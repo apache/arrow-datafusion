@@ -36,7 +36,7 @@ pub struct RecordBatchReceiverStream {
     inner: ReceiverStream<ArrowResult<RecordBatch>>,
 
     #[allow(dead_code)]
-    drop_helper: AbortOnDropSingle<()>,
+    drop_helper: Option<AbortOnDropSingle<()>>,
 }
 
 impl RecordBatchReceiverStream {
@@ -45,14 +45,14 @@ impl RecordBatchReceiverStream {
     pub fn create(
         schema: &SchemaRef,
         rx: tokio::sync::mpsc::Receiver<ArrowResult<RecordBatch>>,
-        join_handle: JoinHandle<()>,
+        join_handle: Option<JoinHandle<()>>,
     ) -> SendableRecordBatchStream {
         let schema = schema.clone();
         let inner = ReceiverStream::new(rx);
         Box::pin(Self {
             schema,
             inner,
-            drop_helper: AbortOnDropSingle::new(join_handle),
+            drop_helper: join_handle.map(AbortOnDropSingle::new),
         })
     }
 }

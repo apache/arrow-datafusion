@@ -119,7 +119,7 @@ async fn main() -> Result<()> {
 
     let scheduler_policy = opt.task_scheduling_policy;
     match scheduler_policy {
-        TaskSchedulingPolicy::PushStaged => {
+        TaskSchedulingPolicy::Push => {
             tokio::spawn(executor_server::startup(
                 scheduler,
                 executor.clone(),

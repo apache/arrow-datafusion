@@ -82,7 +82,7 @@ async fn start_server(
     );
     let scheduler_server: SchedulerServer<LogicalPlanNode, PhysicalPlanNode> =
         match policy {
-            TaskSchedulingPolicy::PushStaged => {
+            TaskSchedulingPolicy::Push => {
                 // TODO make the buffer size configurable
                 let (tx_job, rx_job) = mpsc::channel::<String>(10000);
                 let scheduler_server = SchedulerServer::new_with_policy(

@@ -257,7 +257,7 @@ impl ExecutionPlan for ParquetExec {
         Ok(RecordBatchReceiverStream::create(
             &self.projected_schema,
             response_rx,
-            join_handle,
+            Some(join_handle),
         ))
     }
 

@@ -17,7 +17,8 @@
 
 use crate::error::BallistaError;
 use crate::execution_plans::{
-    ShuffleReaderExec, ShuffleWriterExec, UnresolvedShuffleExec,
+    OutputLocation, ShuffleReaderExec, ShuffleStreamReaderExec, ShuffleWriterExec,
+    UnresolvedShuffleExec,
 };
 use crate::serde::physical_plan::from_proto::parse_protobuf_hash_partitioning;
 use crate::serde::protobuf::physical_expr_node::ExprType;
@@ -25,7 +26,7 @@ use crate::serde::protobuf::physical_plan_node::PhysicalPlanType;
 use crate::serde::protobuf::repartition_exec_node::PartitionMethod;
 use crate::serde::protobuf::ShuffleReaderPartition;
 use crate::serde::protobuf::{PhysicalExtensionNode, PhysicalPlanNode};
-use crate::serde::scheduler::PartitionLocation;
+use crate::serde::scheduler::{ExecutorMeta, PartitionLocation};
 use crate::serde::{
     byte_to_string, proto_error, protobuf, str_to_byte, AsExecutionPlan,
     PhysicalExtensionCodec,
@@ -391,14 +392,38 @@ impl AsExecutionPlan for PhysicalPlanNode {
                 let output_partitioning = parse_protobuf_hash_partitioning(
                     shuffle_writer.output_partitioning.as_ref(),
                 )?;
-
-                Ok(Arc::new(ShuffleWriterExec::try_new(
-                    shuffle_writer.job_id.clone(),
-                    shuffle_writer.stage_id as usize,
-                    input,
-                    "".to_string(), // this is intentional but hacky - the executor will fill this in
-                    output_partitioning,
-                )?))
+                if !shuffle_writer.push_shuffle {
+                    Ok(Arc::new(ShuffleWriterExec::try_new_pull_shuffle(
+                        shuffle_writer.job_id.clone(),
+                        shuffle_writer.stage_id as usize,
+                        input,
+                        "".to_string(), // this is intentional but hacky - the executor will fill this in
+                        output_partitioning,
+                    )?))
+                } else {
+                    let _execs: Vec<ExecutorMeta> = shuffle_writer
+                        .execs
+                        .to_owned()
+                        .into_iter()
+                        .map(|e| e.into())
+                        .collect();
+                    Ok(Arc::new(ShuffleWriterExec::try_new_push_shuffle(
+                        shuffle_writer.job_id.clone(),
+                        shuffle_writer.stage_id as usize,
+                        input,
+                        _execs,
+                        output_partitioning,
+                    )?))
+                }
+            }
+            PhysicalPlanType::ShuffleStreamReader(shuffle_stream_reader) => {
+                let schema = Arc::new(convert_required!(shuffle_stream_reader.schema)?);
+                let shuffle_reader = ShuffleStreamReaderExec::new(
+                    shuffle_stream_reader.stage_id as usize,
+                    schema,
+                    shuffle_stream_reader.partition_count as usize,
+                );
+                Ok(Arc::new(shuffle_reader))
             }
             PhysicalPlanType::ShuffleReader(shuffle_reader) => {
                 let schema = Arc::new(convert_required!(shuffle_reader.schema)?);
@@ -717,6 +742,16 @@ impl AsExecutionPlan for PhysicalPlanNode {
                     },
                 )),
             })
+        } else if let Some(exec) = plan.downcast_ref::<ShuffleStreamReaderExec>() {
+            Ok(protobuf::PhysicalPlanNode {
+                physical_plan_type: Some(PhysicalPlanType::ShuffleStreamReader(
+                    protobuf::ShuffleStreamReaderExecNode {
+                        stage_id: exec.stage_id as u32,
+                        partition_count: exec.partition_count as u64,
+                        schema: Some(exec.schema().as_ref().into()),
+                    },
+                )),
+            })
         } else if let Some(exec) = plan.downcast_ref::<ShuffleReaderExec>() {
             let mut partition = vec![];
             for location in &exec.partition {
@@ -833,16 +868,36 @@ impl AsExecutionPlan for PhysicalPlanNode {
                     )))
                 }
             };
-            Ok(protobuf::PhysicalPlanNode {
-                physical_plan_type: Some(PhysicalPlanType::ShuffleWriter(Box::new(
-                    protobuf::ShuffleWriterExecNode {
-                        job_id: exec.job_id().to_string(),
-                        stage_id: exec.stage_id() as u32,
-                        input: Some(Box::new(input)),
-                        output_partitioning,
-                    },
-                ))),
-            })
+            match &exec.output_loc {
+                OutputLocation::LocalDir(_) => Ok(protobuf::PhysicalPlanNode {
+                    physical_plan_type: Some(PhysicalPlanType::ShuffleWriter(Box::new(
+                        protobuf::ShuffleWriterExecNode {
+                            job_id: exec.job_id().to_string(),
+                            stage_id: exec.stage_id() as u32,
+                            input: Some(Box::new(input)),
+                            output_partitioning,
+                            push_shuffle: false,
+                            execs: Vec::new(),
+                        },
+                    ))),
+                }),
+                OutputLocation::Executors(executors) => {
+                    let _execs: Vec<protobuf::ExecutorMetadata> =
+                        executors.to_owned().into_iter().map(|e| e.into()).collect();
+                    Ok(protobuf::PhysicalPlanNode {
+                        physical_plan_type: Some(PhysicalPlanType::ShuffleWriter(
+                            Box::new(protobuf::ShuffleWriterExecNode {
+                                job_id: exec.job_id().to_string(),
+                                stage_id: exec.stage_id() as u32,
+                                input: Some(Box::new(input)),
+                                output_partitioning,
+                                push_shuffle: true,
+                                execs: _execs,
+                            }),
+                        )),
+                    })
+                }
+            }
         } else if let Some(exec) = plan.downcast_ref::<UnresolvedShuffleExec>() {
             Ok(protobuf::PhysicalPlanNode {
                 physical_plan_type: Some(PhysicalPlanType::Unresolved(
@@ -953,8 +1008,9 @@ mod roundtrip_tests {
 
     use super::super::super::error::Result;
     use super::super::protobuf;
-    use crate::execution_plans::ShuffleWriterExec;
+    use crate::execution_plans::{OutputLocation, ShuffleWriterExec};
     use crate::serde::protobuf::{LogicalPlanNode, PhysicalPlanNode};
+    use crate::serde::scheduler::ExecutorMeta;
 
     fn roundtrip_test(exec_plan: Arc<dyn ExecutionPlan>) -> Result<()> {
         let ctx = ExecutionContext::new();
@@ -1112,11 +1168,32 @@ mod roundtrip_tests {
         let field_b = Field::new("b", DataType::Int64, false);
         let schema = Arc::new(Schema::new(vec![field_a, field_b]));
 
-        roundtrip_test(Arc::new(ShuffleWriterExec::try_new(
+        roundtrip_test(Arc::new(ShuffleWriterExec::try_new_pull_shuffle(
             "job123".to_string(),
             123,
             Arc::new(EmptyExec::new(false, schema)),
             "".to_string(),
+            Some(Partitioning::Hash(vec![Arc::new(Column::new("a", 0))], 4)),
+        )?))
+    }
+
+    #[test]
+    fn roundtrip_push_shuffle_writer() -> Result<()> {
+        let field_a = Field::new("a", DataType::Int64, false);
+        let field_b = Field::new("b", DataType::Int64, false);
+        let schema = Arc::new(Schema::new(vec![field_a, field_b]));
+        let meta = ExecutorMeta {
+            id: "123".to_owned(),
+            host: "localhost".to_owned(),
+            port: 123,
+            grpc_port: 124,
+        };
+        let output = OutputLocation::Executors(vec![meta]);
+        roundtrip_test(Arc::new(ShuffleWriterExec::try_new(
+            "job456".to_string(),
+            456,
+            Arc::new(EmptyExec::new(false, schema)),
+            output,
             Some(Partitioning::Hash(vec![Arc::new(Column::new("a", 0))], 4)),
         )?))
     }

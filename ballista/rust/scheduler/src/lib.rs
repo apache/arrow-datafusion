@@ -102,7 +102,7 @@ use self::state::{ConfigBackendClient, SchedulerState};
 use anyhow::Context;
 use ballista_core::config::{BallistaConfig, TaskSchedulingPolicy};
 use ballista_core::error::BallistaError;
-use ballista_core::execution_plans::ShuffleWriterExec;
+use ballista_core::execution_plans::{ShuffleStreamReaderExec, ShuffleWriterExec};
 use ballista_core::serde::protobuf::executor_grpc_client::ExecutorGrpcClient;
 use ballista_core::serde::scheduler::to_proto::hash_partitioning_to_proto;
 use ballista_core::serde::{AsExecutionPlan, AsLogicalPlan, BallistaCodec};
@@ -137,7 +137,7 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerServer<T
         SchedulerServer::new_with_policy(
             config,
             namespace,
-            TaskSchedulingPolicy::PullStaged,
+            TaskSchedulingPolicy::Pull,
             None,
             ctx,
             codec,
@@ -235,6 +235,12 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerServer<T
         available_executors: &mut Vec<ExecutorData>,
         job_id: &str,
     ) -> Result<(Vec<Vec<TaskDefinition>>, usize), BallistaError> {
+        if let TaskSchedulingPolicy::Pull = self.policy {
+            let msg = "fetch_tasks call is only available for push-based task scheduling"
+                .to_string();
+            error!("{}", msg);
+            return Err(BallistaError::General(msg));
+        }
         let mut ret: Vec<Vec<TaskDefinition>> =
             Vec::with_capacity(available_executors.len());
         for _idx in 0..available_executors.len() {
@@ -415,7 +421,7 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerGrpc
         &self,
         request: Request<PollWorkParams>,
     ) -> std::result::Result<Response<PollWorkResult>, tonic::Status> {
-        if let TaskSchedulingPolicy::PushStaged = self.policy {
+        if let TaskSchedulingPolicy::Push = self.policy {
             error!("Poll work interface is not supported for push-based task scheduling");
             return Err(tonic::Status::failed_precondition(
                 "Bad request because poll work is not supported for push-based task scheduling",
@@ -830,8 +836,8 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerGrpc
             let state = self.state.clone();
             let job_id_spawn = job_id.clone();
             let tx_job: Option<mpsc::Sender<String>> = match self.policy {
-                TaskSchedulingPolicy::PullStaged => None,
-                TaskSchedulingPolicy::PushStaged => {
+                TaskSchedulingPolicy::Pull => None,
+                TaskSchedulingPolicy::Push => {
                     Some(self.scheduler_env.as_ref().unwrap().tx_job.clone())
                 }
             };
@@ -916,6 +922,28 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerGrpc
 
                 // save stages into state
                 for shuffle_writer in stages {
+                    // save stage lineages for all-at-once stages
+                    let stream_shuffle_readers =
+                        ShuffleStreamReaderExec::find_stream_shuffle_readers(
+                            shuffle_writer.clone(),
+                        );
+                    for shuffle_reader in stream_shuffle_readers {
+                        fail_job!(state
+                            .save_stage_lineages(
+                                &job_id_spawn,
+                                shuffle_reader.stage_id,
+                                shuffle_writer.stage_id(),
+                            )
+                            .await
+                            .map_err(|e| {
+                                let msg = format!(
+                                    "Could save plan query stage lineages: {}",
+                                    e
+                                );
+                                error!("{}", msg);
+                                tonic::Status::internal(msg)
+                            }));
+                    }
                     fail_job!(state
                         .save_stage_plan(
                             &job_id_spawn,
@@ -947,6 +975,11 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerGrpc
                             }
                         ));
                     }
+                    info!(
+                        "Adding stage {} with {} pending tasks",
+                        shuffle_writer.stage_id(),
+                        num_partitions
+                    );
                 }
 
                 if let Some(tx_job) = tx_job {

@@ -32,8 +32,9 @@ use crate::serde::scheduler::{
 };
 
 use arrow_flight::utils::flight_data_to_arrow_batch;
-use arrow_flight::Ticket;
 use arrow_flight::{flight_service_client::FlightServiceClient, FlightData};
+use arrow_flight::{FlightDescriptor, SchemaAsIpc, Ticket};
+use datafusion::arrow::ipc::writer::IpcWriteOptions;
 use datafusion::arrow::{
     array::{StringArray, StructArray},
     datatypes::{Schema, SchemaRef},
@@ -44,7 +45,7 @@ use datafusion::physical_plan::common::collect;
 use datafusion::physical_plan::{ExecutionPlan, SendableRecordBatchStream};
 use datafusion::{logical_plan::LogicalPlan, physical_plan::RecordBatchStream};
 use futures::{Stream, StreamExt};
-use log::debug;
+use log::{debug, warn};
 use prost::Message;
 use tonic::Streaming;
 use uuid::Uuid;
@@ -90,6 +91,58 @@ impl BallistaClient {
             path: path.to_owned(),
         };
         self.execute_action(&action).await
+    }
+
+    /// Push a partition to an executor
+    pub async fn push_partition(
+        &mut self,
+        job_id: String,
+        stage_id: usize,
+        partition_id: usize,
+        input: SendableRecordBatchStream,
+    ) -> Result<PartitionStats> {
+        let action = Action::PushPartition {
+            job_id: job_id.to_string(),
+            stage_id,
+            partition_id,
+        };
+
+        let serialized_action: protobuf::Action = action.try_into()?;
+        let mut cmd: Vec<u8> = Vec::with_capacity(serialized_action.encoded_len());
+        serialized_action
+            .encode(&mut cmd)
+            .map_err(|e| BallistaError::General(format!("{:?}", e)))?;
+
+        // add an initial FlightData message that sends schema and cmd
+        let options = datafusion::arrow::ipc::writer::IpcWriteOptions::default();
+        let schema_flight_data =
+            SchemaAsIpc::new(input.schema().as_ref(), &options).into();
+
+        let fd = Some(FlightDescriptor::new_cmd(cmd));
+        let cmd_data = FlightData {
+            flight_descriptor: fd,
+            ..schema_flight_data
+        };
+
+        let flight_stream = Arc::new(Mutex::new(RecordBatchToFlightDataStream::new(
+            input, cmd_data, options,
+        )));
+        let flight_stream_ref = RecordBatchToFlightDataStreamRef {
+            batch_to_stream: flight_stream.clone(),
+        };
+
+        self.flight_client
+            .do_put(flight_stream_ref)
+            .await
+            .map_err(|e| BallistaError::General(format!("{:?}", e)))?
+            .into_inner();
+
+        let metrics = flight_stream.lock();
+        Ok(PartitionStats::new(
+            Some(metrics.num_rows),
+            Some(metrics.num_batches),
+            Some(metrics.num_bytes),
+        ))
     }
 
     /// Execute an action and retrieve the results
@@ -177,5 +230,82 @@ impl Stream for FlightDataStream {
 impl RecordBatchStream for FlightDataStream {
     fn schema(&self) -> SchemaRef {
         self.schema.clone()
+    }
+}
+
+struct RecordBatchToFlightDataStreamRef {
+    batch_to_stream: Arc<Mutex<RecordBatchToFlightDataStream>>,
+}
+
+struct RecordBatchToFlightDataStream {
+    num_batches: u64,
+    num_rows: u64,
+    num_bytes: u64,
+    batch: SendableRecordBatchStream,
+    buffered_data: Vec<FlightData>,
+    options: IpcWriteOptions,
+}
+
+impl RecordBatchToFlightDataStream {
+    pub fn new(
+        batch: SendableRecordBatchStream,
+        schema: FlightData,
+        options: IpcWriteOptions,
+    ) -> Self {
+        Self {
+            num_batches: 0,
+            num_rows: 0,
+            num_bytes: 0,
+            batch,
+            buffered_data: vec![schema],
+            options,
+        }
+    }
+}
+
+impl Stream for RecordBatchToFlightDataStreamRef {
+    type Item = FlightData;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        let mut self_mut = self.get_mut().batch_to_stream.lock();
+        if let Some(event) = self_mut.buffered_data.pop() {
+            Poll::Ready(Some(event))
+        } else {
+            loop {
+                match self_mut.batch.poll_next_unpin(cx) {
+                    Poll::Ready(Some(Err(e))) => {
+                        warn!("Error when poll input batches : {}", e);
+                        continue;
+                    }
+                    Poll::Ready(Some(Ok(record_batch))) => {
+                        self_mut.num_batches += 1;
+                        self_mut.num_rows += record_batch.num_rows() as u64;
+                        let num_bytes: usize = record_batch
+                            .columns()
+                            .iter()
+                            .map(|array| array.get_array_memory_size())
+                            .sum();
+                        self_mut.num_bytes += num_bytes as u64;
+                        let converted_chunk =
+                            arrow_flight::utils::flight_data_from_arrow_batch(
+                                &record_batch,
+                                &self_mut.options,
+                            );
+                        self_mut.buffered_data.extend(converted_chunk.0.into_iter());
+                        self_mut.buffered_data.push(converted_chunk.1);
+                        if let Some(event) = self_mut.buffered_data.pop() {
+                            return Poll::Ready(Some(event));
+                        } else {
+                            continue;
+                        }
+                    }
+                    Poll::Ready(None) => return Poll::Ready(None),
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+        }
     }
 }

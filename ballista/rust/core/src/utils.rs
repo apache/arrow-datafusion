@@ -29,6 +29,7 @@ use crate::execution_plans::{
 };
 use crate::serde::scheduler::PartitionStats;
 
+use crate::client::BallistaClient;
 use crate::config::BallistaConfig;
 use crate::serde::{AsLogicalPlan, DefaultLogicalExtensionCodec, LogicalExtensionCodec};
 use async_trait::async_trait;
@@ -107,6 +108,30 @@ pub async fn write_stream_to_disk(
         Some(num_batches),
         Some(num_bytes as u64),
     ))
+}
+
+/// Stream data to executor in Arrow IPC format
+// "Unnecessary" lifetime syntax due to https://github.com/rust-lang/rust/issues/63033
+pub async fn write_stream_to_flight<'a>(
+    stream: Pin<Box<dyn RecordBatchStream + Send + Sync>>,
+    host: &'a str,
+    port: u16,
+    job_id: String,
+    stage_id: usize,
+    partition_id: usize,
+    flight_write_metric: &'a metrics::Time,
+) -> Result<PartitionStats> {
+    let timer = flight_write_metric.timer();
+    let mut client = BallistaClient::try_new(host, port)
+        .await
+        .map_err(|e| DataFusionError::Execution(format!("{:?}", e)))?;
+    let stats = client
+        .push_partition(job_id, stage_id, partition_id, stream)
+        .await
+        .map_err(|e| DataFusionError::Execution(format!("{:?}", e)))?;
+
+    timer.done();
+    Ok(stats)
 }
 
 pub async fn collect_stream(

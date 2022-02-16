@@ -17,9 +17,15 @@
 
 //! Ballista executor logic
 
+use arrow::error::Result as ArrowResult;
+use arrow::record_batch::RecordBatch;
+use parking_lot::RwLock;
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 
 use ballista_core::error::BallistaError;
+use ballista_core::execution_plans::ShuffleStreamReaderExec;
 use ballista_core::execution_plans::ShuffleWriterExec;
 use ballista_core::serde::protobuf;
 use ballista_core::serde::scheduler::ExecutorSpecification;
@@ -29,10 +35,17 @@ use datafusion::physical_plan::display::DisplayableExecutionPlan;
 use datafusion::physical_plan::{ExecutionPlan, Partitioning};
 use datafusion::prelude::{ExecutionConfig, ExecutionContext};
 
+type ExecutorChannel =
+    RwLock<HashMap<(String, usize, usize), Sender<ArrowResult<RecordBatch>>>>;
+
 /// Ballista executor
 pub struct Executor {
     /// Directory for storing partial results
     work_dir: String,
+
+    /// Channels for sending partial shuffle partitions to stream shuffle reader.
+    /// Key is the jobId + stageId + partition.
+    pub channels: ExecutorChannel,
 
     /// Specification like total task slots
     pub specification: ExecutorSpecification,
@@ -58,6 +71,7 @@ impl Executor {
     ) -> Self {
         Self {
             work_dir: work_dir.to_owned(),
+            channels: RwLock::new(HashMap::new()),
             specification,
             ctx,
         }
@@ -79,14 +93,37 @@ impl Executor {
         let exec = if let Some(shuffle_writer) =
             plan.as_any().downcast_ref::<ShuffleWriterExec>()
         {
+            // find all the stream shuffle readers and bind them to the executor context
+            let stream_shuffle_readers =
+                ShuffleStreamReaderExec::find_stream_shuffle_readers(plan.clone());
+            for shuffle_reader in stream_shuffle_readers {
+                let _job_id = job_id.clone();
+                // The stage_id in shuffle stream reader is the stage id which the reader depends on.
+                let _stage_id = shuffle_reader.stage_id;
+                {
+                    let mut _map = self.channels.write();
+                    let sender = shuffle_reader.create_record_batch_channel();
+                    _map.insert((_job_id, _stage_id, part), sender);
+                }
+            }
             // recreate the shuffle writer with the correct working directory
-            ShuffleWriterExec::try_new(
-                job_id.clone(),
-                stage_id,
-                plan.children()[0].clone(),
-                self.work_dir.clone(),
-                shuffle_writer.shuffle_output_partitioning().cloned(),
-            )
+            if !shuffle_writer.is_push_shuffle() {
+                ShuffleWriterExec::try_new_pull_shuffle(
+                    job_id.clone(),
+                    stage_id,
+                    plan.children()[0].clone(),
+                    self.work_dir.clone(),
+                    shuffle_writer.shuffle_output_partitioning().cloned(),
+                )
+            } else {
+                ShuffleWriterExec::try_new(
+                    job_id.clone(),
+                    stage_id,
+                    plan.children()[0].clone(),
+                    shuffle_writer.output_loc.clone(),
+                    shuffle_writer.shuffle_output_partitioning().cloned(),
+                )
+            }
         } else {
             Err(DataFusionError::Internal(
                 "Plan passed to execute_shuffle_write is not a ShuffleWriterExec"

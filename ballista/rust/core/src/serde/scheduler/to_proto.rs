@@ -44,6 +44,18 @@ impl TryInto<protobuf::Action> for Action {
                 })),
                 settings: vec![],
             }),
+            Action::PushPartition {
+                job_id,
+                stage_id,
+                partition_id,
+            } => Ok(protobuf::Action {
+                action_type: Some(ActionType::PushPartition(protobuf::PushPartition {
+                    job_id,
+                    stage_id: stage_id as u32,
+                    partition_id: partition_id as u32,
+                })),
+                settings: vec![],
+            }),
         }
     }
 }

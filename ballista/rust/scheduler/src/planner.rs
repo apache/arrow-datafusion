@@ -23,8 +23,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use ballista_core::error::{BallistaError, Result};
+use ballista_core::serde::scheduler::ExecutorMeta;
 use ballista_core::{
-    execution_plans::{ShuffleReaderExec, ShuffleWriterExec, UnresolvedShuffleExec},
+    execution_plans::{ShuffleStreamReaderExec, ShuffleReaderExec, ShuffleWriterExec, UnresolvedShuffleExec},
     serde::scheduler::PartitionLocation,
 };
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
@@ -55,24 +56,41 @@ impl Default for DistributedPlanner {
 
 impl DistributedPlanner {
     /// Returns a vector of ExecutionPlans, where the root node is a [ShuffleWriterExec].
-    /// Plans that depend on the input of other plans will have leaf nodes of type [UnresolvedShuffleExec].
+    /// Plans that depend on the input of other plans will have leaf nodes of type [UnresolvedShuffleExec]
+    /// or of type [ShuffleStreamReaderExec] if the created stages are all-at-once stages.
     /// A [ShuffleWriterExec] is created whenever the partitioning changes.
     pub async fn plan_query_stages<'a>(
         &'a mut self,
         job_id: &'a str,
         execution_plan: Arc<dyn ExecutionPlan>,
     ) -> Result<Vec<Arc<ShuffleWriterExec>>> {
-        info!("planning query stages");
-        let (new_plan, mut stages) = self
-            .plan_query_stages_internal(job_id, execution_plan)
+        info!("planning query stages for job {}", job_id);
+        let (modified_plan, mut stages) = self
+            .plan_query_stages_internal(job_id, execution_plan.clone())
             .await?;
-        stages.push(create_shuffle_writer(
-            job_id,
-            self.next_stage_id(),
-            new_plan,
-            None,
-        )?);
-        Ok(stages)
+        // re-plan the input execution plan and create All-at-once query stages.
+        // Now we just simply depends on the the stage count to decide whether to create All-at-once or normal stages.
+        // In future, we can have more sophisticated way to decide which way to go.
+        if stages.len() > 1 && stages.len() <= 4 {
+            let (new_modified_plan, mut new_stages) = self
+                .plan_all_at_once_query_stages_internal(job_id, execution_plan.clone())
+                .await?;
+            new_stages.push(create_shuffle_writer(
+                job_id,
+                self.next_stage_id(),
+                new_modified_plan,
+                None,
+            )?);
+            Ok(new_stages)
+        } else {
+            stages.push(create_shuffle_writer(
+                job_id,
+                self.next_stage_id(),
+                modified_plan,
+                None,
+            )?);
+            Ok(stages)
+        }
     }
 
     /// Returns a potentially modified version of the input execution_plan along with the resulting query stages.
@@ -169,6 +187,85 @@ impl DistributedPlanner {
         .boxed()
     }
 
+    /// Re-plan the input execution_plan and create new All-at-once query stages.
+    fn plan_all_at_once_query_stages_internal<'a>(
+        &'a mut self,
+        job_id: &'a str,
+        execution_plan: Arc<dyn ExecutionPlan>,
+    ) -> BoxFuture<'a, Result<PartialQueryStageResult>> {
+        async move {
+            // recurse down and replace children
+            if execution_plan.children().is_empty() {
+                return Ok((execution_plan, vec![]));
+            }
+
+            let mut stages = vec![];
+            let mut children = vec![];
+            for child in execution_plan.children() {
+                let (new_child, mut child_stages) = self
+                    .plan_all_at_once_query_stages_internal(job_id, child.clone())
+                    .await?;
+                children.push(new_child);
+                stages.append(&mut child_stages);
+            }
+
+            if let Some(coalesce) = execution_plan
+                .as_any()
+                .downcast_ref::<CoalescePartitionsExec>()
+            {
+                let shuffle_writer = create_push_shuffle_writer(
+                    job_id,
+                    self.next_stage_id(),
+                    children[0].clone(),
+                    None,
+                )?;
+
+                let shuffle_reader = Arc::new(ShuffleStreamReaderExec::new(
+                    shuffle_writer.stage_id(),
+                    shuffle_writer.schema(),
+                    1,
+                ));
+                stages.push(shuffle_writer);
+                Ok((coalesce.with_new_children(vec![shuffle_reader])?, stages))
+            } else if let Some(repart) =
+                execution_plan.as_any().downcast_ref::<RepartitionExec>()
+            {
+                match repart.output_partitioning() {
+                    Partitioning::Hash(_, p) => {
+                        let shuffle_writer = create_push_shuffle_writer(
+                            job_id,
+                            self.next_stage_id(),
+                            children[0].clone(),
+                            Some(repart.partitioning().to_owned()),
+                        )?;
+
+                        let shuffle_reader = Arc::new(ShuffleStreamReaderExec::new(
+                            shuffle_writer.stage_id(),
+                            shuffle_writer.schema(),
+                            p,
+                        ));
+                        stages.push(shuffle_writer);
+                        Ok((shuffle_reader, stages))
+                    }
+                    _ => {
+                        // remove any non-hash repartition from the distributed plan
+                        Ok((children[0].clone(), stages))
+                    }
+                }
+            } else if let Some(window) =
+                execution_plan.as_any().downcast_ref::<WindowAggExec>()
+            {
+                Err(BallistaError::NotImplemented(format!(
+                    "WindowAggExec with window {:?}",
+                    window
+                )))
+            } else {
+                Ok((execution_plan.with_new_children(children)?, stages))
+            }
+        }
+        .boxed()
+    }
+
     /// Generate a new stage ID
     fn next_stage_id(&mut self) -> usize {
         self.next_stage_id += 1;
@@ -229,17 +326,54 @@ pub fn remove_unresolved_shuffles(
     Ok(stage.with_new_children(new_children)?)
 }
 
+pub fn update_shuffle_locs(
+    stage: Arc<dyn ExecutionPlan>,
+    output_locs: Vec<ExecutorMeta>,
+) -> Result<Arc<dyn ExecutionPlan>> {
+    if let Some(shuffle_writer) = stage.as_any().downcast_ref::<ShuffleWriterExec>() {
+        if shuffle_writer.is_push_shuffle() {
+            let new_shuffle_writer = Arc::new(ShuffleWriterExec::try_new_push_shuffle(
+                shuffle_writer.job_id().to_string(),
+                shuffle_writer.stage_id(),
+                shuffle_writer.children()[0].clone(),
+                output_locs,
+                shuffle_writer.shuffle_output_partitioning().cloned(),
+            )?);
+            Ok(new_shuffle_writer)
+        } else {
+            Ok(stage)
+        }
+    } else {
+        Ok(stage)
+    }
+}
+
 fn create_shuffle_writer(
     job_id: &str,
     stage_id: usize,
     plan: Arc<dyn ExecutionPlan>,
     partitioning: Option<Partitioning>,
 ) -> Result<Arc<ShuffleWriterExec>> {
-    Ok(Arc::new(ShuffleWriterExec::try_new(
+    Ok(Arc::new(ShuffleWriterExec::try_new_pull_shuffle(
         job_id.to_owned(),
         stage_id,
         plan,
         "".to_owned(), // executor will decide on the work_dir path
+        partitioning,
+    )?))
+}
+
+fn create_push_shuffle_writer(
+    job_id: &str,
+    stage_id: usize,
+    plan: Arc<dyn ExecutionPlan>,
+    partitioning: Option<Partitioning>,
+) -> Result<Arc<ShuffleWriterExec>> {
+    Ok(Arc::new(ShuffleWriterExec::try_new_push_shuffle(
+        job_id.to_owned(),
+        stage_id,
+        plan,
+        Vec::new(), // executors will be decided later during task scheduling
         partitioning,
     )?))
 }
@@ -249,7 +383,7 @@ mod test {
     use crate::planner::DistributedPlanner;
     use crate::test_utils::datafusion_test_context;
     use ballista_core::error::BallistaError;
-    use ballista_core::execution_plans::UnresolvedShuffleExec;
+    use ballista_core::execution_plans::ShuffleStreamReaderExec;
     use ballista_core::serde::{protobuf, AsExecutionPlan, BallistaCodec};
     use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
     use datafusion::physical_plan::hash_aggregate::{AggregateMode, HashAggregateExec};
@@ -308,12 +442,12 @@ mod test {
           ProjectionExec: expr=[l_returnflag@0 as l_returnflag, SUM(lineitem.l_extendedprice Multiply Int64(1))@1 as sum_disc_price]
             HashAggregateExec: mode=FinalPartitioned, gby=[l_returnflag@0 as l_returnflag], aggr=[SUM(l_extendedprice Multiply Int64(1))]
               CoalesceBatchesExec: target_batch_size=4096
-                UnresolvedShuffleExec
+                ShuffleStreamReaderExec
 
         ShuffleWriterExec: None
           SortExec: [l_returnflag@0 ASC]
             CoalescePartitionsExec
-              UnresolvedShuffleExec
+              ShuffleStreamReaderExec
         */
 
         assert_eq!(3, stages.len());
@@ -331,12 +465,12 @@ mod test {
         assert!(*final_hash.mode() == AggregateMode::FinalPartitioned);
         let coalesce = final_hash.children()[0].clone();
         let coalesce = downcast_exec!(coalesce, CoalesceBatchesExec);
-        let unresolved_shuffle = coalesce.children()[0].clone();
-        let unresolved_shuffle =
-            downcast_exec!(unresolved_shuffle, UnresolvedShuffleExec);
-        assert_eq!(unresolved_shuffle.stage_id, 1);
-        assert_eq!(unresolved_shuffle.input_partition_count, 2);
-        assert_eq!(unresolved_shuffle.output_partition_count, 2);
+        let shuffle_stream_reader = coalesce.children()[0].clone();
+        let shuffle_stream_reader =
+            downcast_exec!(shuffle_stream_reader, ShuffleStreamReaderExec);
+        // recreate new stages
+        assert_eq!(shuffle_stream_reader.stage_id, 3);
+        assert_eq!(shuffle_stream_reader.partition_count, 2);
 
         // verify stage 2
         let stage2 = stages[2].children()[0].clone();
@@ -348,12 +482,11 @@ mod test {
             coalesce_partitions.output_partitioning().partition_count(),
             1
         );
-        let unresolved_shuffle = coalesce_partitions.children()[0].clone();
-        let unresolved_shuffle =
-            downcast_exec!(unresolved_shuffle, UnresolvedShuffleExec);
-        assert_eq!(unresolved_shuffle.stage_id, 2);
-        assert_eq!(unresolved_shuffle.input_partition_count, 2);
-        assert_eq!(unresolved_shuffle.output_partition_count, 2);
+        let shuffle_stream_reader = coalesce_partitions.children()[0].clone();
+        let shuffle_stream_reader =
+            downcast_exec!(shuffle_stream_reader, ShuffleStreamReaderExec);
+        assert_eq!(shuffle_stream_reader.stage_id, 4);
+        assert_eq!(shuffle_stream_reader.partition_count, 1);
 
         Ok(())
     }
@@ -427,20 +560,20 @@ order by
             CoalesceBatchesExec: target_batch_size=4096
               HashJoinExec: mode=Partitioned, join_type=Inner, on=[(Column { name: "l_orderkey", index: 0 }, Column { name: "o_orderkey", index: 0 })]
                 CoalesceBatchesExec: target_batch_size=4096
-                  UnresolvedShuffleExec
+                  ShuffleStreamReaderExec
                 CoalesceBatchesExec: target_batch_size=4096
-                  UnresolvedShuffleExec
+                  ShuffleStreamReaderExec
 
         ShuffleWriterExec: None
           ProjectionExec: expr=[l_shipmode@0 as l_shipmode, SUM(CASE WHEN #orders.o_orderpriority Eq Utf8("1-URGENT") Or #orders.o_orderpriority Eq Utf8("2-HIGH") THEN Int64(1) ELSE Int64(0) END)@1 as high_line_count, SUM(CASE WHEN #orders.o_orderpriority NotEq Utf8("1-URGENT") And #orders.o_orderpriority NotEq Utf8("2-HIGH") THEN Int64(1) ELSE Int64(0) END)@2 as low_line_count]
             HashAggregateExec: mode=FinalPartitioned, gby=[l_shipmode@0 as l_shipmode], aggr=[SUM(CASE WHEN #orders.o_orderpriority Eq Utf8("1-URGENT") Or #orders.o_orderpriority Eq Utf8("2-HIGH") THEN Int64(1) ELSE Int64(0) END), SUM(CASE WHEN #orders.o_orderpriority NotEq Utf8("1-URGENT") And #orders.o_orderpriority NotEq Utf8("2-HIGH") THEN Int64(1) ELSE Int64(0) END)]
               CoalesceBatchesExec: target_batch_size=4096
-                UnresolvedShuffleExec
+                ShuffleStreamReaderExec
 
         ShuffleWriterExec: None
           SortExec: [l_shipmode@0 ASC]
             CoalescePartitionsExec
-              UnresolvedShuffleExec
+              ShuffleStreamReaderExec
         */
 
         assert_eq!(5, stages.len());
@@ -499,18 +632,16 @@ order by
         let join_input_1 = join.children()[0].clone();
         // skip CoalesceBatches
         let join_input_1 = join_input_1.children()[0].clone();
-        let unresolved_shuffle_reader_1 =
-            downcast_exec!(join_input_1, UnresolvedShuffleExec);
-        assert_eq!(unresolved_shuffle_reader_1.input_partition_count, 2); // lineitem
-        assert_eq!(unresolved_shuffle_reader_1.output_partition_count, 2);
+        let shuffle_stream_reader_1 =
+            downcast_exec!(join_input_1, ShuffleStreamReaderExec);
+        assert_eq!(shuffle_stream_reader_1.partition_count, 2); // lineitem
 
         let join_input_2 = join.children()[1].clone();
         // skip CoalesceBatches
         let join_input_2 = join_input_2.children()[0].clone();
-        let unresolved_shuffle_reader_2 =
-            downcast_exec!(join_input_2, UnresolvedShuffleExec);
-        assert_eq!(unresolved_shuffle_reader_2.input_partition_count, 1); //orders
-        assert_eq!(unresolved_shuffle_reader_2.output_partition_count, 2);
+        let shuffle_stream_reader_2 =
+            downcast_exec!(join_input_2, ShuffleStreamReaderExec);
+        assert_eq!(shuffle_stream_reader_2.partition_count, 2); //orders
 
         // final partitioned hash aggregate
         assert_eq!(

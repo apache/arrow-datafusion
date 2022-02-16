@@ -17,6 +17,7 @@
 
 //! Implementation of the Apache Arrow Flight protocol that wraps an executor.
 
+use std::convert::TryFrom;
 use std::fs::File;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -27,6 +28,8 @@ use ballista_core::error::BallistaError;
 use ballista_core::serde::decode_protobuf;
 use ballista_core::serde::scheduler::Action as BallistaAction;
 
+use arrow::datatypes::Schema;
+use arrow_flight::utils::flight_data_to_arrow_batch;
 use arrow_flight::{
     flight_service_server::FlightService, Action, ActionType, Criteria, Empty,
     FlightData, FlightDescriptor, FlightInfo, HandshakeRequest, HandshakeResponse,
@@ -39,6 +42,7 @@ use datafusion::arrow::{
 use futures::{Stream, StreamExt};
 use log::{info, warn};
 use std::io::{Read, Seek};
+use std::task::{Context, Poll};
 use tokio::sync::mpsc::channel;
 use tokio::{
     sync::mpsc::{Receiver, Sender},
@@ -112,6 +116,7 @@ impl FlightService for BallistaFlightService {
                     Box::pin(ReceiverStream::new(rx)) as Self::DoGetStream
                 ))
             }
+            _ => Err(Status::unimplemented("unimplemented action")),
         }
     }
 
@@ -147,13 +152,83 @@ impl FlightService for BallistaFlightService {
         &self,
         request: Request<Streaming<FlightData>>,
     ) -> Result<Response<Self::DoPutStream>, Status> {
-        let mut request = request.into_inner();
+        let mut stream = request.into_inner();
+        let first_block_maybe = stream
+            .next()
+            .await
+            .ok_or_else(|| Status::invalid_argument("empty FlightData stream"))?;
 
-        while let Some(data) = request.next().await {
-            let _data = data?;
+        let first_block = match first_block_maybe {
+            Ok(fb) => fb,
+            Err(e) => {
+                return Err(Status::invalid_argument(format!(
+                    "first block did not contain a schema: {}",
+                    e
+                )));
+            }
+        };
+
+        // Extract the FlightDescriptor and Schema from the first FlightData block
+        let descriptor = match &first_block.flight_descriptor {
+            Some(d) => d,
+            None => {
+                return Err(Status::invalid_argument(
+                    "No Flight Descriptor in first block",
+                ));
+            }
+        };
+
+        let arrow_schema = Schema::try_from(&first_block).map_err(|e| {
+            Status::invalid_argument(format!(
+                "first block did not contain a schema: {}",
+                e
+            ))
+        })?;
+
+        let arrow_schema_arc = Arc::new(arrow_schema);
+
+        let action =
+            decode_protobuf(&descriptor.cmd).map_err(|e| from_ballista_err(&e))?;
+
+        let (sender, channel_key) = match action {
+            BallistaAction::PushPartition {
+                job_id,
+                stage_id,
+                partition_id,
+            } => {
+                info!("Trying to read PushPartition job {:?}, stage {:?} and partition {:?}", job_id, stage_id, partition_id);
+                {
+                    let channels_map = self._executor.channels.read();
+                    let channel_key = (job_id, stage_id, partition_id);
+                    match channels_map.get(&channel_key) {
+                        Some(d) => (d.clone(), channel_key),
+                        None => {
+                            return Err(Status::invalid_argument(format!(
+                                "No receive channels registered for this PushPartition job {:?}, stage {:?} ", &channel_key.0, &channel_key.1)
+                            ));
+                        }
+                    }
+                }
+            }
+            _ => return Err(Status::unimplemented("Invalid Action")),
+        };
+
+        while let Some(flight_data) = stream.message().await? {
+            let record_batch =
+                flight_data_to_arrow_batch(&flight_data, arrow_schema_arc.clone(), &[]);
+
+            // ignore the error
+            sender.send(record_batch).await.ok();
         }
 
-        Err(Status::unimplemented("do_put"))
+        {
+            let mut channels_map = self._executor.channels.write();
+            channels_map.remove(&channel_key);
+        }
+
+        Ok(Response::new(
+            Box::pin(EmptyPutStream {}) as Self::DoPutStream
+        ))
     }
 
     async fn do_action(
@@ -241,4 +316,17 @@ fn from_arrow_err(e: &ArrowError) -> Status {
 
 fn from_ballista_err(e: &ballista_core::error::BallistaError) -> Status {
     Status::internal(format!("Ballista Error: {:?}", e))
+}
+
+pub struct EmptyPutStream {}
+
+impl Stream for EmptyPutStream {
+    type Item = Result<PutResult, tonic::Status>;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        Poll::Ready(None)
+    }
 }

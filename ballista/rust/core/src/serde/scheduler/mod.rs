@@ -43,6 +43,13 @@ pub enum Action {
         partition_id: usize,
         path: String,
     },
+
+    /// Push a shuffle partition
+    PushPartition {
+        job_id: String,
+        stage_id: usize,
+        partition_id: usize,
+    }
 }
 
 /// Unique identifier for the output partition of an operator.

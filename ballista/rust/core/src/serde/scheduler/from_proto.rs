@@ -38,6 +38,11 @@ impl TryInto<Action> for protobuf::Action {
                 partition_id: fetch.partition_id as usize,
                 path: fetch.path,
             }),
+            Some(ActionType::PushPartition(push)) => Ok(Action::PushPartition {
+                job_id: push.job_id,
+                stage_id: push.stage_id as usize,
+                partition_id: push.partition_id as usize,
+            }),
             _ => Err(BallistaError::General(
                 "scheduler::from_proto(Action) invalid or missing action".to_owned(),
             )),

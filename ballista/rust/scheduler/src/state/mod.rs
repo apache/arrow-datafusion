@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::convert::TryInto;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{any::type_name, collections::HashMap, sync::Arc, time::Duration};
 
@@ -24,6 +25,7 @@ use log::{debug, error, info};
 use prost::Message;
 use tokio::sync::OwnedMutexGuard;
 
+use ballista_core::execution_plans::ShuffleWriterExec;
 use ballista_core::serde::protobuf::{
     self, job_status, task_status, CompletedJob, CompletedTask, ExecutorHeartbeat,
     ExecutorMetadata, FailedJob, FailedTask, JobStatus, RunningJob, RunningTask,
@@ -36,6 +38,7 @@ use ballista_core::{error::Result, execution_plans::UnresolvedShuffleExec};
 use datafusion::prelude::ExecutionContext;
 
 use super::planner::remove_unresolved_shuffles;
+use super::planner::update_shuffle_locs;
 
 #[cfg(feature = "etcd")]
 mod etcd;
@@ -420,7 +423,75 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerState<T,
                     .get_stage_plan(&partition.job_id, partition.stage_id as usize, ctx)
                     .await?;
 
-                // Let's try to resolve any unresolved shuffles we find
+                // Let's try to resolve the push shuffle writer we find
+                let mut temp_loc = Vec::new();
+                let push_shuffle = find_push_shuffle(&plan);
+                if let Some(push_shuffle) = push_shuffle {
+                    let depend_stage_id = self
+                        .get_depend_stage(&partition.job_id, push_shuffle.stage_id())
+                        .await?;
+                    let depend_stage_task_count = push_shuffle
+                        .shuffle_output_partitioning()
+                        .map(|p| p.partition_count())
+                        .unwrap_or(1);
+                    info!("Find depend stage {:?} of current stage {:?} with task count {:?}",
+                        depend_stage_id, push_shuffle.stage_id(), depend_stage_task_count);
+
+                    for shuffle_output_partition_id in 0..depend_stage_task_count {
+                        // Find out the shuffle reader(reduce) task
+                        let referenced_task = tasks
+                            .get(&get_task_status_key(
+                                &self.namespace,
+                                &partition.job_id,
+                                depend_stage_id,
+                                shuffle_output_partition_id,
+                            ))
+                            .unwrap();
+                        let task_is_dead = self
+                            .reschedule_dead_task(referenced_task, &executors)
+                            .await?;
+                        if task_is_dead {
+                            continue 'tasks;
+                        } else if let Some(task_status::Status::Running(RunningTask {
+                            executor_id,
+                        })) = &referenced_task.status
+                        {
+                            debug!("Reduce task for push based shuffle partition {} is running and scheduled to executor :{}",
+                                shuffle_output_partition_id,
+                                executor_id
+                            );
+
+                            let executor_meta = executors
+                                .iter()
+                                .find(|exec| exec.id == *executor_id)
+                                .unwrap()
+                                .clone();
+
+                            temp_loc.push(executor_meta);
+                        } else if let Some(task_status::Status::Completed(
+                            CompletedTask { .. },
+                        )) = &referenced_task.status
+                        {
+                            error!("Reduce task for push based shuffle partition {} is completed which is illegal, task job_id {}, stage_id {}",
+                                shuffle_output_partition_id,
+                                &partition.job_id,
+                                push_shuffle.stage_id()
+                            );
+                            return Err(BallistaError::General(
+                                "Reduce task finish too early before map task for push based shuffle.".to_string()
+                            ));
+                        } else {
+                            debug!(
+                                "Stage {} output partition {} has not scheduled yet",
+                                push_shuffle.stage_id(),
+                                shuffle_output_partition_id,
+                            );
+                            continue 'tasks;
+                        }
+                    }
+                }
+
+                // Let's try to resolve any unresolved shuffles if there is
                 let unresolved_shuffles = find_unresolved_shuffles(&plan)?;
                 let mut partition_locations: HashMap<
                     usize, // stage id
@@ -525,14 +596,46 @@ impl<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan> SchedulerState<T,
                     }
                 }
 
-                let plan =
-                    remove_unresolved_shuffles(plan.as_ref(), &partition_locations)?;
+                let plan = if !temp_loc.is_empty() {
+                    update_shuffle_locs(plan, temp_loc)?
+                } else if !partition_locations.is_empty() {
+                    remove_unresolved_shuffles(plan.as_ref(), &partition_locations)?
+                } else {
+                    plan
+                };
 
                 // If we get here, there are no more unresolved shuffled and the task can be run
                 return Ok(Some((status.clone(), plan)));
             }
         }
         Ok(None)
+    }
+
+    pub async fn save_stage_lineages(
+        &self,
+        job_id: &str,
+        stage_id: usize,
+        depend_stage_id: usize,
+    ) -> Result<()> {
+        let key = get_stage_lineage_key(&self.namespace, job_id, stage_id);
+        let value = depend_stage_id.to_be_bytes();
+        self.config_client.clone().put(key, value.to_vec()).await
+    }
+
+    pub async fn get_depend_stage(&self, job_id: &str, stage_id: usize) -> Result<usize> {
+        let key = get_stage_lineage_key(&self.namespace, job_id, stage_id);
+        let value = self.config_client.clone().get(&key).await?;
+        if value.is_empty() {
+            return Err(BallistaError::General(format!(
+                "Can not find depend stage for shuffle write stage {}",
+                key
+            )));
+        }
+        let array: [u8; 8] = match value.as_slice().try_into() {
+            Ok(ba) => ba,
+            Err(_) => panic!("Expected a Vec of length {} but it was {}", 8, value.len()),
+        };
+        Ok(usize::from_be_bytes(array))
     }
 
     // Global lock for the state. We should get rid of this to be able to scale.
@@ -714,6 +817,19 @@ fn find_unresolved_shuffles(
     }
 }
 
+/// Return the the push shuffles in the execution plan, shuffle writer should be the root node
+fn find_push_shuffle(plan: &Arc<dyn ExecutionPlan>) -> Option<ShuffleWriterExec> {
+    if let Some(shuffle_writer) = plan.as_any().downcast_ref::<ShuffleWriterExec>() {
+        if shuffle_writer.is_push_shuffle() {
+            Some(shuffle_writer.clone())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 fn get_executors_prefix(namespace: &str) -> String {
     format!("/ballista/{}/executors", namespace)
 }
@@ -768,6 +884,13 @@ fn extract_job_id_from_task_key(job_key: &str) -> Result<&str> {
 
 fn get_stage_plan_key(namespace: &str, job_id: &str, stage_id: usize) -> String {
     format!("/ballista/{}/stages/{}/{}", namespace, job_id, stage_id,)
+}
+
+fn get_stage_lineage_key(namespace: &str, job_id: &str, stage_id: usize) -> String {
+    format!(
+        "/ballista/{}/stages/lineage/{}/{}",
+        namespace, job_id, stage_id,
+    )
 }
 
 fn decode_protobuf<T: Message + Default>(bytes: &[u8]) -> Result<T> {

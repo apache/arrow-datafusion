@@ -332,7 +332,7 @@ fn read_spill_as_stream(
     Ok(RecordBatchReceiverStream::create(
         &schema,
         receiver,
-        join_handle,
+        Some(join_handle),
     ))
 }
 

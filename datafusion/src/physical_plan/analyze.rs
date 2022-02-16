@@ -211,7 +211,7 @@ impl ExecutionPlan for AnalyzeExec {
         Ok(RecordBatchReceiverStream::create(
             &self.schema,
             rx,
-            join_handle,
+            Some(join_handle),
         ))
     }
 
