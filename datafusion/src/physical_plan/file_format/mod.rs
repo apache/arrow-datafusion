@@ -20,6 +20,7 @@
 mod avro;
 mod csv;
 mod file_stream;
+mod ipc;
 mod json;
 mod parquet;
 
@@ -35,6 +36,7 @@ use arrow::{
 pub use avro::AvroExec;
 pub(crate) use csv::plan_to_csv;
 pub use csv::CsvExec;
+pub(crate) use ipc::plan_to_ipc;
 pub use json::NdJsonExec;
 
 use crate::error::DataFusionError;

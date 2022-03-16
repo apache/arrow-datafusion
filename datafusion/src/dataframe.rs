@@ -17,6 +17,7 @@
 
 //! DataFrame API for building and executing query plans.
 
+use crate::arrow::ipc::writer::IpcWriteOptions;
 use crate::arrow::record_batch::RecordBatch;
 use crate::error::Result;
 use crate::logical_plan::{
@@ -35,7 +36,7 @@ use crate::arrow::util::pretty;
 use crate::datasource::TableProvider;
 use crate::datasource::TableType;
 use crate::execution::context::{ExecutionContext, ExecutionContextState};
-use crate::physical_plan::file_format::{plan_to_csv, plan_to_parquet};
+use crate::physical_plan::file_format::{plan_to_csv, plan_to_ipc, plan_to_parquet};
 use crate::physical_plan::{collect, collect_partitioned};
 use crate::physical_plan::{execute_stream, execute_stream_partitioned, ExecutionPlan};
 use crate::scalar::ScalarValue;
@@ -578,6 +579,18 @@ impl DataFrame {
         let state = self.ctx_state.lock().clone();
         let ctx = ExecutionContext::from(Arc::new(Mutex::new(state)));
         plan_to_parquet(&ctx, plan, path, writer_properties).await
+    }
+
+    /// Write a `DataFrame` to a IPC file.
+    pub async fn write_ipc(
+        &self,
+        path: &str,
+        writer_properties: IpcWriteOptions,
+    ) -> Result<()> {
+        let plan = self.create_physical_plan().await?;
+        let state = self.ctx_state.lock().clone();
+        let ctx = ExecutionContext::from(Arc::new(Mutex::new(state)));
+        plan_to_ipc(&ctx, plan, path, writer_properties).await
     }
 }
 

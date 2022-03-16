@@ -47,6 +47,7 @@ use std::string::String;
 use std::sync::Arc;
 
 use arrow::datatypes::{DataType, SchemaRef};
+use arrow::ipc::writer::IpcWriteOptions;
 
 use crate::catalog::{
     catalog::{CatalogProvider, MemoryCatalogProvider},
@@ -77,7 +78,7 @@ use crate::physical_optimizer::repartition::Repartition;
 
 use crate::execution::runtime_env::{RuntimeConfig, RuntimeEnv};
 use crate::logical_plan::plan::Explain;
-use crate::physical_plan::file_format::{plan_to_csv, plan_to_parquet};
+use crate::physical_plan::file_format::{plan_to_csv, plan_to_ipc, plan_to_parquet};
 use crate::physical_plan::planner::DefaultPhysicalPlanner;
 use crate::physical_plan::udaf::AggregateUDF;
 use crate::physical_plan::udf::ScalarUDF;
@@ -88,6 +89,7 @@ use crate::sql::{
     planner::{ContextProvider, SqlToRel},
 };
 use crate::variable::{VarProvider, VarType};
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use parquet::file::properties::WriterProperties;
@@ -724,6 +726,16 @@ impl ExecutionContext {
         writer_properties: Option<WriterProperties>,
     ) -> Result<()> {
         plan_to_parquet(self, plan, path, writer_properties).await
+    }
+
+    /// Executes a query and writes the results to an Arrow IPC file.
+    pub async fn write_ipc(
+        &self,
+        plan: Arc<dyn ExecutionPlan>,
+        path: impl AsRef<str>,
+        writer_properties: IpcWriteOptions,
+    ) -> Result<()> {
+        plan_to_ipc(self, plan, path, writer_properties).await
     }
 
     /// Optimizes the logical plan by applying optimizer rules, and
