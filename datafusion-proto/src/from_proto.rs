@@ -452,6 +452,7 @@ impl From<protobuf::AggregateFunction> for AggregateFunction {
                 Self::ApproxPercentileCont
             }
             protobuf::AggregateFunction::ApproxMedian => Self::ApproxMedian,
+            protobuf::AggregateFunction::BitmapDistinct => Self::BitMapCountDistinct,
         }
     }
 }

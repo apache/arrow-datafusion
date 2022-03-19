@@ -38,11 +38,12 @@ name = "datafusion"
 path = "src/lib.rs"
 
 [features]
-default = ["crypto_expressions", "regex_expressions", "unicode_expressions"]
+default = ["crypto_expressions", "regex_expressions", "unicode_expressions", "roaring_bitmap"]
 simd = ["arrow/simd"]
 crypto_expressions = [ "datafusion-physical-expr/crypto_expressions" ]
 unicode_expressions = ["datafusion-physical-expr/regex_expressions"]
 regex_expressions = ["datafusion-physical-expr/regex_expressions"]
+roaring_bitmap = ["datafusion-physical-expr/roaring_bitmap"]
 pyarrow = ["pyo3", "arrow/pyarrow", "datafusion-common/pyarrow"]
 # Used for testing ONLY: causes all values to hash to the same value (test for collisions)
 force_hash_collisions = []

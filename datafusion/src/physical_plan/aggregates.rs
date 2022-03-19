@@ -54,9 +54,9 @@ pub fn return_type(
 
     match fun {
         // TODO If the datafusion is compatible with PostgreSQL, the returned data type should be INT64.
-        AggregateFunction::Count | AggregateFunction::ApproxDistinct => {
-            Ok(DataType::UInt64)
-        }
+        AggregateFunction::Count
+        | AggregateFunction::ApproxDistinct
+        | AggregateFunction::BitMapCountDistinct => Ok(DataType::UInt64),
         AggregateFunction::Max | AggregateFunction::Min => {
             // For min and max agg function, the returned type is same as input type.
             // The coerced_data_types is same with input_types.
@@ -280,6 +280,20 @@ pub fn create_aggregate_expr(
                 "MEDIAN(DISTINCT) aggregations are not available".to_string(),
             ));
         }
+        #[cfg(feature = "roaring_bitmap")]
+        (AggregateFunction::BitMapCountDistinct, _) => {
+            Arc::new(expressions::BitMapDistinct::new(
+                coerced_phy_exprs[0].clone(),
+                name,
+                coerced_exprs_types[0].clone(),
+            ))
+        }
+        #[cfg(not(feature = "roaring_bitmap"))]
+        (AggregateFunction::BitMapCountDistinct, _) => {
+            return Err(DataFusionError::NotImplemented(
+                "BitMapCountDistinct aggregations are not available".to_string(),
+            ));
+        }
     })
 }
 
@@ -313,7 +327,10 @@ pub(super) fn signature(fun: &AggregateFunction) -> Signature {
     match fun {
         AggregateFunction::Count
         | AggregateFunction::ApproxDistinct
-        | AggregateFunction::ArrayAgg => Signature::any(1, Volatility::Immutable),
+        | AggregateFunction::ArrayAgg
+        | AggregateFunction::BitMapCountDistinct => {
+            Signature::any(1, Volatility::Immutable)
+        }
         AggregateFunction::Min | AggregateFunction::Max => {
             let valid = STRINGS
                 .iter()
@@ -354,11 +371,12 @@ pub(super) fn signature(fun: &AggregateFunction) -> Signature {
 mod tests {
     use super::*;
     use crate::physical_plan::expressions::{
-        ApproxDistinct, ApproxMedian, ApproxPercentileCont, ArrayAgg, Avg, Correlation,
-        Count, Covariance, DistinctArrayAgg, DistinctCount, Max, Min, Stddev, Sum,
-        Variance,
+        ApproxDistinct, ApproxMedian, ApproxPercentileCont, ArrayAgg, Avg,
+        BitMapDistinct, Correlation, Count, Covariance, DistinctArrayAgg, DistinctCount,
+        Max, Min, Stddev, Sum, Variance,
     };
     use crate::{error::Result, scalar::ScalarValue};
+    use arrow::datatypes::DataType::UInt64;
 
     #[test]
     fn test_count_arragg_approx_expr() -> Result<()> {
@@ -496,6 +514,40 @@ mod tests {
             assert_eq!("c1", result_agg_phy_exprs.name());
             assert_eq!(
                 Field::new("c1", data_type.clone(), false),
+                result_agg_phy_exprs.field().unwrap()
+            );
+        }
+    }
+    #[test]
+    fn test_bitmap_count_distinct_expr() {
+        let data_types = vec![
+            DataType::Int8,
+            DataType::Int16,
+            DataType::Int32,
+            DataType::UInt8,
+            DataType::UInt16,
+            DataType::UInt32,
+        ];
+
+        for data_type in data_types {
+            let input_schema =
+                Schema::new(vec![Field::new("c1", data_type.clone(), true)]);
+            let input_phy_exprs: Vec<Arc<dyn PhysicalExpr>> = vec![Arc::new(
+                expressions::Column::new_with_schema("c1", &input_schema).unwrap(),
+            )];
+            let result_agg_phy_exprs = create_aggregate_expr(
+                &AggregateFunction::BitMapCountDistinct,
+                false,
+                &input_phy_exprs[..],
+                &input_schema,
+                "c1",
+            )
+            .expect("failed to create aggregate expr");
+
+            assert!(result_agg_phy_exprs.as_any().is::<BitMapDistinct>());
+            assert_eq!("c1", result_agg_phy_exprs.name());
+            assert_eq!(
+                Field::new("c1", UInt64, false),
                 result_agg_phy_exprs.field().unwrap()
             );
         }

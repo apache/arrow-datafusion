@@ -201,6 +201,7 @@ enum AggregateFunction {
   CORRELATION=13;
   APPROX_PERCENTILE_CONT = 14;
   APPROX_MEDIAN=15;
+  BITMAP_DISTINCT=16;
 }
 
 message AggregateExprNode {

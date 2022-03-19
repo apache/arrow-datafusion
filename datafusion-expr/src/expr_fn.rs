@@ -166,6 +166,15 @@ pub fn approx_percentile_cont(expr: Expr, percentile: Expr) -> Expr {
     }
 }
 
+/// Returns the precise number of distinct input values using bitmap.
+pub fn bitmap_count_distinct(expr: Expr) -> Expr {
+    Expr::AggregateFunction {
+        fun: aggregate_function::AggregateFunction::BitMapCountDistinct,
+        distinct: false,
+        args: vec![expr],
+    }
+}
+
 // TODO(kszucs): this seems buggy, unary_scalar_expr! is used for many
 // varying arity functions
 /// Create an convenience function representing a unary scalar function

@@ -312,6 +312,7 @@ impl From<&AggregateFunction> for protobuf::AggregateFunction {
             AggregateFunction::Correlation => Self::Correlation,
             AggregateFunction::ApproxPercentileCont => Self::ApproxPercentileCont,
             AggregateFunction::ApproxMedian => Self::ApproxMedian,
+            AggregateFunction::BitMapCountDistinct => Self::BitmapDistinct,
         }
     }
 }
@@ -493,6 +494,9 @@ impl TryFrom<&Expr> for protobuf::LogicalExprNode {
                     }
                     AggregateFunction::ApproxMedian => {
                         protobuf::AggregateFunction::ApproxMedian
+                    }
+                    AggregateFunction::BitMapCountDistinct => {
+                        protobuf::AggregateFunction::BitmapDistinct
                     }
                 };
 

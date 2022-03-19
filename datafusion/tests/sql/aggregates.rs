@@ -737,3 +737,75 @@ async fn aggregate_timestamps_avg() -> Result<()> {
     assert_eq!(results.to_string(), "Error during planning: The function Avg does not support inputs of type Timestamp(Nanosecond, None).");
     Ok(())
 }
+
+#[tokio::test]
+async fn csv_query_bitmap_i8() -> Result<()> {
+    let mut ctx = ExecutionContext::new();
+    register_aggregate_csv(&mut ctx).await?;
+    let sql = "SELECT bitmap_distinct(c2) FROM aggregate_test_100";
+    let results = execute_to_batches(&mut ctx, sql).await;
+    let expected = vec![
+        "+--------------------------------------------+",
+        "| BITMAPCOUNTDISTINCT(aggregate_test_100.c2) |",
+        "+--------------------------------------------+",
+        "| 5                                          |",
+        "+--------------------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &results);
+    Ok(())
+}
+
+#[tokio::test]
+async fn csv_query_bitmap_u8() -> Result<()> {
+    let mut ctx = ExecutionContext::new();
+    register_aggregate_csv(&mut ctx).await?;
+    let sql = "SELECT bitmap_distinct(c3) FROM aggregate_test_100";
+    let results = execute_to_batches(&mut ctx, sql).await;
+    let expected = vec![
+        "+--------------------------------------------+",
+        "| BITMAPCOUNTDISTINCT(aggregate_test_100.c3) |",
+        "+--------------------------------------------+",
+        "| 80                                         |",
+        "+--------------------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &results);
+    Ok(())
+}
+
+#[tokio::test]
+async fn csv_query_bitmap_u32() -> Result<()> {
+    let mut ctx = ExecutionContext::new();
+    register_aggregate_csv(&mut ctx).await?;
+    let sql = "SELECT bitmap_distinct(c5) FROM aggregate_test_100";
+    let results = execute_to_batches(&mut ctx, sql).await;
+    let expected = vec![
+        "+--------------------------------------------+",
+        "| BITMAPCOUNTDISTINCT(aggregate_test_100.c5) |",
+        "+--------------------------------------------+",
+        "| 100                                        |",
+        "+--------------------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &results);
+    Ok(())
+}
+
+#[tokio::test]
+async fn csv_query_bitmap_group() -> Result<()> {
+    let mut ctx = ExecutionContext::new();
+    register_aggregate_csv(&mut ctx).await?;
+    let sql1 = "SELECT bitmap_distinct(c5) as a FROM aggregate_test_100 group by c1 order by a limit 5 ";
+    let result1 = execute_to_batches(&mut ctx, sql1).await;
+
+    let sql2 = "SELECT count(distinct c5) as a FROM aggregate_test_100 group by c1 order by a limit 5 ";
+    let result2 = execute_to_batches(&mut ctx, sql2).await;
+
+    assert_eq!(
+        arrow::util::pretty::pretty_format_batches(&result1)
+            .unwrap()
+            .to_string(),
+        arrow::util::pretty::pretty_format_batches(&result2)
+            .unwrap()
+            .to_string()
+    );
+    Ok(())
+}
