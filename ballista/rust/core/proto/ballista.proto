@@ -165,6 +165,7 @@ enum FileType {
   Parquet = 1;
   CSV = 2;
   Avro = 3;
+  Arrow = 4;
 }
 
 message AnalyzeNode {

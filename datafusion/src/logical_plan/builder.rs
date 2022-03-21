@@ -17,13 +17,6 @@
 
 //! This module provides a builder for creating LogicalPlans
 
-use crate::datasource::{
-    empty::EmptyTable,
-    file_format::parquet::{ParquetFormat, DEFAULT_PARQUET_EXTENSION},
-    listing::{ListingOptions, ListingTable, ListingTableConfig},
-    object_store::ObjectStore,
-    MemTable, TableProvider,
-};
 use crate::error::{DataFusionError, Result};
 use crate::logical_plan::expr_schema::ExprSchemable;
 use crate::logical_plan::plan::{
@@ -33,6 +26,16 @@ use crate::logical_plan::plan::{
 use crate::optimizer::utils;
 use crate::prelude::*;
 use crate::scalar::ScalarValue;
+use crate::{
+    datasource::{
+        empty::EmptyTable,
+        file_format::parquet::{ParquetFormat, DEFAULT_PARQUET_EXTENSION},
+        listing::{ListingOptions, ListingTable, ListingTableConfig},
+        object_store::ObjectStore,
+        MemTable, TableProvider,
+    },
+    execution::options::ArrowReadOptions,
+};
 use arrow::{
     datatypes::{DataType, Schema, SchemaRef},
     record_batch::RecordBatch,
@@ -329,6 +332,55 @@ impl LogicalPlanBuilder {
         object_store: Arc<dyn ObjectStore>,
         path: impl Into<String>,
         options: AvroReadOptions<'_>,
+        projection: Option<Vec<usize>>,
+        table_name: impl Into<String>,
+        target_partitions: usize,
+    ) -> Result<Self> {
+        let listing_options = options.to_listing_options(target_partitions);
+
+        let path: String = path.into();
+
+        let resolved_schema = match options.schema {
+            Some(s) => s,
+            None => {
+                listing_options
+                    .infer_schema(Arc::clone(&object_store), &path)
+                    .await?
+            }
+        };
+        let config = ListingTableConfig::new(object_store, path)
+            .with_listing_options(listing_options)
+            .with_schema(resolved_schema);
+        let provider = ListingTable::try_new(config)?;
+
+        Self::scan(table_name, Arc::new(provider), projection)
+    }
+
+    /// Scan an Arrow data source
+    pub async fn scan_arrow(
+        object_store: Arc<dyn ObjectStore>,
+        path: impl Into<String>,
+        options: ArrowReadOptions<'_>,
+        projection: Option<Vec<usize>>,
+        target_partitions: usize,
+    ) -> Result<Self> {
+        let path = path.into();
+        Self::scan_arrow_with_name(
+            object_store,
+            path.clone(),
+            options,
+            projection,
+            path,
+            target_partitions,
+        )
+        .await
+    }
+
+    /// Scan an Arrow data source and register it with a given table name
+    pub async fn scan_arrow_with_name(
+        object_store: Arc<dyn ObjectStore>,
+        path: impl Into<String>,
+        options: ArrowReadOptions<'_>,
         projection: Option<Vec<usize>>,
         table_name: impl Into<String>,
         target_partitions: usize,

@@ -18,7 +18,7 @@
 //! Object store that represents the Local File System.
 
 use std::fs::{self, File, Metadata};
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, Seek, SeekFrom};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -30,7 +30,7 @@ use crate::datasource::object_store::{
 use crate::datasource::PartitionedFile;
 use crate::error::{DataFusionError, Result};
 
-use super::{ObjectReaderStream, SizedFile};
+use super::{ObjectReaderStream, ReadSeek, SizedFile};
 
 #[derive(Debug)]
 /// Local File System as Object Store.
@@ -85,15 +85,14 @@ impl ObjectReader for LocalFileReader {
     fn sync_chunk_reader(
         &self,
         start: u64,
-        length: usize,
-    ) -> Result<Box<dyn Read + Send + Sync>> {
+        _length: usize,
+    ) -> Result<Box<dyn ReadSeek + Send + Sync>> {
         // A new file descriptor is opened for each chunk reader.
         // This okay because chunks are usually fairly large.
         let mut file = File::open(&self.file.path)?;
         file.seek(SeekFrom::Start(start))?;
 
-        let file = BufReader::new(file.take(length as u64));
-
+        let file = BufReader::new(file);
         Ok(Box::new(file))
     }
 

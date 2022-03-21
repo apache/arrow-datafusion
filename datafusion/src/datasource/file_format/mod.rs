@@ -16,7 +16,7 @@
 // under the License.
 
 //! Module containing helper methods for the various file formats
-
+pub mod arrow_file;
 pub mod avro;
 pub mod csv;
 pub mod json;

@@ -74,6 +74,7 @@ macro_rules! test_expression {
 }
 
 pub mod aggregates;
+pub mod arrow_files;
 #[cfg(feature = "avro")]
 pub mod avro;
 pub mod create_drop;

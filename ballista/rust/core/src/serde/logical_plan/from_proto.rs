@@ -47,6 +47,7 @@ impl Into<datafusion::sql::parser::FileType> for protobuf::FileType {
             protobuf::FileType::Parquet => FileType::Parquet,
             protobuf::FileType::Csv => FileType::CSV,
             protobuf::FileType::Avro => FileType::Avro,
+            protobuf::FileType::Arrow => FileType::Arrow,
         }
     }
 }

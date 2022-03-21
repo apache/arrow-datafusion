@@ -16,15 +16,12 @@
 // under the License.
 //! Object store implem used for testing
 
-use std::{
-    io,
-    io::{Cursor, Read},
-    sync::Arc,
-};
+use std::{io, io::Cursor, sync::Arc};
 
 use crate::{
     datasource::object_store::{
-        FileMeta, FileMetaStream, ListEntryStream, ObjectReader, ObjectStore, SizedFile,
+        FileMeta, FileMetaStream, ListEntryStream, ObjectReader, ObjectStore, ReadSeek,
+        SizedFile,
     },
     error::{DataFusionError, Result},
 };
@@ -94,6 +91,7 @@ impl ObjectStore for TestObjectStore {
         }
     }
 }
+impl<R: AsRef<[u8]>> ReadSeek for Cursor<R> {}
 
 struct EmptyObjectReader(u64);
 
@@ -111,7 +109,7 @@ impl ObjectReader for EmptyObjectReader {
         &self,
         _start: u64,
         _length: usize,
-    ) -> Result<Box<dyn Read + Send + Sync>> {
+    ) -> Result<Box<dyn ReadSeek + Send + Sync>> {
         Ok(Box::new(Cursor::new(vec![0; self.0 as usize])))
     }
 

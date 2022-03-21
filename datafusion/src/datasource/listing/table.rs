@@ -27,7 +27,7 @@ use crate::{
     datasource::file_format::avro::AvroFormat,
     datasource::file_format::csv::CsvFormat,
     datasource::file_format::json::JsonFormat,
-    datasource::file_format::parquet::ParquetFormat,
+    datasource::file_format::{arrow_file::ArrowFormat, parquet::ParquetFormat},
     error::{DataFusionError, Result},
     logical_plan::Expr,
     physical_plan::{
@@ -95,6 +95,7 @@ impl ListingTableConfig {
             "csv" => Ok(Arc::new(CsvFormat::default())),
             "json" => Ok(Arc::new(JsonFormat::default())),
             "parquet" => Ok(Arc::new(ParquetFormat::default())),
+            "arrow" => Ok(Arc::new(ArrowFormat::default())),
             _ => Err(DataFusionError::Internal(format!(
                 "Unable to infer file type from suffix {}",
                 suffix

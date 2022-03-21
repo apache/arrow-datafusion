@@ -21,7 +21,10 @@ use crate::{
         catalog::{CatalogList, MemoryCatalogList},
         information_schema::CatalogWithInformationSchema,
     },
-    datasource::listing::{ListingOptions, ListingTable},
+    datasource::{
+        file_format::arrow_file::{ArrowFormat, DEFAULT_ARROW_EXTENSION},
+        listing::{ListingOptions, ListingTable},
+    },
     datasource::{
         file_format::{
             avro::{AvroFormat, DEFAULT_AVRO_EXTENSION},
@@ -96,7 +99,7 @@ use uuid::Uuid;
 use super::{
     disk_manager::DiskManagerConfig,
     memory_manager::MemoryManagerConfig,
-    options::{AvroReadOptions, CsvReadOptions},
+    options::{ArrowReadOptions, AvroReadOptions, CsvReadOptions},
     DiskManager, MemoryManager,
 };
 
@@ -235,6 +238,10 @@ impl SessionContext {
                     FileType::Avro => Ok((
                         Arc::new(AvroFormat::default()) as Arc<dyn FileFormat>,
                         DEFAULT_AVRO_EXTENSION,
+                    )),
+                    FileType::Arrow => Ok((
+                        Arc::new(ArrowFormat::default()) as Arc<dyn FileFormat>,
+                        DEFAULT_ARROW_EXTENSION,
                     )),
                     _ => Err(DataFusionError::NotImplemented(format!(
                         "Unsupported file type {:?}.",
@@ -391,7 +398,6 @@ impl SessionContext {
     }
 
     /// Creates a DataFrame for reading an Avro data source.
-
     pub async fn read_avro(
         &mut self,
         uri: impl Into<String>,
@@ -403,6 +409,29 @@ impl SessionContext {
         Ok(Arc::new(DataFrame::new(
             self.state.clone(),
             &LogicalPlanBuilder::scan_avro(
+                object_store,
+                path,
+                options,
+                None,
+                target_partitions,
+            )
+            .await?
+            .build()?,
+        )))
+    }
+
+    /// Creates a DataFrame for reading an Arrow data source.
+    pub async fn read_arrow(
+        &mut self,
+        uri: impl Into<String>,
+        options: ArrowReadOptions<'_>,
+    ) -> Result<Arc<dyn DataFrame>> {
+        let uri: String = uri.into();
+        let (object_store, path) = self.object_store(&uri)?;
+        let target_partitions = self.state.lock().config.target_partitions;
+        Ok(Arc::new(DataFrameImpl::new(
+            self.state.clone(),
+            &LogicalPlanBuilder::scan_arrow(
                 object_store,
                 path,
                 options,
@@ -536,6 +565,22 @@ impl SessionContext {
             target_partitions,
             table_partition_cols: vec![],
         };
+
+        self.register_listing_table(name, uri, listing_options, None)
+            .await?;
+        Ok(())
+    }
+
+    /// Registers an Arrow data source so that it can be referenced from SQL statements
+    /// executed against this context.
+    pub async fn register_arrow(
+        &mut self,
+        name: &str,
+        uri: &str,
+        options: ArrowReadOptions<'_>,
+    ) -> Result<()> {
+        let listing_options =
+            options.to_listing_options(self.state.lock().config.target_partitions);
 
         self.register_listing_table(name, uri, listing_options, None)
             .await?;

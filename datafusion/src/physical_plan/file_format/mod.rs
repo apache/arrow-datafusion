@@ -17,6 +17,7 @@
 
 //! Execution plans that read file formats
 
+mod arrow_file;
 mod avro;
 mod csv;
 mod file_stream;
@@ -32,6 +33,7 @@ use arrow::{
     error::{ArrowError, Result as ArrowResult},
     record_batch::RecordBatch,
 };
+pub use arrow_file::ArrowExec;
 pub use avro::AvroExec;
 pub(crate) use csv::plan_to_csv;
 pub use csv::CsvExec;

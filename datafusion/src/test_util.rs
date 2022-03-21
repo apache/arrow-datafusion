@@ -21,7 +21,6 @@ use std::collections::BTreeMap;
 use std::{env, error::Error, path::PathBuf, sync::Arc};
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
-
 /// Compares formatted output of a record batch with an expected
 /// vector of strings, with the result of pretty formatting record
 /// batches. This is a macro so errors appear on the correct line
@@ -38,7 +37,7 @@ macro_rules! assert_batches_eq {
         let expected_lines: Vec<String> =
             $EXPECTED_LINES.iter().map(|&s| s.into()).collect();
 
-        let formatted = arrow::util::pretty::pretty_format_batches($CHUNKS)
+        let formatted = ::arrow::util::pretty::pretty_format_batches($CHUNKS)
             .unwrap()
             .to_string();
 
