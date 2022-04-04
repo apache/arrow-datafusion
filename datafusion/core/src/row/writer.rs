@@ -24,7 +24,7 @@ use crate::reg_fn;
 #[cfg(feature = "jit")]
 use crate::row::fn_name;
 use crate::row::{
-    estimate_row_width, fixed_size, get_offsets, schema_null_free, supported,
+    estimate_row_width, fixed_size, get_offsets, row_supported, schema_null_free,
 };
 use arrow::array::*;
 use arrow::datatypes::{DataType, Schema};
@@ -203,12 +203,12 @@ pub struct RowWriter {
 impl RowWriter {
     /// new
     pub fn new(schema: &Arc<Schema>) -> Self {
-        assert!(supported(schema));
+        assert!(row_supported(schema));
         let null_free = schema_null_free(schema);
         let field_count = schema.fields().len();
         let null_width = if null_free { 0 } else { ceil(field_count, 8) };
         let (field_offsets, values_width) = get_offsets(null_width, schema);
-        let mut init_capacity = estimate_row_width(null_width, schema);
+        let mut init_capacity = estimate_row_width(schema);
         if !fixed_size(schema) {
             // double the capacity to avoid repeated resize
             init_capacity *= 2;
@@ -335,13 +335,14 @@ impl RowWriter {
         }
     }
 
-    fn get_row(&self) -> &[u8] {
+    /// Get raw bytes
+    pub fn get_row(&self) -> &[u8] {
         &self.data[0..self.row_width]
     }
 }
 
 /// Stitch attributes of tuple in `batch` at `row_idx` and returns the tuple width
-fn write_row(
+pub fn write_row(
     row: &mut RowWriter,
     row_idx: usize,
     schema: &Arc<Schema>,

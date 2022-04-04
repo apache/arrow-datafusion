@@ -41,7 +41,7 @@ path = "src/lib.rs"
 # Used to enable the avro format
 avro = ["avro-rs", "num-traits", "datafusion-common/avro"]
 crypto_expressions = ["datafusion-physical-expr/crypto_expressions"]
-default = ["crypto_expressions", "regex_expressions", "unicode_expressions"]
+default = ["crypto_expressions", "regex_expressions", "unicode_expressions", "row"]
 # Used for testing ONLY: causes all values to hash to the same value (test for collisions)
 force_hash_collisions = []
 # Used to enable JIT code generation
