@@ -384,6 +384,7 @@ impl<'a> ConstEvaluator<'a> {
             | Expr::QualifiedWildcard { .. } => false,
             Expr::ScalarFunction { fun, .. } => Self::volatility_ok(fun.volatility()),
             Expr::ScalarUDF { fun, .. } => Self::volatility_ok(fun.signature.volatility),
+            Expr::TableUDF { .. } => false,
             Expr::Literal(_)
             | Expr::BinaryExpr { .. }
             | Expr::Not(_)

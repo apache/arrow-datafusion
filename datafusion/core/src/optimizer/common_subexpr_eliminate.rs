@@ -19,7 +19,7 @@
 
 use crate::error::Result;
 use crate::execution::context::ExecutionProps;
-use crate::logical_plan::plan::{Filter, Projection, Window};
+use crate::logical_plan::plan::{Filter, Projection, TableUDFs, Window};
 use crate::logical_plan::{
     col,
     plan::{Aggregate, Sort},
@@ -108,6 +108,28 @@ fn optimize(plan: &LogicalPlan, execution_props: &ExecutionProps) -> Result<Logi
                 input: Arc::new(new_input),
                 schema: schema.clone(),
                 alias: alias.clone(),
+            }))
+        }
+        LogicalPlan::TableUDFs(TableUDFs {
+            expr,
+            input,
+            schema,
+        }) => {
+            let arrays = to_arrays(expr, input, &mut expr_set)?;
+
+            let (mut new_expr, new_input) = rewrite_expr(
+                &[expr],
+                &[&arrays],
+                input,
+                &mut expr_set,
+                schema,
+                execution_props,
+            )?;
+
+            Ok(LogicalPlan::TableUDFs(TableUDFs {
+                expr: new_expr.pop().unwrap(),
+                input: Arc::new(new_input),
+                schema: schema.clone(),
             }))
         }
         LogicalPlan::Filter(Filter { predicate, input }) => {
@@ -438,6 +460,10 @@ impl ExprIdentifierVisitor<'_> {
             }
             Expr::ScalarUDF { fun, .. } => {
                 desc.push_str("ScalarUDF-");
+                desc.push_str(&fun.name);
+            }
+            Expr::TableUDF { fun, .. } => {
+                desc.push_str("TableUDF-");
                 desc.push_str(&fun.name);
             }
             Expr::WindowFunction {

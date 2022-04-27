@@ -30,13 +30,14 @@
 //! to a function that supports f64, it is coerced to f64.
 
 use crate::PhysicalExpr;
+use arrow::array::ArrayRef;
 use arrow::datatypes::{DataType, Schema};
 use arrow::record_batch::RecordBatch;
-use datafusion_common::Result;
-use datafusion_expr::BuiltinScalarFunction;
+use datafusion_common::{DataFusionError, Result};
 use datafusion_expr::ColumnarValue;
 pub use datafusion_expr::NullColumnarValue;
 use datafusion_expr::ScalarFunctionImplementation;
+use datafusion_expr::{BuiltinScalarFunction, TableFunctionImplementation};
 use std::any::Any;
 use std::fmt::Debug;
 use std::fmt::{self, Formatter};
@@ -144,5 +145,115 @@ impl PhysicalExpr for ScalarFunctionExpr {
         // evaluate the function
         let fun = self.fun.as_ref();
         (fun)(&inputs)
+    }
+}
+
+pub struct TableFunctionExpr {
+    fun: TableFunctionImplementation,
+    name: String,
+    args: Vec<Arc<dyn PhysicalExpr>>,
+    return_type: DataType,
+}
+
+impl Debug for TableFunctionExpr {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("TableFunctionExpr")
+            .field("fun", &"<FUNC>")
+            .field("name", &self.name)
+            .field("args", &self.args)
+            .field("return_type", &self.return_type)
+            .finish()
+    }
+}
+
+impl TableFunctionExpr {
+    /// Create a new Table function
+    pub fn new(
+        name: &str,
+        fun: TableFunctionImplementation,
+        args: Vec<Arc<dyn PhysicalExpr>>,
+        return_type: &DataType,
+    ) -> Self {
+        Self {
+            fun,
+            name: name.to_owned(),
+            args,
+            return_type: return_type.clone(),
+        }
+    }
+
+    /// Get the table function implementation
+    pub fn fun(&self) -> &TableFunctionImplementation {
+        &self.fun
+    }
+
+    /// The name for this expression
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Input arguments
+    pub fn args(&self) -> &[Arc<dyn PhysicalExpr>] {
+        &self.args
+    }
+
+    /// Data type produced by this expression
+    pub fn return_type(&self) -> &DataType {
+        &self.return_type
+    }
+
+    pub fn evaluate_table(&self, batch: &RecordBatch) -> Result<(ArrayRef, Vec<usize>)> {
+        // evaluate the arguments, if there are no arguments we'll instead pass in a null array
+        // indicating the batch size (as a convention)
+        let inputs = match (self.args.len(), self.name.parse::<BuiltinScalarFunction>()) {
+            (0, Ok(table_fun)) if table_fun.supports_zero_argument() => {
+                vec![NullColumnarValue::from(batch)]
+            }
+            _ => self
+                .args
+                .iter()
+                .map(|e| e.evaluate(batch))
+                .collect::<Result<Vec<_>>>()?,
+        };
+
+        // evaluate the function
+        let fun = self.fun.as_ref();
+        (fun)(&inputs, batch.num_rows())
+    }
+}
+
+impl fmt::Display for TableFunctionExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}({})",
+            self.name,
+            self.args
+                .iter()
+                .map(|e| format!("{}", e))
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
+}
+
+impl PhysicalExpr for TableFunctionExpr {
+    /// Return a reference to Any that can be used for downcasting
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
+        Ok(self.return_type.clone())
+    }
+
+    fn nullable(&self, _input_schema: &Schema) -> Result<bool> {
+        Ok(true)
+    }
+
+    fn evaluate(&self, _batch: &RecordBatch) -> Result<ColumnarValue> {
+        Err(DataFusionError::NotImplemented(
+            "Use evaluate_table for table funs".to_string(),
+        ))
     }
 }

@@ -26,7 +26,7 @@ use crate::error::{DataFusionError, Result};
 use crate::logical_expr::ExprSchemable;
 use crate::logical_plan::plan::{
     Aggregate, Analyze, EmptyRelation, Explain, Filter, Join, Projection, Sort,
-    SubqueryAlias, TableScan, ToStringifiedPlan, Union, Window,
+    SubqueryAlias, TableScan, TableUDFs, ToStringifiedPlan, Union, Window,
 };
 use crate::optimizer::utils;
 use crate::prelude::*;
@@ -1197,6 +1197,29 @@ pub(crate) fn expand_qualified_wildcard(
     let qualifier_schema =
         DFSchema::new_with_metadata(qualified_fields, schema.metadata().clone())?;
     expand_wildcard(&qualifier_schema, plan)
+}
+
+/// Build merged table udf schema from input and TableUDF experssions
+pub fn build_table_udf_schema(
+    input: &LogicalPlan,
+    udtf_expr: &[Expr],
+) -> Result<DFSchemaRef> {
+    let input_schema = input.schema();
+    let mut schema = (**input_schema).clone();
+    schema.merge(&DFSchema::new_with_metadata(
+        exprlist_to_fields(udtf_expr, input_schema)?,
+        HashMap::new(),
+    )?);
+    Ok(Arc::new(schema))
+}
+
+pub(crate) fn table_udfs(plan: LogicalPlan, udtf_expr: Vec<Expr>) -> Result<LogicalPlan> {
+    let schema = build_table_udf_schema(&plan, &udtf_expr)?;
+    Ok(LogicalPlan::TableUDFs(TableUDFs {
+        expr: udtf_expr,
+        input: Arc::new(plan),
+        schema,
+    }))
 }
 
 #[cfg(test)]

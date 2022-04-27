@@ -36,6 +36,7 @@ mod table_source;
 pub mod type_coercion;
 mod udaf;
 mod udf;
+mod udtf;
 pub mod window_frame;
 pub mod window_function;
 
@@ -59,7 +60,7 @@ pub use expr_fn::{
 pub use expr_schema::ExprSchemable;
 pub use function::{
     AccumulatorFunctionImplementation, ReturnTypeFunction, ScalarFunctionImplementation,
-    StateTypeFunction,
+    StateTypeFunction, TableFunctionImplementation,
 };
 pub use literal::{lit, lit_timestamp_nano, Literal, TimestampLiteral};
 pub use logical_plan::{LogicalPlan, PlanVisitor};
@@ -69,5 +70,6 @@ pub use signature::{Signature, TypeSignature, Volatility};
 pub use table_source::{TableProviderFilterPushDown, TableSource, TableType};
 pub use udaf::AggregateUDF;
 pub use udf::ScalarUDF;
+pub use udtf::TableUDF;
 pub use window_frame::{WindowFrame, WindowFrameBound, WindowFrameUnits};
 pub use window_function::{BuiltInWindowFunction, WindowFunction};

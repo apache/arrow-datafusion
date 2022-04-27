@@ -102,6 +102,7 @@ impl ExpressionVisitor for ApplicabilityVisitor<'_> {
             Expr::ScalarUDF { fun, .. } => {
                 self.visit_volatility(fun.signature.volatility)
             }
+            Expr::TableUDF { fun, .. } => self.visit_volatility(fun.signature.volatility),
 
             // TODO other expressions are not handled yet:
             // - AGGREGATE, WINDOW and SORT should not end up in filter conditions, except maybe in some edge cases

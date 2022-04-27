@@ -25,11 +25,13 @@ use crate::logical_plan::{DFField, DFSchema};
 use arrow::datatypes::DataType;
 pub use datafusion_common::{Column, ExprSchema};
 pub use datafusion_expr::expr_fn::*;
-use datafusion_expr::AccumulatorFunctionImplementation;
 use datafusion_expr::BuiltinScalarFunction;
 pub use datafusion_expr::Expr;
 use datafusion_expr::StateTypeFunction;
 pub use datafusion_expr::{lit, lit_timestamp_nano, Literal};
+use datafusion_expr::{
+    AccumulatorFunctionImplementation, TableFunctionImplementation, TableUDF,
+};
 use datafusion_expr::{AggregateUDF, ScalarUDF};
 use datafusion_expr::{
     ReturnTypeFunction, ScalarFunctionImplementation, Signature, Volatility,
@@ -106,6 +108,27 @@ pub fn create_udf(
 ) -> ScalarUDF {
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(return_type.clone()));
     ScalarUDF::new(
+        name,
+        &Signature::exact(input_types, volatility),
+        &return_type,
+        &fun,
+    )
+}
+
+/// Creates a new UDTF with a specific signature and specific return type.
+/// This is a helper function to create a new UDTF.
+/// The function `create_udtf` returns a subset of all possible `TableFunction`:
+/// * the UDTF has a fixed return type
+/// * the UDTF has a fixed signature (e.g. [f64, f64])
+pub fn create_udtf(
+    name: &str,
+    input_types: Vec<DataType>,
+    return_type: Arc<DataType>,
+    volatility: Volatility,
+    fun: TableFunctionImplementation,
+) -> TableUDF {
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(return_type.clone()));
+    TableUDF::new(
         name,
         &Signature::exact(input_types, volatility),
         &return_type,

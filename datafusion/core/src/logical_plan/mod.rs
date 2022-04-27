@@ -30,7 +30,8 @@ pub mod plan;
 mod registry;
 pub mod window_frames;
 pub use builder::{
-    build_join_schema, union_with_alias, LogicalPlanBuilder, UNNAMED_TABLE,
+    build_join_schema, build_table_udf_schema, union_with_alias, LogicalPlanBuilder,
+    UNNAMED_TABLE,
 };
 pub use datafusion_common::{DFField, DFSchema, DFSchemaRef, ToDFSchema};
 pub use datafusion_expr::{expr_fn::binary_expr, Operator};
@@ -40,9 +41,9 @@ pub use expr::{
     abs, acos, and, approx_distinct, approx_percentile_cont, array, ascii, asin, atan,
     avg, bit_length, btrim, call_fn, case, ceil, character_length, chr, coalesce, col,
     columnize_expr, combine_filters, concat, concat_expr, concat_ws, concat_ws_expr, cos,
-    count, count_distinct, create_udaf, create_udf, date_part, date_trunc, digest,
-    exists, exp, exprlist_to_fields, floor, in_list, in_subquery, initcap, left, length,
-    lit, lit_timestamp_nano, ln, log10, log2, lower, lpad, ltrim, max, md5, min,
+    count, count_distinct, create_udaf, create_udf, create_udtf, date_part, date_trunc,
+    digest, exists, exp, exprlist_to_fields, floor, in_list, in_subquery, initcap, left,
+    length, lit, lit_timestamp_nano, ln, log10, log2, lower, lpad, ltrim, max, md5, min,
     not_exists, not_in_subquery, now, now_expr, nullif, octet_length, or, random,
     regexp_match, regexp_replace, repeat, replace, reverse, right, round, rpad, rtrim,
     scalar_subquery, sha224, sha256, sha384, sha512, signum, sin, split_part, sqrt,
@@ -52,7 +53,8 @@ pub use expr::{
 };
 pub use expr_rewriter::{
     normalize_col, normalize_cols, replace_col, rewrite_sort_cols_by_aggs,
-    unnormalize_col, unnormalize_cols, ExprRewritable, ExprRewriter, RewriteRecursion,
+    rewrite_udtfs_to_columns, unnormalize_col, unnormalize_cols, ExprRewritable,
+    ExprRewriter, RewriteRecursion,
 };
 pub use expr_simplier::{ExprSimplifiable, SimplifyInfo};
 pub use expr_visitor::{ExprVisitable, ExpressionVisitor, Recursion};

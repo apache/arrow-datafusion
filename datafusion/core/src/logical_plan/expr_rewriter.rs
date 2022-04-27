@@ -193,6 +193,10 @@ impl ExprRewritable for Expr {
                 args: rewrite_vec(args, rewriter)?,
                 fun,
             },
+            Expr::TableUDF { args, fun } => Expr::TableUDF {
+                args: rewrite_vec(args, rewriter)?,
+                fun,
+            },
             Expr::WindowFunction {
                 args,
                 fun,
@@ -454,6 +458,34 @@ pub fn unnormalize_col(expr: Expr) -> Expr {
 #[inline]
 pub fn unnormalize_cols(exprs: impl IntoIterator<Item = Expr>) -> Vec<Expr> {
     exprs.into_iter().map(unnormalize_col).collect()
+}
+
+/// Rewrite all table udfs to columns
+/// For now it used by Projection Node (to get access to columns returning by TableUDFs Node)
+pub fn rewrite_udtfs_to_columns(exprs: Vec<Expr>, schema: DFSchema) -> Vec<Expr> {
+    struct ReplaceUdtfWithColumn<'a> {
+        schema: &'a DFSchema,
+    }
+    impl<'a> ExprRewriter for ReplaceUdtfWithColumn<'a> {
+        fn mutate(&mut self, expr: Expr) -> Result<Expr> {
+            if let Expr::TableUDF { .. } = expr {
+                Ok(Expr::Column(Column {
+                    relation: None,
+                    name: expr.name(self.schema).unwrap(),
+                }))
+            } else {
+                Ok(expr)
+            }
+        }
+    }
+
+    exprs
+        .into_iter()
+        .map(|expr| {
+            expr.rewrite(&mut ReplaceUdtfWithColumn { schema: &schema })
+                .unwrap()
+        })
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]

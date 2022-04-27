@@ -968,6 +968,9 @@ impl AsLogicalPlan for LogicalPlanNode {
             LogicalPlan::DropTable(_) => Err(proto_error(
                 "Error converting DropTable. Not yet supported in Ballista",
             )),
+            LogicalPlan::TableUDFs(_) => Err(proto_error(
+                "Error converting TableUDFs. Not yet supported in Ballista",
+            )),
         }
     }
 }

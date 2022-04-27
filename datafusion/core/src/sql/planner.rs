@@ -26,23 +26,25 @@ use std::{convert::TryInto, vec};
 use crate::catalog::TableReference;
 use crate::datasource::TableProvider;
 use crate::logical_plan::window_frames::{WindowFrame, WindowFrameUnits};
+use crate::logical_plan::EmptyRelation;
 use crate::logical_plan::Expr::Alias;
 use crate::logical_plan::{
     and, builder::expand_qualified_wildcard, builder::expand_wildcard, col, lit,
-    normalize_col, union_with_alias, Column, CreateCatalog, CreateCatalogSchema,
-    CreateExternalTable as PlanCreateExternalTable, CreateMemoryTable, DFSchema,
-    DFSchemaRef, DropTable, Expr, FileType, LogicalPlan, LogicalPlanBuilder, Operator,
-    PlanType, ToDFSchema, ToStringifiedPlan,
+    normalize_col, rewrite_udtfs_to_columns, union_with_alias, Column, CreateCatalog,
+    CreateCatalogSchema, CreateExternalTable as PlanCreateExternalTable,
+    CreateMemoryTable, DFSchema, DFSchemaRef, DropTable, Expr, FileType, LogicalPlan,
+    LogicalPlanBuilder, Operator, PlanType, ToDFSchema, ToStringifiedPlan,
 };
 use crate::optimizer::utils::exprlist_to_columns;
 use crate::prelude::JoinType;
 use crate::scalar::ScalarValue;
-use crate::sql::utils::{make_decimal_type, normalize_ident};
+use crate::sql::utils::{find_udtf_exprs, make_decimal_type, normalize_ident};
 use crate::{
     error::{DataFusionError, Result},
     physical_plan::aggregates,
     physical_plan::udaf::AggregateUDF,
     physical_plan::udf::ScalarUDF,
+    physical_plan::udtf::TableUDF,
     sql::parser::{CreateExternalTable, Statement as DFStatement},
 };
 use arrow::datatypes::*;
@@ -68,7 +70,7 @@ use super::{
         resolve_aliases_to_exprs, resolve_positions_to_exprs,
     },
 };
-use crate::logical_plan::builder::project_with_alias;
+use crate::logical_plan::builder::{project_with_alias, table_udfs};
 use crate::logical_plan::plan::{Analyze, Explain};
 
 /// The ContextProvider trait allows the query planner to obtain meta-data about tables and
@@ -78,6 +80,8 @@ pub trait ContextProvider {
     fn get_table_provider(&self, name: TableReference) -> Option<Arc<dyn TableProvider>>;
     /// Getter for a UDF description
     fn get_function_meta(&self, name: &str) -> Option<Arc<ScalarUDF>>;
+    /// Getter for a UDTF description
+    fn get_table_function_meta(&self, name: &str) -> Option<Arc<TableUDF>>;
     /// Getter for a UDAF description
     fn get_aggregate_meta(&self, name: &str) -> Option<Arc<AggregateUDF>>;
     /// Getter for system/user-defined variable type
@@ -666,7 +670,10 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     ) -> Result<LogicalPlan> {
         let (plan, alias) = match relation {
             TableFactor::Table {
-                ref name, alias, ..
+                ref name,
+                alias,
+                args,
+                ..
             } => {
                 let table_name = name.to_string();
                 let cte = ctes.get(&table_name);
@@ -685,10 +692,66 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                             };
                             scan?.build()
                         }
-                        (None, None) => Err(DataFusionError::Plan(format!(
-                            "Table or CTE with name '{}' not found",
-                            name
-                        ))),
+                        (None, None) => {
+                            let table_udf =
+                                self.schema_provider.get_table_function_meta(&table_name);
+                            if table_udf.is_some() {
+                                let udtf = Expr::TableUDF {
+                                    fun: table_udf.unwrap(),
+                                    args: self
+                                        .function_args_to_expr(args, &DFSchema::empty())
+                                        .unwrap(),
+                                };
+
+                                let udtf_plan = table_udfs(
+                                    LogicalPlan::EmptyRelation(EmptyRelation {
+                                        produce_one_row: true,
+                                        schema: Arc::new(DFSchema::empty()),
+                                    }),
+                                    vec![udtf.clone()],
+                                )
+                                .unwrap();
+
+                                if alias.is_none() {
+                                    return Ok(udtf_plan);
+                                }
+
+                                let mut select_exprs = rewrite_udtfs_to_columns(
+                                    vec![udtf],
+                                    udtf_plan.schema().clone().as_ref().to_owned(),
+                                );
+
+                                let alias = alias.unwrap();
+
+                                if !alias.columns.is_empty() {
+                                    select_exprs = select_exprs
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(i, e)| {
+                                            if alias.columns.len() > i {
+                                                Expr::Alias(
+                                                    Box::new(e.clone()),
+                                                    alias.columns[i].to_string(),
+                                                )
+                                            } else {
+                                                e.clone()
+                                            }
+                                        })
+                                        .collect();
+                                }
+
+                                return project_with_alias(
+                                    udtf_plan,
+                                    select_exprs,
+                                    Some(alias.name.value),
+                                );
+                            }
+
+                            Err(DataFusionError::Plan(format!(
+                                "Table or CTE with name '{}' not found",
+                                name
+                            )))
+                        }
                     }?,
                     alias,
                 )
@@ -907,18 +970,30 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         let empty_from = matches!(plans.first(), Some(LogicalPlan::EmptyRelation(_)));
 
         // process `where` clause
-        let plan = self.plan_selection(select.selection, plans, outer_query_schema)?;
+        let mut plan =
+            self.plan_selection(select.selection, plans, outer_query_schema)?;
 
         // process the SELECT expressions, with wildcards expanded.
-        let select_exprs = self.prepare_select_exprs(
+        let mut select_exprs = self.prepare_select_exprs(
             &plan,
             select.projection,
             empty_from,
             outer_query_schema,
         )?;
 
+        // create proxy node to handle udtfs and rewrite udtfs to columns (returning by TableUDFs Node)
+        let udtf_exprs = find_udtf_exprs(select_exprs.as_slice());
+        if !udtf_exprs.is_empty() {
+            plan = table_udfs(plan, udtf_exprs).unwrap();
+            select_exprs = rewrite_udtfs_to_columns(
+                select_exprs,
+                plan.schema().clone().as_ref().to_owned(),
+            );
+        }
+
         // having and group by clause may reference aliases defined in select projection
         let projected_plan = self.project(plan.clone(), select_exprs.clone())?;
+
         let mut combined_schema = (**projected_plan.schema()).clone();
         combined_schema.merge(plan.schema());
 
@@ -1870,10 +1945,16 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                             let args = self.function_args_to_expr(function.args, schema)?;
                             Ok(Expr::AggregateUDF { fun: fm, args })
                         }
-                        _ => Err(DataFusionError::Plan(format!(
-                            "Invalid function '{}'",
-                            name
-                        ))),
+                        None => match self.schema_provider.get_table_function_meta(&name) {
+                            Some(fm) => {
+                                let args = self.function_args_to_expr(function.args, schema)?;
+                                Ok(Expr::TableUDF { fun: fm, args })
+                            }
+                            _ => Err(DataFusionError::Plan(format!(
+                                "Invalid function '{}'",
+                                name
+                            ))),
+                        },
                     },
                 }
             }
@@ -2395,7 +2476,9 @@ pub fn convert_data_type(sql_type: &SQLDataType) -> Result<DataType> {
         SQLDataType::Float(_) => Ok(DataType::Float32),
         SQLDataType::Real => Ok(DataType::Float32),
         SQLDataType::Double => Ok(DataType::Float64),
-        SQLDataType::Char(_) | SQLDataType::Varchar(_) => Ok(DataType::Utf8),
+        SQLDataType::Char(_) | SQLDataType::Varchar(_) | SQLDataType::Text => {
+            Ok(DataType::Utf8)
+        }
         SQLDataType::Timestamp => Ok(DataType::Timestamp(TimeUnit::Nanosecond, None)),
         SQLDataType::Date => Ok(DataType::Date32),
         SQLDataType::Decimal(precision, scale) => make_decimal_type(*precision, *scale),
@@ -4208,6 +4291,10 @@ mod tests {
                 ))),
                 _ => None,
             }
+        }
+
+        fn get_table_function_meta(&self, _name: &str) -> Option<Arc<TableUDF>> {
+            unimplemented!()
         }
 
         fn get_aggregate_meta(&self, _name: &str) -> Option<Arc<AggregateUDF>> {

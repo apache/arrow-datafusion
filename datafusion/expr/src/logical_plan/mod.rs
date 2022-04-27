@@ -24,7 +24,7 @@ pub use plan::{
     CreateMemoryTable, CrossJoin, DropTable, EmptyRelation, Explain, Extension, FileType,
     Filter, Join, JoinConstraint, JoinType, Limit, LogicalPlan, Partitioning, PlanType,
     PlanVisitor, Projection, Repartition, Sort, StringifiedPlan, Subquery, SubqueryAlias,
-    TableScan, ToStringifiedPlan, Union, Values, Window,
+    TableScan, TableUDFs, ToStringifiedPlan, Union, Values, Window,
 };
 
 pub use display::display_schema;
