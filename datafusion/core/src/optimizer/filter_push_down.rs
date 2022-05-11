@@ -130,7 +130,7 @@ fn issue_filters(
         return push_down(&state, plan);
     }
 
-    let plan = utils::add_filter(plan.clone(), &predicates);
+    let plan = utils::filter_by_all(plan.clone(), &predicates);
 
     state.filters = remove_filters(&state.filters, &predicate_columns);
 
@@ -251,7 +251,7 @@ fn optimize_join(
         Ok(plan)
     } else {
         // wrap the join on the filter whose predicates must be kept
-        let plan = utils::add_filter(plan, &to_keep.0);
+        let plan = utils::filter_by_all(plan, &to_keep.0);
         state.filters = remove_filters(&state.filters, &to_keep.1);
 
         Ok(plan)
@@ -290,7 +290,7 @@ fn optimize(plan: &LogicalPlan, mut state: State) -> Result<LogicalPlan> {
             // As those contain only literals, they could be optimized using constant folding
             // and removal of WHERE TRUE / WHERE FALSE
             if !no_col_predicates.is_empty() {
-                Ok(utils::add_filter(
+                Ok(utils::filter_by_all(
                     optimize(input, state)?,
                     &no_col_predicates,
                 ))

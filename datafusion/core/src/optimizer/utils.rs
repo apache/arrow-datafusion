@@ -25,9 +25,9 @@ use datafusion_expr::logical_plan::{
 };
 
 use crate::logical_plan::{
-    and, build_join_schema, Column, CreateMemoryTable, DFSchemaRef, Expr, ExprVisitable,
-    Limit, LogicalPlan, LogicalPlanBuilder, Operator, Partitioning, Recursion,
-    Repartition, Union, Values,
+    and, build_join_schema, or, Column, CreateMemoryTable, DFSchemaRef, Expr,
+    ExprVisitable, Limit, LogicalPlan, LogicalPlanBuilder, Operator, Partitioning,
+    Recursion, Repartition, Union, Values,
 };
 use crate::prelude::lit;
 use crate::scalar::ScalarValue;
@@ -576,6 +576,32 @@ pub fn rewrite_expression(expr: &Expr, expressions: &[Expr]) -> Result<Expr> {
     }
 }
 
+// returns a new [LogicalPlan] that wraps `plan` in a [LogicalPlan::Filter] with
+/// its predicate with all `predicates` ANDed.
+pub fn filter_by_all(plan: LogicalPlan, predicates: &[&Expr]) -> LogicalPlan {
+    if let Some(predicate) = combine_conjunctive(predicates) {
+        LogicalPlan::Filter(Filter {
+            predicate,
+            input: Arc::new(plan),
+        })
+    } else {
+        plan
+    }
+}
+
+// returns a new [LogicalPlan] that wraps `plan` in a [LogicalPlan::Filter] with
+/// its predicate with all `predicates` ORed.
+pub fn filter_by_any(plan: LogicalPlan, predicates: &[&Expr]) -> LogicalPlan {
+    if let Some(predicate) = combine_disjunctive(predicates) {
+        LogicalPlan::Filter(Filter {
+            predicate,
+            input: Arc::new(plan),
+        })
+    } else {
+        plan
+    }
+}
+
 /// converts "A AND B AND C" => [A, B, C]
 pub fn split_conjunction<'a>(predicate: &'a Expr, predicates: &mut Vec<&'a Expr>) {
     match predicate {
@@ -594,22 +620,179 @@ pub fn split_conjunction<'a>(predicate: &'a Expr, predicates: &mut Vec<&'a Expr>
     }
 }
 
-/// returns a new [LogicalPlan] that wraps `plan` in a [LogicalPlan::Filter] with
-/// its predicate be all `predicates` ANDed.
-pub fn add_filter(plan: LogicalPlan, predicates: &[&Expr]) -> LogicalPlan {
-    // reduce filters to a single filter with an AND
-    let predicate = predicates
-        .iter()
-        .skip(1)
-        .fold(predicates[0].clone(), |acc, predicate| {
-            and(acc, (*predicate).to_owned())
-        });
-
-    LogicalPlan::Filter(Filter {
-        predicate,
-        input: Arc::new(plan),
-    })
+/// converts "A OR B OR C" => [A, B, C]
+pub fn split_disjunction<'a>(predicate: &'a Expr, predicates: &mut Vec<&'a Expr>) {
+    match predicate {
+        Expr::BinaryExpr {
+            right,
+            op: Operator::Or,
+            left,
+        } => {
+            split_disjunction(left, predicates);
+            split_disjunction(right, predicates);
+        }
+        Expr::Alias(expr, _) => {
+            split_disjunction(expr, predicates);
+        }
+        other => predicates.push(other),
+    }
 }
+
+/// Converts [A, B, C] -> A AND B AND C
+pub fn combine_conjunctive(predicates: &[&Expr]) -> Option<Expr> {
+    if predicates.is_empty() {
+        None
+    } else {
+        // reduce filters to a single filter with an AND
+        Some(
+            predicates
+                .iter()
+                .skip(1)
+                .fold(predicates[0].clone(), |acc, predicate| {
+                    and(acc, (*predicate).to_owned())
+                }),
+        )
+    }
+}
+
+/// Converts [A, B, C] -> A OR B OR C
+pub fn combine_disjunctive(predicates: &[&Expr]) -> Option<Expr> {
+    if predicates.is_empty() {
+        None
+    } else {
+        // reduce filters to a single filter with an OR
+        Some(
+            predicates
+                .iter()
+                .skip(1)
+                .fold(predicates[0].clone(), |acc, predicate| {
+                    or(acc, (*predicate).to_owned())
+                }),
+        )
+    }
+}
+
+/// Recursively walk an expression tree, returning true if it encounters a joinable subquery
+struct SubqueryVisitor<'a> {
+    contains_joinable_subquery: &'a mut bool,
+}
+
+impl ExpressionVisitor for SubqueryVisitor<'_> {
+    fn pre_visit(self, expr: &Expr) -> Result<Recursion<Self>> {
+        match expr {
+            Expr::InSubquery { .. } | Expr::Exists { .. } => {
+                *self.contains_joinable_subquery = true;
+                return Ok(Recursion::Stop(self));
+            }
+            _ => {}
+        }
+        Ok(Recursion::Continue(self))
+    }
+}
+
+/// Recursively walk an expression tree, returning true if it encounters a joinable subquery
+pub fn contains_joinable_subquery(expr: &Expr) -> Result<bool> {
+    let mut contains_joinable_subquery = false;
+    expr.accept(SubqueryVisitor {
+        contains_joinable_subquery: &mut contains_joinable_subquery,
+    })?;
+    Ok(contains_joinable_subquery)
+}
+
+/// Checks if the column belongs to the outer schema
+pub(crate) fn column_is_correlated(outer: &Arc<DFSchema>, column: &Column) -> bool {
+    for field in outer.fields() {
+        if *column == field.qualified_column() || *column == field.unqualified_column() {
+            return true;
+        }
+    }
+    false
+}
+
+/// Recursively walk an expression tree, returning true if it encounters a joinable subquery
+struct CorrelatedColumnsVisitor<'a> {
+    outer_schema: &'a Arc<DFSchema>,
+    contains_correlated_columns: &'a mut bool,
+}
+
+impl ExpressionVisitor for CorrelatedColumnsVisitor<'_> {
+    fn pre_visit(self, expr: &Expr) -> Result<Recursion<Self>> {
+        if let Expr::Column(c) = expr {
+            if column_is_correlated(self.outer_schema, c) {
+                *self.contains_correlated_columns = true;
+                return Ok(Recursion::Stop(self));
+            }
+        }
+        Ok(Recursion::Continue(self))
+    }
+}
+
+/// Recursively walk an expression tree, returning true if it encounters a correlated column
+pub fn contains_correlated_columns(
+    outer_schema: &Arc<DFSchema>,
+    expr: &Expr,
+) -> Result<bool> {
+    let mut contains_correlated_columns = false;
+    expr.accept(CorrelatedColumnsVisitor {
+        outer_schema,
+        contains_correlated_columns: &mut contains_correlated_columns,
+    })?;
+    Ok(contains_correlated_columns)
+}
+
+/// Check if one of the columns belongs to the outer schema, then return (outer, inner)
+fn maybe_correlated_columns(
+    outer: &Arc<DFSchema>,
+    column_a: &Column,
+    column_b: &Column,
+) -> Option<(Column, Column)> {
+    if column_is_correlated(outer, column_a) {
+        return Some((column_a.clone(), column_b.clone()));
+    } else if column_is_correlated(outer, column_b) {
+        return Some((column_b.clone(), column_a.clone()));
+    }
+    None
+}
+
+/// Extract filters of the form  Column = Column where one of the columns
+/// from the given expression belongs to the outer schema
+pub(crate) fn extract_correlated_as_join_columns(
+    expr: &Expr,
+    outer: &Arc<DFSchema>,
+    correlated_columns: &mut Vec<(Column, Column)>,
+) -> Option<Expr> {
+    let mut filters = vec![];
+    // This will also strip aliases
+    split_conjunction(expr, &mut filters);
+
+    let mut non_correlated_predicates = vec![];
+    for filter in filters {
+        match filter {
+            Expr::BinaryExpr { left, op, right } => {
+                let mut extracted_column = false;
+                if let (Expr::Column(column_a), Expr::Column(column_b)) =
+                    (left.as_ref(), right.as_ref())
+                {
+                    if let Some(columns) =
+                        maybe_correlated_columns(outer, column_a, column_b)
+                    {
+                        if *op == Operator::Eq {
+                            correlated_columns.push(columns);
+                            extracted_column = true;
+                        }
+                    }
+                }
+                if !extracted_column {
+                    non_correlated_predicates.push(filter);
+                }
+            }
+            _ => non_correlated_predicates.push(filter),
+        }
+    }
+
+    combine_conjunctive(&non_correlated_predicates)
+}
+
 
 #[cfg(test)]
 mod tests {
