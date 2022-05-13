@@ -1088,16 +1088,33 @@ pub fn union_with_alias(
     }
 
     let union_schema = (**inputs[0].schema()).clone();
-    let union_schema = Arc::new(match alias {
-        Some(ref alias) => union_schema.replace_qualifier(alias.as_str()),
-        None => union_schema.strip_qualifiers(),
+    let union_schema_strip = union_schema.clone().strip_qualifiers();
+
+    inputs
+        .iter()
+        .skip(1)
+        .try_for_each(|input_plan| -> Result<()> {
+            union_schema_strip.check_arrow_schema_type_compatible(
+                &((**input_plan.schema()).clone().into()),
+            )
+        })?;
+
+    let union_plan = LogicalPlan::Union(Union {
+        inputs,
+        schema: Arc::new(union_schema_strip),
     });
 
-    Ok(LogicalPlan::Union(Union {
-        inputs,
-        schema: union_schema,
-        alias,
-    }))
+    match alias {
+        Some(ref alias) => {
+            let alias_schema = union_schema.replace_qualifier(alias.as_str());
+            Ok(LogicalPlan::SubqueryAlias(SubqueryAlias {
+                input: Arc::new(union_plan),
+                alias: alias.to_string(),
+                schema: Arc::new(alias_schema),
+            }))
+        }
+        None => Ok(union_plan),
+    }
 }
 
 /// Project with optional alias

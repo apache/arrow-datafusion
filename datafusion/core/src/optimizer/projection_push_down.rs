@@ -32,6 +32,7 @@ use crate::optimizer::utils;
 use crate::sql::utils::find_sort_exprs;
 use arrow::datatypes::{Field, Schema};
 use arrow::error::Result as ArrowResult;
+use datafusion_expr::logical_plan::Filter;
 use std::{
     collections::{BTreeSet, HashSet},
     sync::Arc,
@@ -383,11 +384,7 @@ fn optimize_plan(
                 schema: a.schema.clone(),
             }))
         }
-        LogicalPlan::Union(Union {
-            inputs,
-            schema,
-            alias,
-        }) => {
+        LogicalPlan::Union(Union { inputs, schema }) => {
             // UNION inputs will reference the same column with different identifiers, so we need
             // to populate new_required_columns by unqualified column name based on required fields
             // from the resulting UNION output
@@ -429,10 +426,10 @@ fn optimize_plan(
             Ok(LogicalPlan::Union(Union {
                 inputs: new_inputs,
                 schema: Arc::new(new_schema),
-                alias: alias.clone(),
             }))
         }
         LogicalPlan::SubqueryAlias(SubqueryAlias { input, alias, .. }) => {
+            println!("input: {:?}", *input);
             match input.as_ref() {
                 LogicalPlan::TableScan(TableScan { table_name, .. }) => {
                     let new_required_columns = new_required_columns
@@ -453,6 +450,62 @@ fn optimize_plan(
                         _execution_props,
                     )?];
                     let expr = vec![];
+                    utils::from_plan(plan, &expr, &new_inputs)
+                }
+                LogicalPlan::Union(Union { .. }) => {
+                    // Scope of alias is outside, inside we should remove it.
+                    // Here we remove the alias in `new_required_columns`.
+                    let new_required_columns = new_required_columns
+                        .iter()
+                        .map(|c| match &c.relation {
+                            Some(q) if q == alias => Column {
+                                relation: None,
+                                name: c.name.clone(),
+                            },
+                            _ => c.clone(),
+                        })
+                        .collect();
+                    let new_inputs = vec![optimize_plan(
+                        _optimizer,
+                        input,
+                        &new_required_columns,
+                        has_projection,
+                        _execution_props,
+                    )?];
+                    let expr = vec![];
+
+                    utils::from_plan(plan, &expr, &new_inputs)
+                }
+                LogicalPlan::Filter(Filter { input, .. }) => {
+                    // let new_inputs = vec![optimize_plan(
+                    //     _optimizer,
+                    //     input,
+                    //     &new_required_columns,
+                    //     has_projection,
+                    //     _execution_props,
+                    // )?];
+                    // let expr = vec![];
+
+                    // utils::from_plan(plan, &expr, &new_inputs)
+                    let expr = plan.expressions();
+                    // collect all required columns by this plan
+                    utils::exprlist_to_columns(&expr, &mut new_required_columns)?;
+
+                    // apply the optimization to all inputs of the plan
+                    let inputs = plan.inputs();
+                    let new_inputs = inputs
+                        .iter()
+                        .map(|input_plan| {
+                            optimize_plan(
+                                _optimizer,
+                                input_plan,
+                                &new_required_columns,
+                                has_projection,
+                                _execution_props,
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+
                     utils::from_plan(plan, &expr, &new_inputs)
                 }
                 _ => Err(DataFusionError::Plan(

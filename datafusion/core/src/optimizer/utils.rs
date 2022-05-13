@@ -268,13 +268,10 @@ pub fn from_plan(
         LogicalPlan::Extension(e) => Ok(LogicalPlan::Extension(Extension {
             node: e.node.from_template(expr, inputs),
         })),
-        LogicalPlan::Union(Union { schema, alias, .. }) => {
-            Ok(LogicalPlan::Union(Union {
-                inputs: inputs.to_vec(),
-                schema: schema.clone(),
-                alias: alias.clone(),
-            }))
-        }
+        LogicalPlan::Union(Union { schema, .. }) => Ok(LogicalPlan::Union(Union {
+            inputs: inputs.to_vec(),
+            schema: schema.clone(),
+        })),
         LogicalPlan::Analyze(a) => {
             assert!(expr.is_empty());
             assert_eq!(inputs.len(), 1);
