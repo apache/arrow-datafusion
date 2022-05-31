@@ -45,6 +45,7 @@ pub mod disk_manager;
 pub mod memory_manager;
 pub mod options;
 pub mod runtime_env;
+pub mod async_executor;
 
 pub use disk_manager::DiskManager;
 pub use memory_manager::{

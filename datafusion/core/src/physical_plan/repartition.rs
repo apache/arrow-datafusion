@@ -337,7 +337,7 @@ impl ExecutionPlan for RepartitionExec {
                 let r_metrics = RepartitionMetrics::new(i, partition, &self.metrics);
 
                 let input_task: JoinHandle<Result<()>> =
-                    tokio::spawn(Self::pull_from_input(
+                    context.async_executor().execute(Self::pull_from_input(
                         self.input.clone(),
                         i,
                         txs.clone(),
@@ -348,7 +348,7 @@ impl ExecutionPlan for RepartitionExec {
 
                 // In a separate task, wait for each input to be done
                 // (and pass along any errors, including panic!s)
-                let join_handle = tokio::spawn(Self::wait_for_task(
+                let join_handle = context.async_executor().execute(Self::wait_for_task(
                     AbortOnDropSingle::new(input_task),
                     txs,
                 ));

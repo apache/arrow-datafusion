@@ -75,7 +75,7 @@ impl MemTable {
             .map(|part_i| {
                 let context1 = context.clone();
                 let exec = exec.clone();
-                tokio::spawn(async move {
+                context.async_executor().execute(async move {
                     let stream = exec.execute(part_i, context1.clone())?;
                     common::collect(stream).await
                 })

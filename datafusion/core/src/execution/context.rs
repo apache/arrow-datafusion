@@ -79,6 +79,7 @@ use crate::physical_optimizer::coalesce_batches::CoalesceBatches;
 use crate::physical_optimizer::merge_exec::AddCoalescePartitionsExec;
 use crate::physical_optimizer::repartition::Repartition;
 
+use crate::execution::async_executor::{AsyncExecutor, DefaultExecutor};
 use crate::execution::runtime_env::{RuntimeConfig, RuntimeEnv};
 use crate::logical_plan::plan::Explain;
 use crate::physical_plan::file_format::{plan_to_csv, plan_to_json, plan_to_parquet};
@@ -1507,6 +1508,8 @@ pub struct TaskContext {
     aggregate_functions: HashMap<String, Arc<AggregateUDF>>,
     /// Runtime environment associated with this task context
     runtime: Arc<RuntimeEnv>,
+    /// Async executor allows to specific which asynchronous executor should be used
+    async_executor: Arc<Box<dyn AsyncExecutor>>,
 }
 
 impl TaskContext {
@@ -1526,6 +1529,7 @@ impl TaskContext {
             scalar_functions,
             aggregate_functions,
             runtime,
+            async_executor: Arc::new(Box::new(DefaultExecutor {})),
         }
     }
 
@@ -1579,6 +1583,10 @@ impl TaskContext {
     pub fn runtime_env(&self) -> Arc<RuntimeEnv> {
         self.runtime.clone()
     }
+
+    pub fn async_executor(&self) -> Arc<Box<dyn AsyncExecutor>> {
+        Arc::clone(&self.async_executor)
+    }
 }
 
 /// Create a new task context instance from SessionContext
@@ -1601,6 +1609,7 @@ impl From<&SessionContext> for TaskContext {
             scalar_functions,
             aggregate_functions,
             runtime,
+            async_executor: Arc::new(Box::new(DefaultExecutor {})),
         }
     }
 }
@@ -1620,6 +1629,7 @@ impl From<&SessionState> for TaskContext {
             scalar_functions,
             aggregate_functions,
             runtime,
+            async_executor: Arc::new(Box::new(DefaultExecutor {})),
         }
     }
 }
