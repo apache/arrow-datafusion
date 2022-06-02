@@ -928,6 +928,11 @@ pub fn parse_expr(
             op: from_proto_binary_op(&binary_expr.op)?,
             right: Box::new(parse_required_expr(&binary_expr.r, registry, "r")?),
         }),
+        ExprType::AnyExpr(any_expr) => Ok(Expr::AnyExpr {
+            left: Box::new(parse_required_expr(&any_expr.l, registry, "l")?),
+            op: from_proto_binary_op(&any_expr.op)?,
+            right: Box::new(parse_required_expr(&any_expr.r, registry, "r")?),
+        }),
         ExprType::Column(column) => Ok(Expr::Column(column.into())),
         ExprType::Literal(literal) => {
             let scalar_value: ScalarValue = literal.try_into()?;

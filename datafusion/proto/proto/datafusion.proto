@@ -301,6 +301,9 @@ message LogicalExprNode {
 
     // Scalar UDF expressions
     ScalarUDFExprNode scalar_udf_expr = 20;
+
+    // binary expressions
+    AnyExprNode any_expr = 21;
   }
 }
 
@@ -322,6 +325,12 @@ message AliasNode {
 }
 
 message BinaryExprNode {
+  LogicalExprNode l = 1;
+  LogicalExprNode r = 2;
+  string op = 3;
+}
+
+message AnyExprNode {
   LogicalExprNode l = 1;
   LogicalExprNode r = 2;
   string op = 3;

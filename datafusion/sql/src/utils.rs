@@ -232,6 +232,11 @@ where
                 op: *op,
                 right: Box::new(clone_with_replacement(&**right, replacement_fn)?),
             }),
+            Expr::AnyExpr { left, right, op } => Ok(Expr::AnyExpr {
+                left: Box::new(clone_with_replacement(&**left, replacement_fn)?),
+                op: *op,
+                right: Box::new(clone_with_replacement(&**right, replacement_fn)?),
+            }),
             Expr::Case {
                 expr: case_expr_opt,
                 when_then_expr,

@@ -956,6 +956,30 @@ async fn test_extract_date_part() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_binary_any() -> Result<()> {
+    // =
+    test_expression!("1 = ANY([1, 2])", "true");
+    test_expression!("3 = ANY([1, 2])", "false");
+    test_expression!("NULL = ANY([1, 2])", "NULL");
+    // utf8
+    test_expression!("'a' = ANY(['a', 'b'])", "true");
+    test_expression!("'c' = ANY(['a', 'b'])", "false");
+    // bool
+    test_expression!("true = ANY([true, false])", "true");
+    test_expression!("false = ANY([true, false])", "true");
+    test_expression!("false = ANY([true, true])", "false");
+    // <>
+    test_expression!("3 <> ANY([1, 2])", "true");
+    test_expression!("1 <> ANY([1, 2])", "false");
+    test_expression!("2 <> ANY([1, 2])", "false");
+    test_expression!("NULL = ANY([1, 2])", "NULL");
+    test_expression!("'c' <> ANY(['a', 'b'])", "true");
+    test_expression!("'a' <> ANY(['a', 'b'])", "false");
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_in_list_scalar() -> Result<()> {
     test_expression!("'a' IN ('a','b')", "true");
     test_expression!("'c' IN ('a','b')", "false");

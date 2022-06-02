@@ -127,6 +127,11 @@ impl ExprRewritable for Expr {
                 op,
                 right: rewrite_boxed(right, rewriter)?,
             },
+            Expr::AnyExpr { left, op, right } => Expr::AnyExpr {
+                left: rewrite_boxed(left, rewriter)?,
+                op,
+                right: rewrite_boxed(right, rewriter)?,
+            },
             Expr::Not(expr) => Expr::Not(rewrite_boxed(expr, rewriter)?),
             Expr::IsNotNull(expr) => Expr::IsNotNull(rewrite_boxed(expr, rewriter)?),
             Expr::IsNull(expr) => Expr::IsNull(rewrite_boxed(expr, rewriter)?),

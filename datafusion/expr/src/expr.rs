@@ -99,6 +99,15 @@ pub enum Expr {
         /// Right-hand side of the expression
         right: Box<Expr>,
     },
+    /// A binary expression such as "age > 21"
+    AnyExpr {
+        /// Left-hand side of the expression
+        left: Box<Expr>,
+        /// The comparison operator
+        op: Operator,
+        /// Right-hand side of the expression
+        right: Box<Expr>,
+    },
     /// Negation of an expression. The expression's type must be a boolean to make sense.
     Not(Box<Expr>),
     /// Whether an expression is not Null. This expression is never null.
@@ -302,6 +311,7 @@ impl Expr {
             Expr::AggregateUDF { .. } => "AggregateUDF",
             Expr::Alias(..) => "Alias",
             Expr::Between { .. } => "Between",
+            Expr::AnyExpr { .. } => "AnyExpr",
             Expr::BinaryExpr { .. } => "BinaryExpr",
             Expr::Case { .. } => "Case",
             Expr::Cast { .. } => "Cast",
@@ -524,6 +534,9 @@ impl fmt::Debug for Expr {
             Expr::BinaryExpr { left, op, right } => {
                 write!(f, "{:?} {} {:?}", left, op, right)
             }
+            Expr::AnyExpr { left, op, right } => {
+                write!(f, "{:?} {} ANY({:?})", left, op, right)
+            }
             Expr::Sort {
                 expr,
                 asc,
@@ -706,6 +719,11 @@ fn create_name(e: &Expr, input_schema: &DFSchema) -> Result<String> {
             let left = create_name(left, input_schema)?;
             let right = create_name(right, input_schema)?;
             Ok(format!("{} {} {}", left, op, right))
+        }
+        Expr::AnyExpr { left, op, right } => {
+            let left = create_name(left, input_schema)?;
+            let right = create_name(right, input_schema)?;
+            Ok(format!("{} {} ANY({})", left, op, right))
         }
         Expr::Case {
             expr,

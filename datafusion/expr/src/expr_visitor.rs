@@ -128,6 +128,10 @@ impl ExprVisitable for Expr {
                 let visitor = left.accept(visitor)?;
                 right.accept(visitor)
             }
+            Expr::AnyExpr { left, right, .. } => {
+                let visitor = left.accept(visitor)?;
+                right.accept(visitor)
+            }
             Expr::Between {
                 expr, low, high, ..
             } => {

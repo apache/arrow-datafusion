@@ -19,6 +19,7 @@
 
 #[macro_use]
 mod binary;
+mod any;
 mod case;
 mod cast;
 mod column;
@@ -65,6 +66,7 @@ pub use crate::window::nth_value::NthValue;
 pub use crate::window::rank::{dense_rank, percent_rank, rank};
 pub use crate::window::row_number::RowNumber;
 
+pub use any::{any, AnyExpr};
 pub use binary::{binary, BinaryExpr};
 pub use case::{case, CaseExpr};
 pub use cast::{

@@ -448,6 +448,16 @@ impl TryFrom<&Expr> for protobuf::LogicalExprNode {
                     expr_type: Some(ExprType::BinaryExpr(binary_expr)),
                 }
             }
+            Expr::AnyExpr { left, op, right } => {
+                let binary_expr = Box::new(protobuf::AnyExprNode {
+                    l: Some(Box::new(left.as_ref().try_into()?)),
+                    r: Some(Box::new(right.as_ref().try_into()?)),
+                    op: format!("{:?}", op),
+                });
+                Self {
+                    expr_type: Some(ExprType::AnyExpr(binary_expr)),
+                }
+            }
             Expr::WindowFunction {
                 ref fun,
                 ref args,

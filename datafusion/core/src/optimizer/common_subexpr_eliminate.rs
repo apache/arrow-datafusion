@@ -404,6 +404,10 @@ impl ExprIdentifierVisitor<'_> {
                 desc.push_str("BinaryExpr-");
                 desc.push_str(&op.to_string());
             }
+            Expr::AnyExpr { op, .. } => {
+                desc.push_str("AnyExpr-");
+                desc.push_str(&op.to_string());
+            }
             Expr::Not(_) => {
                 desc.push_str("Not-");
             }

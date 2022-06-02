@@ -104,6 +104,7 @@ impl ExprSchemable for Expr {
             | Expr::InSubquery { .. }
             | Expr::Between { .. }
             | Expr::InList { .. }
+            | Expr::AnyExpr { .. }
             | Expr::IsNotNull(_) => Ok(DataType::Boolean),
             Expr::ScalarSubquery(subquery) => {
                 Ok(subquery.subquery.schema().field(0).data_type().clone())
@@ -187,6 +188,11 @@ impl ExprSchemable for Expr {
                 Ok(subquery.subquery.schema().field(0).is_nullable())
             }
             Expr::BinaryExpr {
+                ref left,
+                ref right,
+                ..
+            } => Ok(left.nullable(input_schema)? || right.nullable(input_schema)?),
+            Expr::AnyExpr {
                 ref left,
                 ref right,
                 ..
