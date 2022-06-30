@@ -17,15 +17,15 @@
 
 use crate::arrow::datatypes::{DataType, IntervalUnit, Schema, TimeUnit, UnionMode};
 use crate::error::{DataFusionError, Result};
+use apache_avro::schema::{Alias, Name};
+use apache_avro::types::Value;
+use apache_avro::Schema as AvroSchema;
 use arrow::datatypes::Field;
-use avro_rs::schema::Name;
-use avro_rs::types::Value;
-use avro_rs::Schema as AvroSchema;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 /// Converts an avro schema to an arrow schema
-pub fn to_arrow_schema(avro_schema: &avro_rs::Schema) -> Result<Schema> {
+pub fn to_arrow_schema(avro_schema: &apache_avro::Schema) -> Result<Schema> {
     let mut schema_fields = vec![];
     match avro_schema {
         AvroSchema::Record { fields, .. } => {
@@ -46,7 +46,7 @@ pub fn to_arrow_schema(avro_schema: &avro_rs::Schema) -> Result<Schema> {
 }
 
 fn schema_to_field(
-    schema: &avro_rs::Schema,
+    schema: &apache_avro::Schema,
     name: Option<&str>,
     nullable: bool,
 ) -> Result<Field> {
@@ -61,6 +61,7 @@ fn schema_to_field_with_props(
 ) -> Result<Field> {
     let mut nullable = nullable;
     let field_type: DataType = match schema {
+        AvroSchema::Ref { .. } => todo!("Add support for AvroSchema::Ref"),
         AvroSchema::Null => DataType::Null,
         AvroSchema::Boolean => DataType::Boolean,
         AvroSchema::Int => DataType::Int32,
@@ -95,7 +96,7 @@ fn schema_to_field_with_props(
                         .clone()
                 } else {
                     return Err(DataFusionError::AvroError(
-                        avro_rs::Error::GetUnionDuplicate,
+                        apache_avro::Error::GetUnionDuplicate,
                     ));
                 }
             } else {
@@ -240,6 +241,9 @@ fn external_props(schema: &AvroSchema) -> BTreeMap<String, String> {
         }
         | AvroSchema::Enum {
             doc: Some(ref doc), ..
+        }
+        | AvroSchema::Fixed {
+            doc: Some(ref doc), ..
         } => {
             props.insert("avro::doc".to_string(), doc.clone());
         }
@@ -247,30 +251,18 @@ fn external_props(schema: &AvroSchema) -> BTreeMap<String, String> {
     }
     match &schema {
         AvroSchema::Record {
-            name:
-                Name {
-                    aliases: Some(aliases),
-                    namespace,
-                    ..
-                },
+            name: Name { namespace, .. },
+            aliases: Some(aliases),
             ..
         }
         | AvroSchema::Enum {
-            name:
-                Name {
-                    aliases: Some(aliases),
-                    namespace,
-                    ..
-                },
+            name: Name { namespace, .. },
+            aliases: Some(aliases),
             ..
         }
         | AvroSchema::Fixed {
-            name:
-                Name {
-                    aliases: Some(aliases),
-                    namespace,
-                    ..
-                },
+            name: Name { namespace, .. },
+            aliases: Some(aliases),
             ..
         } => {
             let aliases: Vec<String> = aliases
@@ -299,18 +291,18 @@ fn get_metadata(
 
 /// Returns the fully qualified name for a field
 pub fn aliased(
-    name: &str,
+    alias: &Alias,
     namespace: Option<&str>,
     default_namespace: Option<&str>,
 ) -> String {
-    if name.contains('.') {
-        name.to_string()
+    if alias.namespace().is_some() {
+        alias.fullname(None)
     } else {
         let namespace = namespace.as_ref().copied().or(default_namespace);
 
         match namespace {
-            Some(ref namespace) => format!("{}.{}", namespace, name),
-            None => name.to_string(),
+            Some(ref namespace) => format!("{}.{}", namespace, alias.name()),
+            None => alias.fullname(None),
         }
     }
 }
@@ -321,16 +313,20 @@ mod test {
     use crate::arrow::datatypes::DataType::{Binary, Float32, Float64, Timestamp, Utf8};
     use crate::arrow::datatypes::TimeUnit::Microsecond;
     use crate::arrow::datatypes::{Field, Schema};
+    use apache_avro::schema::{Alias, Name};
+    use apache_avro::Schema as AvroSchema;
     use arrow::datatypes::DataType::{Boolean, Int32, Int64};
-    use avro_rs::schema::Name;
-    use avro_rs::Schema as AvroSchema;
+
+    fn alias(name: &str) -> Alias {
+        Alias::new(name).unwrap()
+    }
 
     #[test]
     fn test_alias() {
-        assert_eq!(aliased("foo.bar", None, None), "foo.bar");
-        assert_eq!(aliased("bar", Some("foo"), None), "foo.bar");
-        assert_eq!(aliased("bar", Some("foo"), Some("cat")), "foo.bar");
-        assert_eq!(aliased("bar", None, Some("cat")), "cat.bar");
+        assert_eq!(aliased(&alias("foo.bar"), None, None), "foo.bar");
+        assert_eq!(aliased(&alias("bar"), Some("foo"), None), "foo.bar");
+        assert_eq!(aliased(&alias("bar"), Some("foo"), Some("cat")), "foo.bar");
+        assert_eq!(aliased(&alias("bar"), None, Some("cat")), "cat.bar");
     }
 
     #[test]
@@ -339,8 +335,8 @@ mod test {
             name: Name {
                 name: "record".to_string(),
                 namespace: None,
-                aliases: Some(vec!["fooalias".to_string(), "baralias".to_string()]),
             },
+            aliases: Some(vec![alias("fooalias"), alias("baralias")]),
             doc: Some("record documentation".to_string()),
             fields: vec![],
             lookup: Default::default(),
@@ -358,8 +354,8 @@ mod test {
             name: Name {
                 name: "enum".to_string(),
                 namespace: None,
-                aliases: Some(vec!["fooenum".to_string(), "barenum".to_string()]),
             },
+            aliases: Some(vec![alias("fooenum"), alias("barenum")]),
             doc: Some("enum documentation".to_string()),
             symbols: vec![],
         };
@@ -376,9 +372,10 @@ mod test {
             name: Name {
                 name: "fixed".to_string(),
                 namespace: None,
-                aliases: Some(vec!["foofixed".to_string(), "barfixed".to_string()]),
             },
+            aliases: Some(vec![alias("foofixed"), alias("barfixed")]),
             size: 1,
+            doc: None,
         };
         let props = external_props(&fixed_schema);
         assert_eq!(

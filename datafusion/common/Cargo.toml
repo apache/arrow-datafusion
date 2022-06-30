@@ -33,13 +33,13 @@ name = "datafusion_common"
 path = "src/lib.rs"
 
 [features]
-avro = ["avro-rs"]
+avro = ["apache-avro"]
 jit = ["cranelift-module"]
 pyarrow = ["pyo3"]
 
 [dependencies]
+apache-avro = { git = "https://github.com/apache/avro.git", features = ["snappy"], optional = true }
 arrow = { version = "16.0.0", features = ["prettyprint"] }
-avro-rs = { version = "0.13", features = ["snappy"], optional = true }
 cranelift-module = { version = "0.85.0", optional = true }
 ordered-float = "3.0"
 parquet = { version = "16.0.0", features = ["arrow"], optional = true }

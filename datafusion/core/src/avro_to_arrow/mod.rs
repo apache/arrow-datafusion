@@ -33,7 +33,7 @@ use std::io::Read;
 #[cfg(feature = "avro")]
 /// Read Avro schema given a reader
 pub fn read_avro_schema_from_reader<R: Read>(reader: &mut R) -> Result<Schema> {
-    let avro_reader = avro_rs::Reader::new(reader)?;
+    let avro_reader = apache_avro::Reader::new(reader)?;
     let schema = avro_reader.writer_schema();
     schema::to_arrow_schema(schema)
 }

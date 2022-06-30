@@ -56,7 +56,7 @@ impl ReaderBuilder {
     /// # Example
     ///
     /// ```
-    /// extern crate avro_rs;
+    /// extern crate apache_avro;
     ///
     /// use std::fs::File;
     ///

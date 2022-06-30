@@ -39,7 +39,7 @@ path = "src/lib.rs"
 
 [features]
 # Used to enable the avro format
-avro = ["avro-rs", "num-traits", "datafusion-common/avro"]
+avro = ["apache-avro", "num-traits", "datafusion-common/avro"]
 crypto_expressions = ["datafusion-physical-expr/crypto_expressions"]
 default = ["crypto_expressions", "regex_expressions", "unicode_expressions"]
 # Used for testing ONLY: causes all values to hash to the same value (test for collisions)
@@ -55,9 +55,9 @@ unicode_expressions = ["datafusion-physical-expr/regex_expressions", "datafusion
 
 [dependencies]
 ahash = { version = "0.7", default-features = false }
+apache-avro = { git = "https://github.com/apache/avro.git", optional = true }
 arrow = { version = "16.0.0", features = ["prettyprint"] }
 async-trait = "0.1.41"
-avro-rs = { version = "0.13", features = ["snappy"], optional = true }
 chrono = { version = "0.4", default-features = false }
 datafusion-common = { path = "../common", version = "9.0.0", features = ["parquet"] }
 datafusion-data-access = { path = "../data-access", version = "9.0.0" }

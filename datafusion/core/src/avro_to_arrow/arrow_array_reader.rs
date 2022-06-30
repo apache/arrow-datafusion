@@ -36,17 +36,17 @@ use crate::arrow::error::ArrowError;
 use crate::arrow::record_batch::RecordBatch;
 use crate::arrow::util::bit_util;
 use crate::error::{DataFusionError, Result};
-use arrow::array::{BinaryArray, GenericListArray};
-use arrow::datatypes::SchemaRef;
-use arrow::error::ArrowError::SchemaError;
-use arrow::error::Result as ArrowResult;
-use avro_rs::{
+use apache_avro::{
     schema::{Schema as AvroSchema, SchemaKind},
     types::Value,
     AvroResult, Error as AvroError, Reader as AvroReader,
 };
+use arrow::array::{BinaryArray, GenericListArray};
+use arrow::datatypes::SchemaRef;
+use arrow::error::ArrowError::SchemaError;
+use arrow::error::Result as ArrowResult;
 use num_traits::NumCast;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::sync::Arc;
 
@@ -56,7 +56,7 @@ pub struct AvroArrowArrayReader<'a, R: Read> {
     reader: AvroReader<'a, R>,
     schema: SchemaRef,
     projection: Option<Vec<String>>,
-    schema_lookup: HashMap<String, usize>,
+    schema_lookup: BTreeMap<String, usize>,
 }
 
 impl<'a, R: Read> AvroArrowArrayReader<'a, R> {
@@ -76,7 +76,7 @@ impl<'a, R: Read> AvroArrowArrayReader<'a, R> {
         })
     }
 
-    pub fn schema_lookup(schema: AvroSchema) -> Result<HashMap<String, usize>> {
+    pub fn schema_lookup(schema: AvroSchema) -> Result<BTreeMap<String, usize>> {
         match schema {
             AvroSchema::Record {
                 lookup: ref schema_lookup,
@@ -879,7 +879,7 @@ fn flatten_string_values(values: &[&Value]) -> Vec<Option<String>> {
 /// This is useful if the expected datatype is a string, in which case we preserve
 /// all the values regardless of they type.
 fn resolve_string(v: &Value) -> ArrowResult<String> {
-    let v = if let Value::Union(b) = v { b } else { v };
+    let v = if let Value::Union(_, b) = v { b } else { v };
     match v {
         Value::String(s) => Ok(s.clone()),
         Value::Bytes(bytes) => {
@@ -887,7 +887,7 @@ fn resolve_string(v: &Value) -> ArrowResult<String> {
         }
         other => Err(AvroError::GetString(other.into())),
     }
-    .map_err(|e| SchemaError(format!("expected resolvable string : {}", e)))
+    .map_err(|e| SchemaError(format!("expected resolvable string : {:?}", e)))
 }
 
 fn resolve_u8(v: &Value) -> AvroResult<u8> {
@@ -906,7 +906,7 @@ fn resolve_u8(v: &Value) -> AvroResult<u8> {
 }
 
 fn resolve_bytes(v: &Value) -> Option<Vec<u8>> {
-    let v = if let Value::Union(b) = v { b } else { v };
+    let v = if let Value::Union(_, b) = v { b } else { v };
     match v {
         Value::Bytes(_) => Ok(v.clone()),
         Value::String(s) => Ok(Value::Bytes(s.clone().into_bytes())),
@@ -927,7 +927,7 @@ fn resolve_bytes(v: &Value) -> Option<Vec<u8>> {
 }
 
 fn resolve_boolean(value: &Value) -> Option<bool> {
-    let v = if let Value::Union(b) = value {
+    let v = if let Value::Union(_, b) = value {
         b
     } else {
         value
@@ -950,7 +950,7 @@ fn maybe_resolve_union(value: &Value) -> &Value {
     if SchemaKind::from(value) == SchemaKind::Union {
         // Pull out the Union, and attempt to resolve against it.
         match value {
-            Value::Union(b) => b,
+            Value::Union(_, b) => b,
             _ => unreachable!(),
         }
     } else {
