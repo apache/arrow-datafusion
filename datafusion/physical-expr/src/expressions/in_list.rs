@@ -47,28 +47,46 @@ use datafusion_expr::ColumnarValue;
 /// TODO: add switch codeGen in In_List
 static OPTIMIZER_INSET_THRESHOLD: usize = 30;
 
-macro_rules! compare_op_scalar {
-    ($left: expr, $right:expr, $op:expr) => {{
-        let null_bit_buffer = $left.data().null_buffer().cloned();
+/// Applies an unary and infallible comparison function to a primitive
+/// array.  This is the fastest way to perform an operation on a
+/// primitive array when the benefits of a vectorized operation
+/// outweights the cost of branching nulls and non-nulls.
+///
+/// # Implementation
+///
+/// This will apply the function for all values, including those on
+/// null slots.  This implies that the operation must be infallible
+/// for any value of the corresponding type or this function may
+/// panic.
+///
+/// # Example
+/// TODO
+fn unary_cmp<I, F>(array: &PrimitiveArray<I>, op: F) -> BooleanArray
+where
+    I: ArrowPrimitiveType,
+    F: Fn(I::Native) -> bool,
+{
+    let comparison = array.values().iter().map(|v| op(*v));
 
-        let comparison =
-            (0..$left.len()).map(|i| unsafe { $op($left.value_unchecked(i), $right) });
-        // same as $left.len()
-        let buffer = unsafe { MutableBuffer::from_trusted_len_iter_bool(comparison) };
+    // JUSTIFICATION
+    //  Benefit
+    //      ~60% speedup
+    //  Soundness
+    //      `values` is an iterator with a known size because arrays are sized.
+    let buffer = unsafe { MutableBuffer::from_trusted_len_iter_bool(comparison) };
 
-        let data = unsafe {
-            ArrayData::new_unchecked(
-                DataType::Boolean,
-                $left.len(),
-                None,
-                null_bit_buffer,
-                0,
-                vec![Buffer::from(buffer)],
-                vec![],
-            )
-        };
-        Ok(BooleanArray::from(data))
-    }};
+    let data = unsafe {
+        ArrayData::new_unchecked(
+            DataType::Boolean,
+            array.len(),
+            None,
+            array.data().null_buffer().cloned(),
+            0,
+            vec![Buffer::from(buffer)],
+            vec![],
+        )
+    };
+    BooleanArray::from(data)
 }
 
 /// InList
@@ -183,7 +201,7 @@ macro_rules! make_contains_primitive {
                 )))
             } else {
                 Ok(ColumnarValue::Array(Arc::new(
-                    not_in_list_primitive(array, &values)?,
+                    not_in_list_primitive(array, &values),
                 )))
             }
         } else {
@@ -200,7 +218,7 @@ macro_rules! make_contains_primitive {
             } else {
                 Ok(ColumnarValue::Array(Arc::new(in_list_primitive(
                     array, &values,
-                )?)))
+                ))))
             }
         }
     }};
@@ -230,39 +248,37 @@ macro_rules! set_contains_with_negated {
 fn in_list_primitive<T: ArrowPrimitiveType>(
     array: &PrimitiveArray<T>,
     values: &[<T as ArrowPrimitiveType>::Native],
-) -> Result<BooleanArray> {
-    compare_op_scalar!(
-        array,
-        values,
-        |x, v: &[<T as ArrowPrimitiveType>::Native]| v.contains(&x)
-    )
+) -> BooleanArray {
+    unary_cmp(array, |x| values.contains(&x))
 }
 
 // whether each value on the left (can be null) is contained in the non-null list
 fn not_in_list_primitive<T: ArrowPrimitiveType>(
     array: &PrimitiveArray<T>,
     values: &[<T as ArrowPrimitiveType>::Native],
-) -> Result<BooleanArray> {
-    compare_op_scalar!(
-        array,
-        values,
-        |x, v: &[<T as ArrowPrimitiveType>::Native]| !v.contains(&x)
-    )
+) -> BooleanArray {
+    unary_cmp(array, |x| !values.contains(&x))
 }
 
 // whether each value on the left (can be null) is contained in the non-null list
 fn in_list_utf8<OffsetSize: OffsetSizeTrait>(
     array: &GenericStringArray<OffsetSize>,
     values: &[&str],
-) -> Result<BooleanArray> {
-    compare_op_scalar!(array, values, |x, v: &[&str]| v.contains(&x))
+) -> BooleanArray {
+    array
+        .iter()
+        .map(|x| x.map(|x| !values.contains(&x)))
+        .collect::<BooleanArray>()
 }
 
 fn not_in_list_utf8<OffsetSize: OffsetSizeTrait>(
     array: &GenericStringArray<OffsetSize>,
     values: &[&str],
-) -> Result<BooleanArray> {
-    compare_op_scalar!(array, values, |x, v: &[&str]| !v.contains(&x))
+) -> BooleanArray {
+    array
+        .iter()
+        .map(|x| x.map(|x| !values.contains(&x)))
+        .collect::<BooleanArray>()
 }
 
 //check all filter values of In clause are static.
@@ -469,7 +485,7 @@ impl InListExpr {
             } else {
                 Ok(ColumnarValue::Array(Arc::new(not_in_list_utf8(
                     array, &values,
-                )?)))
+                ))))
             }
         } else if contains_null {
             Ok(ColumnarValue::Array(Arc::new(
@@ -482,9 +498,7 @@ impl InListExpr {
                     .collect::<BooleanArray>(),
             )))
         } else {
-            Ok(ColumnarValue::Array(Arc::new(in_list_utf8(
-                array, &values,
-            )?)))
+            Ok(ColumnarValue::Array(Arc::new(in_list_utf8(array, &values))))
         }
     }
 }
