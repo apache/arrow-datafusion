@@ -522,7 +522,7 @@ mod tests {
     };
     use arrow::array::{ArrayRef, Utf8Array};
     use arrow::datatypes::{DataType, Field, Schema};
-    use arrow::error::ArrowError;
+    use arrow::error::Error as ArrowError;
     use datafusion_common::field_util::SchemaExt;
     use datafusion_common::record_batch::RecordBatch;
     use futures::FutureExt;

@@ -42,7 +42,7 @@ use crate::{
     scalar::ScalarValue,
 };
 use arrow::array::{Array, PrimitiveArray, Utf8Array};
-use arrow::error::{ArrowError, Result as ArrowResult};
+use arrow::error::{Error as ArrowError, Result as ArrowResult};
 use arrow::types::{NativeType, Offset};
 use arrow::{
     array::ArrayRef,
@@ -740,9 +740,9 @@ where
         .windows(2)
         .map(|offset| op(offset[1] - offset[0]));
 
-    let values = arrow::buffer::Buffer::from_trusted_len_iter(values);
+    let values = arrow::buffer::Buffer::from_iter(values);
 
-    let data_type = if O::is_large() {
+    let data_type = if O::IS_LARGE {
         DataType::Int64
     } else {
         DataType::Int32

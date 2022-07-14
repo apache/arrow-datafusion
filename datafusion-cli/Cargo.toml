@@ -32,7 +32,7 @@ clap = { version = "3", features = ["derive", "cargo"] }
 rustyline = "9.0"
 tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync", "parking_lot"] }
 datafusion = { path = "../datafusion", version = "7.0.0" }
-arrow = { package = "arrow2", version="0.10", features = ["io_print"] }
+arrow = { package = "arrow2", version="0.12", features = ["io_print"] }
 ballista = { path = "../ballista/rust/client", version = "0.6.0", optional=true }
 env_logger = "0.9"
 mimalloc = { version = "*", default-features = false }

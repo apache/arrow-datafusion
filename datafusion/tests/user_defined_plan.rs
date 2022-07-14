@@ -63,7 +63,7 @@ use futures::{Stream, StreamExt};
 use arrow::{
     array::{Int64Array, Utf8Array},
     datatypes::SchemaRef,
-    error::ArrowError,
+    error::Error as ArrowError,
 };
 use datafusion::record_batch::RecordBatch;
 use datafusion::{

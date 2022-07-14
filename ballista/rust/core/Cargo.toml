@@ -35,19 +35,19 @@ async-trait = "0.1.41"
 futures = "0.3"
 hashbrown = "0.12"
 log = "0.4"
-prost = "0.9"
-prost-types = "0.9"
+prost = "0.10"
+prost-types = "0.10"
 serde = {version = "1", features = ["derive"]}
 sqlparser = "0.15"
 tokio = "1.0"
-tonic = "0.6"
+tonic = "0.7"
 uuid = { version = "0.8", features = ["v4"] }
 chrono = { version = "0.4", default-features = false }
 clap = { version = "3", features = ["derive", "cargo"] }
 parse_arg = "0.1.3"
 
-arrow-format = { version = "0.4", features = ["flight-data", "flight-service"] }
-arrow = { package = "arrow2", version="0.10", features = ["io_ipc", "io_flight"] }
+arrow-format = { version = "0.6", features = ["flight-data", "flight-service"] }
+arrow = { package = "arrow2", version="0.12", features = ["io_ipc", "io_flight"] }
 
 datafusion = { path = "../../../datafusion", version = "7.0.0" }
 datafusion-proto = { path = "../../../datafusion-proto", version = "7.0.0" }
@@ -58,4 +58,4 @@ parking_lot = "0.12"
 tempfile = "3"
 
 [build-dependencies]
-tonic-build = { version = "0.6" }
+tonic-build = { version = "0.7" }

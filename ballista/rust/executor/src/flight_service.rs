@@ -35,7 +35,7 @@ use arrow_format::flight::data::{
 };
 use arrow_format::flight::service::flight_service_server::FlightService;
 use datafusion::arrow::{
-    error::ArrowError, io::ipc::read::FileReader, io::ipc::write::WriteOptions,
+    error::Error as ArrowError, io::ipc::read::FileReader, io::ipc::write::WriteOptions,
 };
 use futures::{Stream, StreamExt};
 use log::{info, warn};

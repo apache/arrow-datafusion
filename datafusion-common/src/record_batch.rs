@@ -23,7 +23,7 @@ use arrow::array::*;
 use arrow::chunk::Chunk;
 use arrow::compute::filter::{build_filter, filter};
 use arrow::datatypes::*;
-use arrow::error::{ArrowError, Result};
+use arrow::error::{Error as ArrowError, Result};
 
 /// A two-dimensional dataset with a number of
 /// columns ([`Array`]) and rows and defined [`Schema`](crate::datatypes::Schema).

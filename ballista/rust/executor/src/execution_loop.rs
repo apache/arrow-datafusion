@@ -62,16 +62,14 @@ pub async fn poll_loop<T: 'static + AsLogicalPlan, U: 'static + AsExecutionPlan>
         // to avoid going in sleep mode between polling
         let mut active_job = false;
 
-        let poll_work_result: anyhow::Result<
-            tonic::Response<PollWorkResult>,
-            tonic::Status,
-        > = scheduler
-            .poll_work(PollWorkParams {
-                metadata: Some(executor.metadata.clone()),
-                can_accept_task: available_tasks_slots.load(Ordering::SeqCst) > 0,
-                task_status,
-            })
-            .await;
+        let poll_work_result: Result<tonic::Response<PollWorkResult>, tonic::Status> =
+            scheduler
+                .poll_work(PollWorkParams {
+                    metadata: Some(executor.metadata.clone()),
+                    can_accept_task: available_tasks_slots.load(Ordering::SeqCst) > 0,
+                    task_status,
+                })
+                .await;
 
         let task_status_sender = task_status_sender.clone();
 

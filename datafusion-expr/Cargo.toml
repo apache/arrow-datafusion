@@ -36,6 +36,6 @@ path = "src/lib.rs"
 
 [dependencies]
 datafusion-common = { path = "../datafusion-common", version = "7.0.0" }
-arrow = { package = "arrow2", version = "0.10", default-features = false }
+arrow = { package = "arrow2", version = "0.12", default-features = false }
 sqlparser = "0.15"
 ahash = { version = "0.7", default-features = false }

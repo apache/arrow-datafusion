@@ -20,7 +20,7 @@
 use std::task::Poll;
 
 use super::{Count, ExecutionPlanMetricsSet, Gauge, MetricBuilder, Time, Timestamp};
-use arrow::error::ArrowError;
+use arrow::error::Error as ArrowError;
 use datafusion_common::record_batch::RecordBatch;
 
 /// Helper for creating and tracking common "baseline" metrics for

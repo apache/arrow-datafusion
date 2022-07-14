@@ -89,7 +89,6 @@ use crate::variable::{VarProvider, VarType};
 use crate::{dataframe::DataFrame, physical_plan::udaf::AggregateUDF};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use parquet::write::WriteOptions;
 
 use super::{
     disk_manager::DiskManagerConfig,
@@ -723,7 +722,7 @@ impl ExecutionContext {
         &self,
         plan: Arc<dyn ExecutionPlan>,
         path: impl AsRef<str>,
-        writer_properties: WriteOptions,
+        writer_properties: arrow::io::parquet::write::WriteOptions,
     ) -> Result<()> {
         plan_to_parquet(self, plan, path, Some(writer_properties)).await
     }

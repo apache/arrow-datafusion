@@ -19,6 +19,7 @@
 
 use arrow::array::ArrayRef;
 use arrow::chunk::Chunk;
+use datafusion::arrow::io::print;
 use futures::future::join_all;
 use rand::prelude::*;
 use std::ops::Div;
@@ -30,8 +31,6 @@ use std::{
     sync::Arc,
     time::{Instant, SystemTime},
 };
-
-use datafusion::arrow::io::print;
 
 use datafusion::datasource::{
     listing::{ListingOptions, ListingTable},
@@ -52,7 +51,8 @@ use datafusion::{
     datasource::file_format::parquet::ParquetFormat, record_batch::RecordBatch,
 };
 
-use arrow::io::parquet::write::{Compression, Version, WriteOptions};
+use arrow::io::parquet::write::Version;
+use parquet2::compression::CompressionOptions;
 use ballista::prelude::{
     BallistaConfig, BallistaContext, BALLISTA_DEFAULT_SHUFFLE_PARTITIONS,
 };
@@ -665,14 +665,15 @@ async fn convert_tbl(opt: ConvertOpt) -> Result<()> {
         match opt.file_format.as_str() {
             "csv" => ctx.write_csv(csv, output_path).await?,
             "parquet" => {
+
                 let compression = match opt.compression.as_str() {
-                    "none" => Compression::Uncompressed,
-                    "snappy" => Compression::Snappy,
-                    "brotli" => Compression::Brotli,
-                    "gzip" => Compression::Gzip,
-                    "lz4" => Compression::Lz4,
-                    "lz0" => Compression::Lzo,
-                    "zstd" => Compression::Zstd,
+                    "none" => CompressionOptions::Uncompressed,
+                    "snappy" => CompressionOptions::Snappy,
+                    "brotli" => CompressionOptions::Brotli(None),
+                    "gzip" => CompressionOptions::Gzip(None),
+                    "lz4" => CompressionOptions::Lz4,
+                    "lz0" => CompressionOptions::Lzo,
+                    "zstd" => CompressionOptions::Zstd(None),
                     other => {
                         return Err(DataFusionError::NotImplemented(format!(
                             "Invalid compression format: {}",
@@ -680,11 +681,10 @@ async fn convert_tbl(opt: ConvertOpt) -> Result<()> {
                         )))
                     }
                 };
-
-                let options = WriteOptions {
-                    compression,
+                let options = arrow::io::parquet::write::WriteOptions {
                     write_statistics: false,
                     version: Version::V1,
+                    compression,
                 };
                 ctx.write_parquet(csv, output_path, options).await?
             }

@@ -42,7 +42,7 @@ use arrow::compute::{concatenate, take};
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use arrow::{
     array::Array,
-    error::{ArrowError, Result as ArrowResult},
+    error::{Error as ArrowError, Result as ArrowResult},
 };
 use arrow::{array::ArrayRef, compute::cast};
 use hashbrown::raw::RawTable;

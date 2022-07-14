@@ -29,7 +29,7 @@ use tokio::sync::Barrier;
 use crate::record_batch::RecordBatch;
 use arrow::{
     datatypes::{DataType, Field, Schema, SchemaRef},
-    error::{ArrowError, Result as ArrowResult},
+    error::{Error as ArrowError, Result as ArrowResult},
 };
 use datafusion_common::field_util::SchemaExt;
 use futures::Stream;
@@ -239,7 +239,7 @@ impl ExecutionPlan for MockExec {
 }
 
 fn clone_error(e: &ArrowError) -> ArrowError {
-    use ArrowError::*;
+    use arrow::error::Error::InvalidArgumentError;
     match e {
         InvalidArgumentError(msg) => InvalidArgumentError(msg.to_string()),
         _ => unimplemented!(),

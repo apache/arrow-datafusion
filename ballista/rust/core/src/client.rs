@@ -34,7 +34,7 @@ use arrow_format::flight::data::{FlightData, Ticket};
 use arrow_format::flight::service::flight_service_client::FlightServiceClient;
 use datafusion::arrow::{
     datatypes::SchemaRef,
-    error::{ArrowError, Result as ArrowResult},
+    error::{Error as ArrowError, Result as ArrowResult},
 };
 use datafusion::field_util::SchemaExt;
 use datafusion::physical_plan::RecordBatchStream;

@@ -25,7 +25,7 @@ use arrow::io::parquet::write::{FileWriter, RowGroupIterator};
 use arrow::{
     array::{Array, ArrayRef, Float64Array, Int32Array, Int64Array, Utf8Array},
     datatypes::{DataType, Field, Schema},
-    io::parquet::write::{Compression, Encoding, Version, WriteOptions},
+    io::parquet::write::{CompressionOptions, Encoding, Version, WriteOptions},
 };
 use chrono::{Datelike, Duration};
 use datafusion::record_batch::RecordBatch;
@@ -624,18 +624,18 @@ async fn make_test_file(scenario: Scenario) -> NamedTempFile {
     let schema = batches[0].schema();
 
     let options = WriteOptions {
-        compression: Compression::Uncompressed,
+        compression: CompressionOptions::Uncompressed,
         write_statistics: true,
         version: Version::V1,
     };
-    let encodings: Vec<Encoding> = schema
+    let encodings: Vec<Vec<Encoding>> = schema
         .fields()
         .iter()
         .map(|field| {
             if let DataType::Dictionary(_, _, _) = field.data_type() {
-                Encoding::RleDictionary
+                vec![Encoding::RleDictionary]
             } else {
-                Encoding::Plain
+                vec![Encoding::Plain]
             }
         })
         .collect();
@@ -650,10 +650,9 @@ async fn make_test_file(scenario: Scenario) -> NamedTempFile {
 
     let mut writer =
         FileWriter::try_new(&mut file, schema.as_ref().clone(), options).unwrap();
-    writer.start().unwrap();
     for rg in row_groups.unwrap() {
-        let (group, len) = rg.unwrap();
-        writer.write(group, len).unwrap();
+        let group = rg.unwrap();
+        writer.write(group).unwrap();
     }
     writer.end(None).unwrap();
 

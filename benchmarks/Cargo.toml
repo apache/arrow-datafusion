@@ -32,7 +32,8 @@ simd = ["datafusion/simd"]
 snmalloc = ["snmalloc-rs"]
 
 [dependencies]
-arrow = { package = "arrow2", version="0.10", features = ["io_csv", "io_json", "io_parquet", "io_parquet_compression", "io_ipc", "io_print", "ahash", "compute_merge_sort", "compute", "regex"] }
+arrow = { package = "arrow2", version="0.12", features = ["io_csv", "io_json", "io_parquet", "io_parquet_compression", "io_ipc", "io_print", "ahash", "compute_merge_sort", "compute", "regex"] }
+parquet2 = "0.13"
 datafusion = { path = "../datafusion" }
 ballista = { path = "../ballista/rust/client" }
 structopt = { version = "0.3", default-features = false }

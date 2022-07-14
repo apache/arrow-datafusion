@@ -24,6 +24,6 @@ edition = "2021"
 
 [dependencies]
 datafusion-common = { path = "../../datafusion-common", version = "^7.0.0" }
-arrow = { package = "arrow2", version="0.10", features = ["io_print"] }
+arrow = { package = "arrow2", version="0.12", features = ["io_print"] }
 rand = "0.8"
 env_logger = "0.9.0"

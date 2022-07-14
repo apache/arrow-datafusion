@@ -936,7 +936,7 @@ mod tests {
     use crate::expressions::{col, lit};
     use crate::test_util::create_decimal_array;
     use arrow::datatypes::{Field, SchemaRef};
-    use arrow::error::ArrowError;
+    use arrow::error::Error as ArrowError;
     use datafusion_common::field_util::SchemaExt;
 
     // TODO add iter for decimal array

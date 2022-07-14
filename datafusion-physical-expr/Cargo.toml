@@ -41,7 +41,7 @@ unicode_expressions = ["unicode-segmentation"]
 [dependencies]
 datafusion-common = { path = "../datafusion-common", version = "7.0.0" }
 datafusion-expr = { path = "../datafusion-expr", version = "7.0.0" }
-arrow = { package = "arrow2", version = "0.10" }
+arrow = { package = "arrow2", version = "0.12" }
 paste = "^1.0"
 ahash = { version = "0.7", default-features = false }
 ordered-float = "2.10"

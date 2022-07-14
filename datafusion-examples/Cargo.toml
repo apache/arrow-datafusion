@@ -34,11 +34,11 @@ path = "examples/avro_sql.rs"
 required-features = ["datafusion/avro"]
 
 [dev-dependencies]
-arrow-format = { version = "0.4", features = ["flight-service", "flight-data"] }
-arrow = { package = "arrow2", version="0.10", features = ["io_ipc", "io_flight"] }
+arrow-format = { version = "0.6", features = ["flight-service", "flight-data"] }
+arrow = { package = "arrow2", version="0.12", features = ["io_ipc", "io_flight"] }
 datafusion = { path = "../datafusion" }
-prost = "0.9"
-tonic = "0.6"
+prost = "0.10"
+tonic = "0.7"
 tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync", "parking_lot"] }
 futures = "0.3"
 num_cpus = "1.13.0"

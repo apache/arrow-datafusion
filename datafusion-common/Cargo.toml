@@ -37,8 +37,8 @@ pyarrow = ["pyo3"]
 jit = ["cranelift-module"]
 
 [dependencies]
-arrow = { package = "arrow2", version = "0.10", default-features = false }
-parquet = { package = "parquet2", version = "0.10", default_features = false, features = ["stream"], optional = true }
+arrow = { package = "arrow2", version = "0.12.0", default-features = false }
+parquet = { package = "parquet2", version = "0.13", default_features = false, optional = true }
 pyo3 = { version = "0.16", optional = true }
 sqlparser = "0.15"
 ordered-float = "2.10"

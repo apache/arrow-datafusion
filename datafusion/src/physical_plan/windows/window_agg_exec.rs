@@ -32,7 +32,7 @@ use crate::record_batch::RecordBatch;
 use arrow::{
     array::ArrayRef,
     datatypes::{Schema, SchemaRef},
-    error::{ArrowError, Result as ArrowResult},
+    error::{Error as ArrowError, Result as ArrowResult},
 };
 use async_trait::async_trait;
 use datafusion_common::field_util::SchemaExt;

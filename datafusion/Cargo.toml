@@ -60,7 +60,7 @@ datafusion-jit = { path = "../datafusion-jit", version = "7.0.0", optional = tru
 datafusion-physical-expr = { path = "../datafusion-physical-expr", version = "7.0.0" }
 ahash = { version = "0.7", default-features = false }
 hashbrown = { version = "0.12", features = ["raw"] }
-parquet = { package = "parquet2", version = "0.10", default_features = false, features = ["stream"] }
+parquet = { package = "parquet2", version = "0.13", default_features = false }
 sqlparser = "0.15"
 paste = "^1.0"
 num_cpus = "1.13.0"
@@ -86,14 +86,14 @@ comfy-table = { version = "5.0", default-features = false }
 
 [dependencies.arrow]
 package = "arrow2"
-version="0.10"
+version="0.12"
 features = ["io_csv", "io_json", "io_parquet", "io_parquet_compression", "io_ipc", "ahash", "compute"]
 
 [dev-dependencies]
 criterion = "0.3"
 doc-comment = "0.3"
 fuzz-utils = { path = "fuzz-utils" }
-parquet-format-async-temp = "0.2"
+parquet-format-async-temp = "0.3"
 
 [[bench]]
 name = "aggregate_query_sql"

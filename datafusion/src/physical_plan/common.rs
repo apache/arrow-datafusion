@@ -26,7 +26,7 @@ use crate::record_batch::RecordBatch;
 use arrow::compute::aggregate::estimated_bytes_size;
 use arrow::compute::concatenate::concatenate;
 use arrow::datatypes::{Schema, SchemaRef};
-use arrow::error::ArrowError;
+use arrow::error::Error as ArrowError;
 use arrow::error::Result as ArrowResult;
 use arrow::io::ipc::write::{FileWriter, WriteOptions};
 use datafusion_common::field_util::SchemaExt;

@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::task::Poll;
 
 use crate::record_batch::RecordBatch;
-use arrow::error::ArrowError;
+use arrow::error::Error as ArrowError;
 
 /// Simplified version of tracking memory consumer,
 /// see also: [`Tracking`](crate::execution::memory_manager::ConsumerType::Tracking)

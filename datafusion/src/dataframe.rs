@@ -26,7 +26,6 @@ use std::sync::Arc;
 
 use crate::physical_plan::SendableRecordBatchStream;
 use async_trait::async_trait;
-use parquet::write::WriteOptions;
 
 /// DataFrame represents a logical set of rows with the same named columns.
 /// Similar to a [Pandas DataFrame](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.html) or
@@ -414,6 +413,6 @@ pub trait DataFrame: Send + Sync {
     async fn write_parquet(
         &self,
         path: &str,
-        writer_properties: Option<WriteOptions>,
+        writer_properties: Option<arrow::io::parquet::write::WriteOptions>,
     ) -> Result<()>;
 }

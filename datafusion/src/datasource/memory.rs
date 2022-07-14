@@ -165,7 +165,7 @@ mod tests {
 
     use arrow::array::Int32Array;
     use arrow::datatypes::{DataType, Field, Schema};
-    use arrow::error::ArrowError;
+    use arrow::error::Error as ArrowError;
     use std::collections::BTreeMap;
 
     #[tokio::test]

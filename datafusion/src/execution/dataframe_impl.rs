@@ -20,7 +20,6 @@
 use async_trait::async_trait;
 use datafusion_common::field_util::{FieldExt, SchemaExt};
 use parking_lot::Mutex;
-use parquet::write::WriteOptions;
 use std::any::Any;
 use std::sync::Arc;
 
@@ -327,7 +326,7 @@ impl DataFrame for DataFrameImpl {
     async fn write_parquet(
         &self,
         path: &str,
-        writer_properties: Option<WriteOptions>,
+        writer_properties: Option<arrow::io::parquet::write::WriteOptions>,
     ) -> Result<()> {
         let plan = self.create_physical_plan().await?;
         let state = self.ctx_state.lock().clone();

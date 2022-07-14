@@ -22,13 +22,13 @@ use std::fmt::{Display, Formatter};
 use std::io;
 use std::result;
 
-use arrow::error::ArrowError;
+use arrow::error::Error as ArrowError;
 #[cfg(feature = "avro")]
 use avro_rs::Error as AvroError;
 #[cfg(feature = "jit")]
 use cranelift_module::ModuleError;
 #[cfg(feature = "parquet")]
-use parquet::error::ParquetError;
+use parquet::error::Error as ParquetError;
 use sqlparser::parser::ParserError;
 
 /// Result type for operations that could result in an [DataFusionError]
@@ -181,7 +181,7 @@ impl error::Error for DataFusionError {}
 #[cfg(test)]
 mod test {
     use crate::error::DataFusionError;
-    use arrow::error::ArrowError;
+    use arrow::error::Error as ArrowError;
 
     #[test]
     fn arrow_error_to_datafusion() {

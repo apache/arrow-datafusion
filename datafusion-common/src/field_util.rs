@@ -19,7 +19,7 @@
 
 use arrow::array::{ArrayRef, StructArray};
 use arrow::datatypes::{DataType, Field, Metadata, Schema};
-use arrow::error::ArrowError;
+use arrow::error::Error as ArrowError;
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
 

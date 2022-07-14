@@ -29,8 +29,8 @@ edition = "2018"
 snmalloc = ["snmalloc-rs"]
 
 [dependencies]
-arrow-format = { version = "0.4", features = ["flight-data", "flight-service"] }
-arrow = { package = "arrow2", version="0.10", features = ["io_ipc"] }
+arrow-format = { version = "0.6", features = ["flight-data", "flight-service"] }
+arrow = { package = "arrow2", version="0.12", features = ["io_ipc"] }
 anyhow = "1"
 async-trait = "0.1.41"
 ballista-core = { path = "../core", version = "0.6.0" }
@@ -43,7 +43,7 @@ snmalloc-rs = {version = "0.2", optional = true}
 tempfile = "3"
 tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread", "parking_lot"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-tonic = "0.6"
+tonic = "0.7"
 uuid = { version = "0.8", features = ["v4"] }
 hyper = "0.14.4"
 parking_lot = "0.12"

@@ -28,7 +28,7 @@ pub use self::parquet::ParquetExec;
 use arrow::{
     array::{ArrayRef, DictionaryArray},
     datatypes::{DataType, Field, Schema, SchemaRef},
-    error::{ArrowError, Result as ArrowResult},
+    error::{Error as ArrowError, Result as ArrowResult},
 };
 pub use avro::AvroExec;
 pub(crate) use csv::plan_to_csv;

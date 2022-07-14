@@ -29,7 +29,7 @@ use crate::{
 };
 use arrow::{
     datatypes::SchemaRef,
-    error::{ArrowError, Result as ArrowResult},
+    error::{Error as ArrowError, Result as ArrowResult},
 };
 use datafusion_common::record_batch::RecordBatch;
 use futures::Stream;

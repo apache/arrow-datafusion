@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::error::{ArrowError, Result};
+use arrow::error::{Error as ArrowError, Result};
 use chrono::{prelude::*, LocalResult};
 
 /// Accepts a string in RFC3339 / ISO8601 standard format and some

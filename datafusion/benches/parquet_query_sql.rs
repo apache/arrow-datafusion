@@ -29,7 +29,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use datafusion::prelude::ExecutionContext;
 use datafusion_common::field_util::SchemaExt;
 use datafusion_common::record_batch::RecordBatch;
-use parquet::compression::Compression;
+use parquet::compression::{Compression, CompressionOptions};
 use parquet::encoding::Encoding;
 use parquet::write::Version;
 use rand::distributions::uniform::SampleUniform;
@@ -153,7 +153,7 @@ fn generate_file() -> NamedTempFile {
 
     let options = arrow::io::parquet::write::WriteOptions {
         write_statistics: true,
-        compression: Compression::Uncompressed,
+        compression: CompressionOptions::Uncompressed,
         version: Version::V2,
     };
 
@@ -172,12 +172,11 @@ fn generate_file() -> NamedTempFile {
             iter.into_iter(),
             schema.as_ref(),
             options,
-            vec![Encoding::Plain].repeat(schema.fields().len()),
+            vec![vec![Encoding::Plain]].repeat(schema.fields().len()),
         )
         .unwrap();
         for rg in row_groups {
-            let (group, len) = rg.unwrap();
-            writer.write(group, len).unwrap();
+            writer.write(rg.unwrap()).unwrap();
         }
     }
     let (_total_size, mut w) = writer.end(None).unwrap();

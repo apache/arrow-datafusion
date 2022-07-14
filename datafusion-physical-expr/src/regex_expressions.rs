@@ -28,7 +28,7 @@ use std::any::type_name;
 use std::sync::Arc;
 
 use arrow::array::*;
-use arrow::error::ArrowError;
+use arrow::error::Error as ArrowError;
 
 use datafusion_common::{DataFusionError, Result};
 
