@@ -2327,8 +2327,8 @@ mod tests {
     ) -> Result<SchemaRef> {
         // define schema for data source (csv file)
         let schema = Arc::new(Schema::new(vec![
-            Field::new("c1", DataType::UInt32, false),
-            Field::new("c2", DataType::UInt64, false),
+            Field::new("c1", DataType::Int32, false),
+            Field::new("c2", DataType::Int64, false),
             Field::new("c3", DataType::Boolean, false),
         ]));
 
