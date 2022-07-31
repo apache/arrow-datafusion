@@ -109,6 +109,7 @@ pub mod decimal;
 mod explain;
 mod idenfifers;
 pub mod information_schema;
+mod parquet_schema;
 mod partitioned_csv;
 mod subqueries;
 #[cfg(feature = "unicode_expressions")]

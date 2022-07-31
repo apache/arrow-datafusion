@@ -26,7 +26,9 @@ use std::{
     time::{Instant, SystemTime},
 };
 
-use datafusion::datasource::{MemTable, TableProvider};
+use datafusion::datasource::{
+    file_format::parquet::ParquetFormatOptions, MemTable, TableProvider,
+};
 use datafusion::error::{DataFusionError, Result};
 use datafusion::logical_plan::LogicalPlan;
 use datafusion::parquet::basic::Compression;
@@ -407,7 +409,9 @@ fn get_table(
             }
             "parquet" => {
                 let path = format!("{}/{}", path, table);
-                let format = ParquetFormat::default().with_enable_pruning(true);
+                let format = ParquetFormat::new(
+                    ParquetFormatOptions::new().with_enable_pruning(true),
+                );
 
                 (Arc::new(format), path, DEFAULT_PARQUET_EXTENSION)
             }

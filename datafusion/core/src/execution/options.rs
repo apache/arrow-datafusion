@@ -21,6 +21,7 @@ use std::sync::Arc;
 
 use arrow::datatypes::{Schema, SchemaRef};
 
+use crate::datasource::file_format::parquet::ParquetFormatOptions;
 use crate::datasource::file_format::DEFAULT_SCHEMA_INFER_MAX_RECORD;
 use crate::datasource::{
     file_format::{
@@ -142,9 +143,8 @@ pub struct ParquetReadOptions<'a> {
     pub file_extension: &'a str,
     /// Partition Columns
     pub table_partition_cols: Vec<String>,
-    /// Should DataFusion parquet reader using the predicate to prune data,
-    /// overridden by value on execution::context::SessionConfig
-    pub parquet_pruning: bool,
+    /// Parquet specific reading options
+    pub options: ParquetFormatOptions,
 }
 
 impl<'a> Default for ParquetReadOptions<'a> {
@@ -152,7 +152,7 @@ impl<'a> Default for ParquetReadOptions<'a> {
         Self {
             file_extension: DEFAULT_PARQUET_EXTENSION,
             table_partition_cols: vec![],
-            parquet_pruning: ParquetFormat::default().enable_pruning(),
+            options: ParquetFormatOptions::default(),
         }
     }
 }
@@ -160,7 +160,26 @@ impl<'a> Default for ParquetReadOptions<'a> {
 impl<'a> ParquetReadOptions<'a> {
     /// Specify parquet_pruning
     pub fn parquet_pruning(mut self, parquet_pruning: bool) -> Self {
-        self.parquet_pruning = parquet_pruning;
+        self.options = self.options.with_enable_pruning(parquet_pruning);
+        self
+    }
+
+    /// Tell the parquet reader to skip any metadata that may be in
+    /// the file Schema. This can help avoid schema conflicts due to
+    /// metadata.  Defaults to true.
+    pub fn skip_metadata(mut self, skip_metadata: bool) -> Self {
+        self.options = self.options.with_skip_metadata(skip_metadata);
+        self
+    }
+
+    /// Provide a hint to the size of the file metadata. If a hint is
+    /// provided the reader will try and fetch the last `size_hint`
+    /// bytes of the parquet file optimistically.  With out a hint,
+    /// two read are required. One read to fetch the 8-byte parquet
+    /// footer and then another read to fetch the metadata length
+    /// encoded in the footer.
+    pub fn metadata_size_hint(mut self, size_hint: usize) -> Self {
+        self.options = self.options.with_metadata_size_hint(size_hint);
         self
     }
 
@@ -172,8 +191,7 @@ impl<'a> ParquetReadOptions<'a> {
 
     /// Helper to convert these user facing options to `ListingTable` options
     pub fn to_listing_options(&self, target_partitions: usize) -> ListingOptions {
-        let file_format =
-            ParquetFormat::default().with_enable_pruning(self.parquet_pruning);
+        let file_format = ParquetFormat::new(self.options.clone());
 
         ListingOptions {
             format: Arc::new(file_format),

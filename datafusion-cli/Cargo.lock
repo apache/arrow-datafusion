@@ -57,9 +57,9 @@ checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
 
 [[package]]
 name = "arrow"
-version = "18.0.0"
+version = "19.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5f89d2bc04fa746ee395d20c4cbfa508e4cce5c00bae816f0fae434fcfb9853"
+checksum = "89b7e88e4739c3616cae75adce6660c9c1a80f2660545eb77afbe0e4a0f048a0"
 dependencies = [
  "ahash",
  "bitflags",
@@ -1251,9 +1251,9 @@ dependencies = [
 
 [[package]]
 name = "parquet"
-version = "18.0.0"
+version = "19.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65f61759af307fad711e7656c705218402a8a79b776c893c20fef96e8ffd2a7d"
+checksum = "2cfcf237362047888b342e4f0e213a9b303133b085853e447f2c58e65e00099d"
 dependencies = [
  "arrow",
  "base64",
@@ -1535,7 +1535,6 @@ version = "1.0.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b7ce2b32a1aed03c558dc61a5cd328f15aff2dbc17daad8fb8af04d2100e15c"
 dependencies = [
- "indexmap",
  "itoa 1.0.2",
  "ryu",
  "serde",
@@ -1594,9 +1593,9 @@ checksum = "45456094d1983e2ee2a18fdfebce3189fa451699d0502cb8e3b49dba5ba41451"
 
 [[package]]
 name = "sqlparser"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f531637a13132fa3d38c54d4cd8f115905e5dc3e72f6e77bd6160481f482e25d"
+checksum = "d8ec7ef1bad82a2453dbaef7218b6f036e545edcce1ffd55f6e7af7bea43cce2"
 dependencies = [
  "log",
 ]

@@ -130,7 +130,9 @@ impl FileScanConfig {
             column_statistics: Some(table_cols_stats),
         };
 
-        let table_schema = Arc::new(Schema::new(table_fields));
+        let table_schema = Arc::new(
+            Schema::new(table_fields).with_metadata(self.file_schema.metadata().clone()),
+        );
 
         (table_schema, table_stats)
     }

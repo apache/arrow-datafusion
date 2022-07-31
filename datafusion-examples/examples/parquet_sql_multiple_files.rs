@@ -16,7 +16,7 @@
 // under the License.
 
 use datafusion::datasource::file_format::parquet::{
-    ParquetFormat, DEFAULT_PARQUET_EXTENSION,
+    ParquetFormat, ParquetFormatOptions, DEFAULT_PARQUET_EXTENSION,
 };
 use datafusion::datasource::listing::ListingOptions;
 use datafusion::error::Result;
@@ -33,7 +33,8 @@ async fn main() -> Result<()> {
     let testdata = datafusion::test_util::parquet_test_data();
 
     // Configure listing options
-    let file_format = ParquetFormat::default().with_enable_pruning(true);
+    let file_format =
+        ParquetFormat::new(ParquetFormatOptions::new().with_enable_pruning(true));
     let listing_options = ListingOptions {
         file_extension: DEFAULT_PARQUET_EXTENSION.to_owned(),
         format: Arc::new(file_format),

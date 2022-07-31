@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{collections::HashMap, fs, path::Path};
+use std::{fs, path::Path};
 
 use ::parquet::arrow::ArrowWriter;
 use tempfile::TempDir;
@@ -171,58 +171,6 @@ async fn parquet_list_columns() {
     assert!(result.is_null(1));
     assert_eq!(result.value(2), "hij");
     assert_eq!(result.value(3), "xyz");
-}
-
-#[tokio::test]
-async fn schema_merge_ignores_metadata() {
-    // Create two parquet files in same table with same schema but different metadata
-    let tmp_dir = TempDir::new().unwrap();
-    let table_dir = tmp_dir.path().join("parquet_test");
-    let table_path = Path::new(&table_dir);
-
-    let mut non_empty_metadata: HashMap<String, String> = HashMap::new();
-    non_empty_metadata.insert("testing".to_string(), "metadata".to_string());
-
-    let fields = vec![
-        Field::new("id", DataType::Int32, true),
-        Field::new("name", DataType::Utf8, true),
-    ];
-    let schemas = vec![
-        Arc::new(Schema::new_with_metadata(
-            fields.clone(),
-            non_empty_metadata.clone(),
-        )),
-        Arc::new(Schema::new(fields.clone())),
-    ];
-
-    if let Ok(()) = fs::create_dir(table_path) {
-        for (i, schema) in schemas.iter().enumerate().take(2) {
-            let filename = format!("part-{}.parquet", i);
-            let path = table_path.join(&filename);
-            let file = fs::File::create(path).unwrap();
-            let mut writer = ArrowWriter::try_new(file, schema.clone(), None).unwrap();
-
-            // create mock record batch
-            let ids = Arc::new(Int32Array::from_slice(&[i as i32]));
-            let names = Arc::new(StringArray::from_slice(&["test"]));
-            let rec_batch =
-                RecordBatch::try_new(schema.clone(), vec![ids, names]).unwrap();
-
-            writer.write(&rec_batch).unwrap();
-            writer.close().unwrap();
-        }
-    }
-
-    // Read the parquet files into a dataframe to confirm results
-    // (no errors)
-    let ctx = SessionContext::new();
-    let df = ctx
-        .read_parquet(table_dir.to_str().unwrap(), ParquetReadOptions::default())
-        .await
-        .unwrap();
-    let result = df.collect().await.unwrap();
-
-    assert_eq!(result[0].schema().metadata(), result[1].schema().metadata());
 }
 
 #[tokio::test]

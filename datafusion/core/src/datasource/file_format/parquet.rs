@@ -49,23 +49,30 @@ use crate::physical_plan::{Accumulator, ExecutionPlan, Statistics};
 /// The default file extension of parquet files
 pub const DEFAULT_PARQUET_EXTENSION: &str = ".parquet";
 
-/// The Apache Parquet `FileFormat` implementation
-#[derive(Debug)]
-pub struct ParquetFormat {
+/// Apache Parquet `FileFormat` options
+#[derive(Debug, Clone)]
+pub struct ParquetFormatOptions {
     enable_pruning: bool,
     metadata_size_hint: Option<usize>,
+    skip_metadata: bool,
 }
 
-impl Default for ParquetFormat {
+impl Default for ParquetFormatOptions {
     fn default() -> Self {
         Self {
             enable_pruning: true,
             metadata_size_hint: None,
+            skip_metadata: true,
         }
     }
 }
 
-impl ParquetFormat {
+impl ParquetFormatOptions {
+    /// Create default options
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     /// Activate statistics based row group level pruning
     /// - defaults to true
     pub fn with_enable_pruning(mut self, enable: bool) -> Self {
@@ -81,6 +88,7 @@ impl ParquetFormat {
         self.metadata_size_hint = Some(size_hint);
         self
     }
+
     /// Return true if pruning is enabled
     pub fn enable_pruning(&self) -> bool {
         self.enable_pruning
@@ -89,6 +97,55 @@ impl ParquetFormat {
     /// Return the metadata size hint if set
     pub fn metadata_size_hint(&self) -> Option<usize> {
         self.metadata_size_hint
+    }
+
+    /// Tell the parquet reader to skip any metadata that may be in
+    /// the file Schema. This can help avoid schema conflicts due to
+    /// metadata.  Defaults to true.
+    pub fn with_skip_metadata(mut self, skip_metadata: bool) -> Self {
+        self.skip_metadata = skip_metadata;
+        self
+    }
+
+    /// returns true if schema metadata will be cleared prior to
+    /// schema merging.
+    pub fn skip_metadata(&self) -> bool {
+        self.skip_metadata
+    }
+}
+
+/// Clears all metadata (Schema level and field level) on an iterator
+/// of Schemas
+fn clear_metadata(
+    schemas: impl IntoIterator<Item = Schema>,
+) -> impl Iterator<Item = Schema> {
+    schemas.into_iter().map(|schema| {
+        let fields = schema
+            .fields()
+            .iter()
+            .map(|field| {
+                field.clone().with_metadata(None) // clear meta
+            })
+            .collect::<Vec<_>>();
+        Schema::new(fields)
+    })
+}
+
+/// The Apache Parquet `FileFormat` implementation
+#[derive(Debug, Default)]
+pub struct ParquetFormat {
+    options: ParquetFormatOptions,
+}
+
+impl ParquetFormat {
+    /// Create a new [`ParquetFormat`] with the specified options
+    pub fn new(options: ParquetFormatOptions) -> Self {
+        Self { options }
+    }
+
+    /// return the current options
+    pub fn options(&self) -> &ParquetFormatOptions {
+        &self.options
     }
 }
 
@@ -106,10 +163,17 @@ impl FileFormat for ParquetFormat {
         let mut schemas = Vec::with_capacity(objects.len());
         for object in objects {
             let schema =
-                fetch_schema(store.as_ref(), object, self.metadata_size_hint).await?;
+                fetch_schema(store.as_ref(), object, self.options.metadata_size_hint)
+                    .await?;
             schemas.push(schema)
         }
-        let schema = Schema::try_merge(schemas)?;
+
+        let schema = if self.options.skip_metadata {
+            Schema::try_merge(clear_metadata(schemas))
+        } else {
+            Schema::try_merge(schemas)
+        }?;
+
         Ok(Arc::new(schema))
     }
 
@@ -123,7 +187,7 @@ impl FileFormat for ParquetFormat {
             store.as_ref(),
             table_schema,
             object,
-            self.metadata_size_hint,
+            self.options.metadata_size_hint,
         )
         .await?;
         Ok(stats)
@@ -137,7 +201,7 @@ impl FileFormat for ParquetFormat {
         // If enable pruning then combine the filters to build the predicate.
         // If disable pruning then set the predicate to None, thus readers
         // will not prune data based on the statistics.
-        let predicate = if self.enable_pruning {
+        let predicate = if self.options.enable_pruning {
             combine_filters(filters)
         } else {
             None
@@ -146,7 +210,7 @@ impl FileFormat for ParquetFormat {
         Ok(Arc::new(ParquetExec::new(
             conf,
             predicate,
-            self.metadata_size_hint(),
+            self.options.metadata_size_hint(),
         )))
     }
 }
@@ -682,7 +746,8 @@ mod tests {
 
         assert_eq!(store.request_count(), 2);
 
-        let format = ParquetFormat::default().with_metadata_size_hint(9);
+        let format =
+            ParquetFormat::new(ParquetFormatOptions::new().with_metadata_size_hint(9));
         let schema = format.infer_schema(&store.upcast(), &meta).await.unwrap();
 
         let stats =
@@ -709,7 +774,9 @@ mod tests {
         // ensure the requests were coalesced into a single request
         assert_eq!(store.request_count(), 1);
 
-        let format = ParquetFormat::default().with_metadata_size_hint(size_hint);
+        let format = ParquetFormat::new(
+            ParquetFormatOptions::new().with_metadata_size_hint(size_hint),
+        );
         let schema = format.infer_schema(&store.upcast(), &meta).await.unwrap();
         let stats = fetch_statistics(
             store.upcast().as_ref(),

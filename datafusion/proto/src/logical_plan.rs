@@ -24,7 +24,9 @@ use crate::{
     to_proto,
 };
 use arrow::datatypes::Schema;
-use datafusion::prelude::SessionContext;
+use datafusion::{
+    datasource::file_format::parquet::ParquetFormatOptions, prelude::SessionContext,
+};
 use datafusion::{
     datasource::{
         file_format::{
@@ -397,9 +399,10 @@ impl AsLogicalPlan for LogicalPlanNode {
                     })? {
                         &FileFormatType::Parquet(protobuf::ParquetFormat {
                             enable_pruning,
-                        }) => Arc::new(
-                            ParquetFormat::default().with_enable_pruning(enable_pruning),
-                        ),
+                        }) => Arc::new(ParquetFormat::new(
+                            ParquetFormatOptions::new()
+                                .with_enable_pruning(enable_pruning),
+                        )),
                         FileFormatType::Csv(protobuf::CsvFormat {
                             has_header,
                             delimiter,
@@ -747,7 +750,7 @@ impl AsLogicalPlan for LogicalPlanNode {
                         any.downcast_ref::<ParquetFormat>()
                     {
                         FileFormatType::Parquet(protobuf::ParquetFormat {
-                            enable_pruning: parquet.enable_pruning(),
+                            enable_pruning: parquet.options().enable_pruning(),
                         })
                     } else if let Some(csv) = any.downcast_ref::<CsvFormat>() {
                         FileFormatType::Csv(protobuf::CsvFormat {
