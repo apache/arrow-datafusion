@@ -219,7 +219,7 @@ impl From<&DataType> for protobuf::arrow_type::ArrowTypeEnum {
                     value: Some(Box::new(value_type.as_ref().into())),
                 }))
             }
-            DataType::Decimal(whole, fractional) => Self::Decimal(protobuf::Decimal {
+            DataType::Decimal128(whole, fractional) => Self::Decimal(protobuf::Decimal {
                 whole: *whole as u64,
                 fractional: *fractional as u64,
             }),
@@ -1241,7 +1241,7 @@ impl TryFrom<&DataType> for protobuf::scalar_type::Datatype {
             | DataType::Union(_, _, _)
             | DataType::Dictionary(_, _)
             | DataType::Map(_, _)
-            | DataType::Decimal(_, _)
+            | DataType::Decimal128(_, _)
             | DataType::Decimal256(_, _) => {
                 return Err(Error::invalid_scalar_type(val));
             }

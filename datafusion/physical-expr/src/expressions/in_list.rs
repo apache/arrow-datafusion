@@ -254,6 +254,45 @@ macro_rules! collection_contains_check {
     }};
 }
 
+macro_rules! collection_contains_check_decimal {
+    ($ARRAY:expr, $VALUES:expr, $NEGATED:expr, $CONTAINS_NULL:expr) => {{
+        let bool_array = if $NEGATED {
+            // Not in
+            if $CONTAINS_NULL {
+                $ARRAY
+                    .iter()
+                    .map(|vop| match vop.map(|v| !$VALUES.contains(&v.as_i128())) {
+                        Some(true) => None,
+                        x => x,
+                    })
+                    .collect::<BooleanArray>()
+            } else {
+                $ARRAY
+                    .iter()
+                    .map(|vop| vop.map(|v| !$VALUES.contains(&v.as_i128())))
+                    .collect::<BooleanArray>()
+            }
+        } else {
+            // In
+            if $CONTAINS_NULL {
+                $ARRAY
+                    .iter()
+                    .map(|vop| match vop.map(|v| $VALUES.contains(&v.as_i128())) {
+                        Some(false) => None,
+                        x => x,
+                    })
+                    .collect::<BooleanArray>()
+            } else {
+                $ARRAY
+                    .iter()
+                    .map(|vop| vop.map(|v| $VALUES.contains(&v.as_i128())))
+                    .collect::<BooleanArray>()
+            }
+        };
+        ColumnarValue::Array(Arc::new(bool_array))
+    }};
+}
+
 // whether each value on the left (can be null) is contained in the non-null list
 fn in_list_utf8<OffsetSize: OffsetSizeTrait>(
     array: &GenericStringArray<OffsetSize>,
@@ -315,7 +354,7 @@ fn make_list_contains_decimal(
         })
         .collect::<Vec<_>>();
 
-    collection_contains_check!(array, values, negated, contains_null)
+    collection_contains_check_decimal!(array, values, negated, contains_null)
 }
 
 fn make_set_contains_decimal(
@@ -335,7 +374,7 @@ fn make_set_contains_decimal(
         .collect::<Vec<_>>();
     let native_set: HashSet<i128> = HashSet::from_iter(native_array);
 
-    collection_contains_check!(array, native_set, negated, contains_null)
+    collection_contains_check_decimal!(array, native_set, negated, contains_null)
 }
 
 fn set_contains_utf8<OffsetSize: OffsetSizeTrait>(
@@ -631,7 +670,7 @@ impl PhysicalExpr for InListExpr {
                         .unwrap();
                     Ok(set_contains_utf8(array, set, self.negated))
                 }
-                DataType::Decimal(_, _) => {
+                DataType::Decimal128(_, _) => {
                     let array = array.as_any().downcast_ref::<Decimal128Array>().unwrap();
                     Ok(make_set_contains_decimal(array, set, self.negated))
                 }
@@ -760,7 +799,7 @@ impl PhysicalExpr for InListExpr {
                     let null_array = new_null_array(&DataType::Boolean, array.len());
                     Ok(ColumnarValue::Array(Arc::new(null_array)))
                 }
-                DataType::Decimal(_, _) => {
+                DataType::Decimal128(_, _) => {
                     let decimal_array =
                         array.as_any().downcast_ref::<Decimal128Array>().unwrap();
                     Ok(make_list_contains_decimal(
@@ -1032,7 +1071,8 @@ mod tests {
     #[test]
     fn in_list_decimal() -> Result<()> {
         // Now, we can check the NULL type
-        let schema = Schema::new(vec![Field::new("a", DataType::Decimal(13, 4), true)]);
+        let schema =
+            Schema::new(vec![Field::new("a", DataType::Decimal128(13, 4), true)]);
         let array = vec![Some(100_0000_i128), None, Some(200_5000_i128)]
             .into_iter()
             .collect::<Decimal128Array>();
@@ -1278,7 +1318,8 @@ mod tests {
 
     #[test]
     fn in_list_set_decimal() -> Result<()> {
-        let schema = Schema::new(vec![Field::new("a", DataType::Decimal(13, 4), true)]);
+        let schema =
+            Schema::new(vec![Field::new("a", DataType::Decimal128(13, 4), true)]);
         let array = vec![Some(100_0000_i128), Some(200_5000_i128), None]
             .into_iter()
             .collect::<Decimal128Array>();
@@ -1320,7 +1361,8 @@ mod tests {
     #[test]
     fn test_cast_static_filter_to_set() -> Result<()> {
         // random schema
-        let schema = Schema::new(vec![Field::new("a", DataType::Decimal(13, 4), true)]);
+        let schema =
+            Schema::new(vec![Field::new("a", DataType::Decimal128(13, 4), true)]);
         // list of phy expr
         let mut phy_exprs = vec![
             lit(1i64),

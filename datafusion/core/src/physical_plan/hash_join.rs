@@ -1098,8 +1098,8 @@ fn equal_rows(
             DataType::LargeUtf8 => {
                 equal_rows_elem!(LargeStringArray, l, r, left, right, null_equals_null)
             }
-            DataType::Decimal(_, lscale) => match r.data_type() {
-                DataType::Decimal(_, rscale) => {
+            DataType::Decimal128(_, lscale) => match r.data_type() {
+                DataType::Decimal128(_, rscale) => {
                     if lscale == rscale {
                         equal_rows_elem!(
                             Decimal128Array,

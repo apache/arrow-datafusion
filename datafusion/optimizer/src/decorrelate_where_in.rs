@@ -60,8 +60,7 @@ impl DecorrelateWhereIn {
                     subquery,
                     negated,
                 } => {
-                    let subquery =
-                        self.optimize(&*subquery.subquery, optimizer_config)?;
+                    let subquery = self.optimize(&subquery.subquery, optimizer_config)?;
                     let subquery = Arc::new(subquery);
                     let subquery = Subquery { subquery };
                     let subquery =
@@ -132,7 +131,7 @@ fn optimize_where_in(
     outer_other_exprs: &[Expr],
     optimizer_config: &mut OptimizerConfig,
 ) -> datafusion_common::Result<LogicalPlan> {
-    let proj = Projection::try_from_plan(&*query_info.query.subquery)
+    let proj = Projection::try_from_plan(&query_info.query.subquery)
         .map_err(|e| context!("a projection is required", e))?;
     let mut subqry_input = proj.input.clone();
     let proj = only_or_err(proj.expr.as_slice())

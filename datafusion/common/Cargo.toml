@@ -38,11 +38,11 @@ jit = ["cranelift-module"]
 pyarrow = ["pyo3"]
 
 [dependencies]
-arrow = { version = "19.0.0", features = ["prettyprint"] }
+arrow = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = ["prettyprint"], optional = false }
 avro-rs = { version = "0.13", features = ["snappy"], optional = true }
 cranelift-module = { version = "0.86.1", optional = true }
-object_store = { version = "0.3", optional = true }
+object_store = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = [], optional = true }
 ordered-float = "3.0"
-parquet = { version = "19.0.0", features = ["arrow"], optional = true }
+parquet = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = ["arrow"], optional = true }
 pyo3 = { version = "0.16", optional = true }
 sqlparser = "0.19"

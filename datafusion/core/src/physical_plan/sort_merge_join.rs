@@ -1098,7 +1098,7 @@ fn compare_join_arrays(
             DataType::Float64 => compare_value!(Float64Array),
             DataType::Utf8 => compare_value!(StringArray),
             DataType::LargeUtf8 => compare_value!(LargeStringArray),
-            DataType::Decimal(..) => compare_value!(Decimal128Array),
+            DataType::Decimal128(..) => compare_value!(Decimal128Array),
             DataType::Timestamp(time_unit, None) => match time_unit {
                 TimeUnit::Second => compare_value!(TimestampSecondArray),
                 TimeUnit::Millisecond => compare_value!(TimestampMillisecondArray),
@@ -1164,7 +1164,7 @@ fn is_join_arrays_equal(
             DataType::Float64 => compare_value!(Float64Array),
             DataType::Utf8 => compare_value!(StringArray),
             DataType::LargeUtf8 => compare_value!(LargeStringArray),
-            DataType::Decimal(..) => compare_value!(Decimal128Array),
+            DataType::Decimal128(..) => compare_value!(Decimal128Array),
             DataType::Timestamp(time_unit, None) => match time_unit {
                 TimeUnit::Second => compare_value!(TimestampSecondArray),
                 TimeUnit::Millisecond => compare_value!(TimestampMillisecondArray),

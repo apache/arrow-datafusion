@@ -38,9 +38,9 @@ unicode_expressions = []
 
 [dependencies]
 ahash = { version = "0.7", default-features = false }
-arrow = { version = "19.0.0", features = ["prettyprint"] }
-datafusion-common = { path = "../common", version = "10.0.0" }
-datafusion-expr = { path = "../expr", version = "10.0.0" }
+arrow = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = ["prettyprint"], optional = false }
+datafusion-common = { path = "../common", features = [], optional = false }
+datafusion-expr = { path = "../expr", features = [], optional = false }
 hashbrown = "0.12"
 sqlparser = "0.19"
 tokio = { version = "1.0", features = ["macros", "rt", "rt-multi-thread", "sync", "fs", "parking_lot"] }

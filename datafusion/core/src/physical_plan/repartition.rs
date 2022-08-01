@@ -933,7 +933,7 @@ mod tests {
         let items_set: HashSet<&str> = items_vec.iter().copied().collect();
         assert_eq!(items_vec.len(), items_set.len());
         let source_str_set: HashSet<&str> =
-            (&["foo", "bar", "frob", "baz", "goo", "gar", "grob", "gaz"])
+            ["foo", "bar", "frob", "baz", "goo", "gar", "grob", "gaz"]
                 .iter()
                 .copied()
                 .collect();

@@ -425,7 +425,7 @@ macro_rules! get_statistic {
             ParquetStatistics::Int32(s) => {
                 match $target_arrow_type {
                     // int32 to decimal with the precision and scale
-                    Some(DataType::Decimal(precision, scale)) => {
+                    Some(DataType::Decimal128(precision, scale)) => {
                         Some(ScalarValue::Decimal128(
                             Some(*s.$func() as i128),
                             precision,
@@ -438,7 +438,7 @@ macro_rules! get_statistic {
             ParquetStatistics::Int64(s) => {
                 match $target_arrow_type {
                     // int64 to decimal with the precision and scale
-                    Some(DataType::Decimal(precision, scale)) => {
+                    Some(DataType::Decimal128(precision, scale)) => {
                         Some(ScalarValue::Decimal128(
                             Some(*s.$func() as i128),
                             precision,
@@ -463,7 +463,7 @@ macro_rules! get_statistic {
             ParquetStatistics::FixedLenByteArray(s) => {
                 match $target_arrow_type {
                     // just support the decimal data type
-                    Some(DataType::Decimal(precision, scale)) => {
+                    Some(DataType::Decimal128(precision, scale)) => {
                         Some(ScalarValue::Decimal128(
                             Some(from_bytes_to_i128(s.$bytes_func())),
                             precision,
@@ -535,10 +535,10 @@ fn parquet_to_arrow_decimal_type(parquet_column: &ColumnDescriptor) -> Option<Da
     let type_ptr = parquet_column.self_type_ptr();
     match type_ptr.get_basic_info().logical_type() {
         Some(LogicalType::Decimal { scale, precision }) => {
-            Some(DataType::Decimal(precision as usize, scale as usize))
+            Some(DataType::Decimal128(precision as usize, scale as usize))
         }
         _ => match type_ptr.get_basic_info().converted_type() {
-            ConvertedType::DECIMAL => Some(DataType::Decimal(
+            ConvertedType::DECIMAL => Some(DataType::Decimal128(
                 type_ptr.get_precision() as usize,
                 type_ptr.get_scale() as usize,
             )),
@@ -1475,7 +1475,8 @@ mod tests {
 
         // INT32: c1 > 5, the c1 is decimal(9,2)
         let expr = col("c1").gt(lit(ScalarValue::Decimal128(Some(500), 9, 2)));
-        let schema = Schema::new(vec![Field::new("c1", DataType::Decimal(9, 2), false)]);
+        let schema =
+            Schema::new(vec![Field::new("c1", DataType::Decimal128(9, 2), false)]);
         let schema_descr = get_test_schema_descr(vec![(
             "c1",
             PhysicalType::INT32,
@@ -1516,7 +1517,8 @@ mod tests {
         // INT32: c1 > 5, but parquet decimal type has different precision or scale to arrow decimal
         // The decimal of arrow is decimal(5,2), the decimal of parquet is decimal(9,0)
         let expr = col("c1").gt(lit(ScalarValue::Decimal128(Some(500), 5, 2)));
-        let schema = Schema::new(vec![Field::new("c1", DataType::Decimal(5, 2), false)]);
+        let schema =
+            Schema::new(vec![Field::new("c1", DataType::Decimal128(5, 2), false)]);
         // The decimal of parquet is decimal(9,0)
         let schema_descr = get_test_schema_descr(vec![(
             "c1",
@@ -1568,7 +1570,8 @@ mod tests {
 
         // INT64: c1 < 5, the c1 is decimal(18,2)
         let expr = col("c1").lt(lit(ScalarValue::Decimal128(Some(500), 18, 2)));
-        let schema = Schema::new(vec![Field::new("c1", DataType::Decimal(18, 2), false)]);
+        let schema =
+            Schema::new(vec![Field::new("c1", DataType::Decimal128(18, 2), false)]);
         let schema_descr = get_test_schema_descr(vec![(
             "c1",
             PhysicalType::INT64,
@@ -1607,7 +1610,8 @@ mod tests {
         // FIXED_LENGTH_BYTE_ARRAY: c1 = 100, the c1 is decimal(28,2)
         // the type of parquet is decimal(18,2)
         let expr = col("c1").eq(lit(ScalarValue::Decimal128(Some(100000), 28, 3)));
-        let schema = Schema::new(vec![Field::new("c1", DataType::Decimal(18, 3), false)]);
+        let schema =
+            Schema::new(vec![Field::new("c1", DataType::Decimal128(18, 3), false)]);
         let schema_descr = get_test_schema_descr(vec![(
             "c1",
             PhysicalType::FIXED_LEN_BYTE_ARRAY,

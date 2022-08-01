@@ -37,12 +37,12 @@ default = ["unicode_expressions"]
 unicode_expressions = []
 
 [dependencies]
-arrow = { version = "19.0.0", features = ["prettyprint"] }
+arrow = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = ["prettyprint"], optional = false }
 async-trait = "0.1.41"
 chrono = { version = "0.4", default-features = false }
-datafusion-common = { path = "../common", version = "10.0.0" }
-datafusion-expr = { path = "../expr", version = "10.0.0" }
-datafusion-physical-expr = { path = "../physical-expr", version = "10.0.0" }
+datafusion-common = { path = "../common", features = [], optional = false }
+datafusion-expr = { path = "../expr", features = [], optional = false }
+datafusion-physical-expr = { path = "../physical-expr", features = [], optional = false }
 hashbrown = { version = "0.12", features = ["raw"] }
 log = "^0.4"
 

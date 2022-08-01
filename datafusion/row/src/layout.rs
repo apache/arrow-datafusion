@@ -166,7 +166,7 @@ fn word_aligned_offsets(null_width: usize, schema: &Schema) -> (Vec<usize>, usiz
     let mut offset = null_width;
     for f in schema.fields() {
         offsets.push(offset);
-        assert!(!matches!(f.data_type(), DataType::Decimal(_, _)));
+        assert!(!matches!(f.data_type(), DataType::Decimal128(_, _)));
         // All of the current support types can fit into one single 8-bytes word.
         // When we decide to support Decimal type in the future, its width would be
         // of two 8-bytes words and should adapt the width calculation below.

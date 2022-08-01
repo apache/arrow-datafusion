@@ -153,7 +153,7 @@ mod roundtrip_tests {
             pub expr: ::core::option::Option<crate::protobuf::LogicalExprNode>,
         }
 
-        #[derive(Clone, PartialEq, ::prost::Message)]
+        #[derive(Clone, PartialEq, Eq, ::prost::Message)]
         pub struct TopKExecProto {
             #[prost(uint64, tag = "1")]
             pub k: u64,
@@ -569,7 +569,7 @@ mod roundtrip_tests {
             DataType::FixedSizeBinary(1234),
             DataType::FixedSizeBinary(-432),
             DataType::LargeBinary,
-            DataType::Decimal(1345, 5431),
+            DataType::Decimal128(1345, 5431),
             // Recursive list tests
             DataType::List(new_box_field("Level1", DataType::Binary, true)),
             DataType::List(new_box_field(
@@ -651,7 +651,7 @@ mod roundtrip_tests {
                 ])),
             ),
             DataType::Dictionary(
-                Box::new(DataType::Decimal(10, 50)),
+                Box::new(DataType::Decimal128(10, 50)),
                 Box::new(DataType::FixedSizeList(
                     new_box_field("Level1", DataType::Binary, true),
                     4,
@@ -724,7 +724,7 @@ mod roundtrip_tests {
             DataType::LargeBinary,
             DataType::Utf8,
             DataType::LargeUtf8,
-            DataType::Decimal(1345, 5431),
+            DataType::Decimal128(1345, 5431),
             // Recursive list tests
             DataType::List(new_box_field("Level1", DataType::Binary, true)),
             DataType::List(new_box_field(
@@ -806,7 +806,7 @@ mod roundtrip_tests {
                 ])),
             ),
             DataType::Dictionary(
-                Box::new(DataType::Decimal(10, 50)),
+                Box::new(DataType::Decimal128(10, 50)),
                 Box::new(DataType::FixedSizeList(
                     new_box_field("Level1", DataType::Binary, true),
                     4,

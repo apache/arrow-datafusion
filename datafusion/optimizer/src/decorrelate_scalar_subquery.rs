@@ -69,7 +69,7 @@ impl DecorrelateScalarSubquery {
                                 _ => return Ok(()),
                             };
                             let subquery =
-                                self.optimize(&*subquery.subquery, optimizer_config)?;
+                                self.optimize(&subquery.subquery, optimizer_config)?;
                             let subquery = Arc::new(subquery);
                             let subquery = Subquery { subquery };
                             let res = SubqueryInfo::new(subquery, expr, *op, lhs);
@@ -163,7 +163,7 @@ fn optimize_scalar(
         "optimizing:\n{}",
         query_info.query.subquery.display_indent()
     );
-    let proj = Projection::try_from_plan(&*query_info.query.subquery)
+    let proj = Projection::try_from_plan(&query_info.query.subquery)
         .map_err(|e| context!("scalar subqueries must have a projection", e))?;
     let proj = only_or_err(proj.expr.as_slice())
         .map_err(|e| context!("exactly one expression should be projected", e))?;
@@ -173,7 +173,7 @@ fn optimize_scalar(
         .map_err(|e| context!("Exactly one input is expected. Is this a join?", e))?;
     let aggr = Aggregate::try_from_plan(sub_input)
         .map_err(|e| context!("scalar subqueries must aggregate a value", e))?;
-    let filter = Filter::try_from_plan(&*aggr.input).map_err(|e| {
+    let filter = Filter::try_from_plan(&aggr.input).map_err(|e| {
         context!("scalar subqueries must have a filter to be correlated", e)
     })?;
 

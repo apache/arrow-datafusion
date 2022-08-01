@@ -275,7 +275,7 @@ fn create_hashjoin_datatype_context() -> Result<SessionContext> {
     let t1_schema = Schema::new(vec![
         Field::new("c1", DataType::Date32, true),
         Field::new("c2", DataType::Date64, true),
-        Field::new("c3", DataType::Decimal(5, 2), true),
+        Field::new("c3", DataType::Decimal128(5, 2), true),
         Field::new(
             "c4",
             DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8)),
@@ -308,7 +308,7 @@ fn create_hashjoin_datatype_context() -> Result<SessionContext> {
     let t2_schema = Schema::new(vec![
         Field::new("c1", DataType::Date32, true),
         Field::new("c2", DataType::Date64, true),
-        Field::new("c3", DataType::Decimal(10, 2), true),
+        Field::new("c3", DataType::Decimal128(10, 2), true),
         Field::new(
             "c4",
             DataType::Dictionary(Box::new(DataType::Int32), Box::new(DataType::Utf8)),

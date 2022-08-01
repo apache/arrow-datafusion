@@ -17,7 +17,7 @@
 
 //! SQL Utility Functions
 
-use arrow::datatypes::{DataType, DECIMAL_DEFAULT_SCALE, DECIMAL_MAX_PRECISION};
+use arrow::datatypes::{DataType, DECIMAL128_MAX_PRECISION, DECIMAL_DEFAULT_SCALE};
 use sqlparser::ast::Ident;
 
 use datafusion_common::{DataFusionError, Result, ScalarValue};
@@ -454,17 +454,17 @@ pub(crate) fn make_decimal_type(
                 "Cannot specify only scale for decimal data type".to_string(),
             ))
         }
-        (None, None) => (DECIMAL_MAX_PRECISION, DECIMAL_DEFAULT_SCALE),
+        (None, None) => (DECIMAL128_MAX_PRECISION, DECIMAL_DEFAULT_SCALE),
     };
 
     // Arrow decimal is i128 meaning 38 maximum decimal digits
-    if precision > DECIMAL_MAX_PRECISION || scale > precision {
+    if precision > DECIMAL128_MAX_PRECISION || scale > precision {
         Err(DataFusionError::Internal(format!(
             "For decimal(precision, scale) precision must be less than or equal to 38 and scale can't be greater than precision. Got ({}, {})",
             precision, scale
         )))
     } else {
-        Ok(DataType::Decimal(precision, scale))
+        Ok(DataType::Decimal128(precision, scale))
     }
 }
 

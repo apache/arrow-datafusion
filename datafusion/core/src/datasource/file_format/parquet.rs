@@ -575,7 +575,8 @@ mod tests {
     use futures::StreamExt;
     use object_store::local::LocalFileSystem;
     use object_store::path::Path;
-    use object_store::{GetResult, ListResult};
+    use object_store::{GetResult, ListResult, MultipartId};
+    use tokio::io::AsyncWrite;
 
     #[tokio::test]
     async fn read_merged_batches() -> Result<()> {
@@ -646,6 +647,22 @@ mod tests {
     #[async_trait]
     impl ObjectStore for RequestCountingObjectStore {
         async fn put(&self, _location: &Path, _bytes: Bytes) -> object_store::Result<()> {
+            Err(object_store::Error::NotImplemented)
+        }
+
+        async fn put_multipart(
+            &self,
+            _location: &Path,
+        ) -> object_store::Result<(MultipartId, Box<dyn AsyncWrite + Unpin + Send>)>
+        {
+            Err(object_store::Error::NotImplemented)
+        }
+
+        async fn abort_multipart(
+            &self,
+            _location: &Path,
+            _multipart_id: &MultipartId,
+        ) -> object_store::Result<()> {
             Err(object_store::Error::NotImplemented)
         }
 
@@ -1073,7 +1090,7 @@ mod tests {
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(4, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(4, 2), column.data_type());
 
         // parquet use the int64 as the physical type to store decimal
         let exec = get_exec("int64_decimal.parquet", None, None).await?;
@@ -1081,7 +1098,7 @@ mod tests {
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(10, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(10, 2), column.data_type());
 
         // parquet use the fixed length binary as the physical type to store decimal
         let exec = get_exec("fixed_length_decimal.parquet", None, None).await?;
@@ -1089,14 +1106,14 @@ mod tests {
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(25, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(25, 2), column.data_type());
 
         let exec = get_exec("fixed_length_decimal_legacy.parquet", None, None).await?;
         let batches = collect(exec, task_ctx.clone()).await?;
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(13, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(13, 2), column.data_type());
 
         // parquet use the fixed length binary as the physical type to store decimal
         // TODO: arrow-rs don't support convert the physical type of binary to decimal
