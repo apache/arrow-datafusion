@@ -53,4 +53,4 @@ tokio = "1.18"
 
 [build-dependencies]
 pbjson-build = { version = "0.3", optional = true }
-prost-build = { version = "0.10" }
+prost-build = { version = "0.11" }
