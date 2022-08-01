@@ -18,11 +18,15 @@
 //! DateTime expressions
 
 use arrow::{
-    array::{Array, ArrayRef, GenericStringArray, OffsetSizeTrait, PrimitiveArray},
+    array::{
+        Array, ArrayRef, GenericStringArray, Int32Array, Int32Builder, OffsetSizeTrait,
+        PrimitiveArray,
+    },
     compute::kernels::cast_utils::string_to_timestamp_nanos,
     datatypes::{
-        ArrowPrimitiveType, DataType, TimestampMicrosecondType, TimestampMillisecondType,
-        TimestampNanosecondType, TimestampSecondType,
+        ArrowNumericType, ArrowPrimitiveType, ArrowTemporalType, DataType,
+        TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
+        TimestampSecondType,
     },
 };
 use arrow::{
@@ -356,8 +360,9 @@ pub fn date_part(args: &[ColumnarValue]) -> Result<ColumnarValue> {
         "hour" => extract_date_part!(array, temporal::hour),
         "minute" => extract_date_part!(array, temporal::minute),
         "second" => extract_date_part!(array, temporal::second),
+        "epoch" => extract_date_part!(array, extract_epoch),
         _ => Err(DataFusionError::Execution(format!(
-            "Date part '{}' not supported",
+            "Date partx '{}' not supported",
             date_part
         ))),
     }?;
@@ -370,6 +375,40 @@ pub fn date_part(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     } else {
         ColumnarValue::Array(Arc::new(arr))
     })
+}
+
+fn extract_epoch<T>(array: &PrimitiveArray<T>) -> Result<Int32Array>
+where
+    T: ArrowTemporalType + ArrowNumericType,
+    i64: std::convert::From<T::Native>,
+{
+    let mut b = Int32Builder::new(array.len());
+    match array.data_type() {
+        &DataType::Timestamp(ref unit, _) => {
+            for i in 0..array.len() {
+                if array.is_null(i) {
+                    b.append_null()?;
+                } else {
+                    let scale = match unit {
+                        TimeUnit::Second => 1,
+                        TimeUnit::Millisecond => 1_000,
+                        TimeUnit::Microsecond => 1_000_000,
+                        TimeUnit::Nanosecond => 1_000_000_000,
+                    };
+                    let n: i64 = array.value(i).into();
+                    b.append_value((n / scale) as i32)?;
+                }
+            }
+        }
+        dt => {
+            return Ok(Err(arrow::error::ArrowError::ComputeError(format!(
+                "epoch does not support: {:?}",
+                dt
+            )))?);
+        }
+    }
+
+    Ok(b.finish())
 }
 
 #[cfg(test)]
