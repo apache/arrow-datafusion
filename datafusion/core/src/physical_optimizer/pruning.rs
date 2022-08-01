@@ -48,6 +48,8 @@ use datafusion_expr::expr_rewriter::{ExprRewritable, ExprRewriter};
 use datafusion_expr::utils::expr_to_columns;
 use datafusion_physical_expr::create_physical_expr;
 
+use log::debug;
+
 /// Interface to pass statistics information to [`PruningPredicate`]
 ///
 /// Returns statistics for containers / files of data in Arrays.
@@ -531,7 +533,9 @@ fn rewrite_expr_to_prunable(
                 ))),
             };
         }
-
+        Expr::GetIndexedField { ref expr, key } => {
+            Ok((column_expr.clone(), op, scalar_expr.clone()))
+        }
         _ => Err(DataFusionError::Plan(format!(
             "column expression {:?} is not supported",
             column_expr
@@ -723,7 +727,8 @@ fn build_predicate_expression(
         Ok(builder) => builder,
         // allow partial failure in predicate expression generation
         // this can still produce a useful predicate when multiple conditions are joined using AND
-        Err(_) => {
+        Err(e) => {
+            debug!("could not build pruning expression: left={:?} right={:?} op={:?} required_columns={:?} e={:?}", left, right, op, required_columns, e);
             return Ok(unhandled);
         }
     };
