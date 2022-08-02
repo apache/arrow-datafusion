@@ -36,6 +36,6 @@ path = "src/lib.rs"
 
 [dependencies]
 ahash = { version = "0.7", default-features = false }
-arrow = { path = "../../../arrow-rs/arrow", features = ["prettyprint"], optional = false }
+arrow = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = ["prettyprint"], optional = false }
 datafusion-common = { path = "../common", features = [], optional = false }
 sqlparser = "0.19"
