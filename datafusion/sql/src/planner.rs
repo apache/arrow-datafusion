@@ -2566,6 +2566,7 @@ pub fn convert_simple_data_type(sql_type: &SQLDataType) -> Result<DataType> {
         | SQLDataType::String => Ok(DataType::Utf8),
         SQLDataType::Timestamp => Ok(DataType::Timestamp(TimeUnit::Nanosecond, None)),
         SQLDataType::Date => Ok(DataType::Date32),
+        SQLDataType::Time => Ok(DataType::Time32(TimeUnit::Millisecond)),
         SQLDataType::Decimal(precision, scale) => make_decimal_type(*precision, *scale),
         other => Err(DataFusionError::NotImplemented(format!(
             "Unsupported SQL type {:?}",
@@ -4349,10 +4350,19 @@ mod tests {
     }
 
     #[test]
-    fn select_typedstring() {
+    fn select_typed_date_string() {
         let sql = "SELECT date '2020-12-10' AS date FROM person";
         let expected = "Projection: CAST(Utf8(\"2020-12-10\") AS Date32) AS date\
             \n  TableScan: person";
+        quick_test(sql, expected);
+    }
+
+    #[test]
+    fn select_typed_time_string() {
+        let sql = "SELECT time '12:34:56.123' AS x";
+        let expected =
+            "Projection: CAST(Utf8(\"12:34:56.123\") AS Time32(Millisecond)) AS x\
+        \n  EmptyRelation";
         quick_test(sql, expected);
     }
 
