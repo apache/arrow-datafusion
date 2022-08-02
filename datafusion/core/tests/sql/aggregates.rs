@@ -1289,7 +1289,7 @@ async fn aggregate_decimal_min() -> Result<()> {
         "+-----------------+",
     ];
     assert_eq!(
-        &DataType::Decimal(10, 3),
+        &DataType::Decimal128(10, 3),
         result[0].schema().field(0).data_type()
     );
     assert_batches_sorted_eq!(expected, &result);
@@ -1313,7 +1313,7 @@ async fn aggregate_decimal_max() -> Result<()> {
         "+-----------------+",
     ];
     assert_eq!(
-        &DataType::Decimal(10, 3),
+        &DataType::Decimal128(10, 3),
         result[0].schema().field(0).data_type()
     );
     assert_batches_sorted_eq!(expected, &result);
@@ -1336,7 +1336,7 @@ async fn aggregate_decimal_sum() -> Result<()> {
         "+-----------------+",
     ];
     assert_eq!(
-        &DataType::Decimal(20, 3),
+        &DataType::Decimal128(20, 3),
         result[0].schema().field(0).data_type()
     );
     assert_batches_sorted_eq!(expected, &result);
@@ -1359,7 +1359,7 @@ async fn aggregate_decimal_avg() -> Result<()> {
         "+-----------------+",
     ];
     assert_eq!(
-        &DataType::Decimal(14, 7),
+        &DataType::Decimal128(14, 7),
         result[0].schema().field(0).data_type()
     );
     assert_batches_sorted_eq!(expected, &result);

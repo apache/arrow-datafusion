@@ -19,7 +19,7 @@
 
 use crate::{Signature, TypeSignature, Volatility};
 use arrow::datatypes::{
-    DataType, Field, TimeUnit, DECIMAL_MAX_PRECISION, DECIMAL_MAX_SCALE,
+    DataType, Field, TimeUnit, DECIMAL128_MAX_PRECISION, DECIMAL128_MAX_SCALE,
 };
 use datafusion_common::{DataFusionError, Result};
 use std::ops::Deref;
@@ -400,11 +400,11 @@ pub fn sum_return_type(arg_type: &DataType) -> Result<DataType> {
         // In the https://www.postgresql.org/docs/current/functions-aggregate.html doc,
         // the result type of floating-point is FLOAT64 with the double precision.
         DataType::Float64 | DataType::Float32 => Ok(DataType::Float64),
-        DataType::Decimal(precision, scale) => {
+        DataType::Decimal128(precision, scale) => {
             // in the spark, the result type is DECIMAL(min(38,precision+10), s)
             // ref: https://github.com/apache/spark/blob/fcf636d9eb8d645c24be3db2d599aba2d7e2955a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/aggregate/Sum.scala#L66
-            let new_precision = DECIMAL_MAX_PRECISION.min(*precision + 10);
-            Ok(DataType::Decimal(new_precision, *scale))
+            let new_precision = DECIMAL128_MAX_PRECISION.min(*precision + 10);
+            Ok(DataType::Decimal128(new_precision, *scale))
         }
         other => Err(DataFusionError::Plan(format!(
             "SUM does not support type \"{:?}\"",
@@ -496,12 +496,12 @@ pub fn stddev_return_type(arg_type: &DataType) -> Result<DataType> {
 /// function return type of an average
 pub fn avg_return_type(arg_type: &DataType) -> Result<DataType> {
     match arg_type {
-        DataType::Decimal(precision, scale) => {
+        DataType::Decimal128(precision, scale) => {
             // in the spark, the result type is DECIMAL(min(38,precision+4), min(38,scale+4)).
             // ref: https://github.com/apache/spark/blob/fcf636d9eb8d645c24be3db2d599aba2d7e2955a/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/expressions/aggregate/Average.scala#L66
-            let new_precision = DECIMAL_MAX_PRECISION.min(*precision + 4);
-            let new_scale = DECIMAL_MAX_SCALE.min(*scale + 4);
-            Ok(DataType::Decimal(new_precision, new_scale))
+            let new_precision = DECIMAL128_MAX_PRECISION.min(*precision + 4);
+            let new_scale = DECIMAL128_MAX_SCALE.min(*scale + 4);
+            Ok(DataType::Decimal128(new_precision, new_scale))
         }
         DataType::Int8
         | DataType::Int16
@@ -602,7 +602,7 @@ pub fn is_sum_support_arg_type(arg_type: &DataType) -> bool {
             | DataType::Int64
             | DataType::Float32
             | DataType::Float64
-            | DataType::Decimal(_, _)
+            | DataType::Decimal128(_, _)
     )
 }
 
@@ -619,7 +619,7 @@ pub fn is_avg_support_arg_type(arg_type: &DataType) -> bool {
             | DataType::Int64
             | DataType::Float32
             | DataType::Float64
-            | DataType::Decimal(_, _)
+            | DataType::Decimal128(_, _)
     )
 }
 

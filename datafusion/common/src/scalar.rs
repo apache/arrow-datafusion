@@ -27,7 +27,7 @@ use arrow::{
         IntervalMonthDayNanoType, IntervalUnit, IntervalYearMonthType, TimeUnit,
         TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
         TimestampSecondType, UInt16Type, UInt32Type, UInt64Type, UInt8Type,
-        DECIMAL_MAX_PRECISION,
+        DECIMAL128_MAX_PRECISION,
     },
     util::decimal::{BasicDecimal, Decimal128},
 };
@@ -611,7 +611,7 @@ impl ScalarValue {
         scale: usize,
     ) -> Result<Self> {
         // make sure the precision and scale is valid
-        if precision <= DECIMAL_MAX_PRECISION && scale <= precision {
+        if precision <= DECIMAL128_MAX_PRECISION && scale <= precision {
             return Ok(ScalarValue::Decimal128(Some(value), precision, scale));
         }
         Err(DataFusionError::Internal(format!(
@@ -654,7 +654,7 @@ impl ScalarValue {
             ScalarValue::Int32(_) => DataType::Int32,
             ScalarValue::Int64(_) => DataType::Int64,
             ScalarValue::Decimal128(_, precision, scale) => {
-                DataType::Decimal(*precision, *scale)
+                DataType::Decimal128(*precision, *scale)
             }
             ScalarValue::TimestampSecond(_, tz_opt) => {
                 DataType::Timestamp(TimeUnit::Second, tz_opt.clone())
@@ -935,7 +935,7 @@ impl ScalarValue {
         }
 
         let array: ArrayRef = match &data_type {
-            DataType::Decimal(precision, scale) => {
+            DataType::Decimal128(precision, scale) => {
                 let decimal_array =
                     ScalarValue::iter_to_decimal_array(scalars, precision, scale)?;
                 Arc::new(decimal_array)
@@ -1448,7 +1448,7 @@ impl ScalarValue {
 
         Ok(match array.data_type() {
             DataType::Null => ScalarValue::Null,
-            DataType::Decimal(precision, scale) => {
+            DataType::Decimal128(precision, scale) => {
                 ScalarValue::get_decimal_value_from_array(array, index, precision, scale)
             }
             DataType::Boolean => typed_cast!(array, index, BooleanArray, Boolean),
@@ -1899,7 +1899,7 @@ impl TryFrom<&DataType> for ScalarValue {
             DataType::UInt16 => ScalarValue::UInt16(None),
             DataType::UInt32 => ScalarValue::UInt32(None),
             DataType::UInt64 => ScalarValue::UInt64(None),
-            DataType::Decimal(precision, scale) => {
+            DataType::Decimal128(precision, scale) => {
                 ScalarValue::Decimal128(None, *precision, *scale)
             }
             DataType::Utf8 => ScalarValue::Utf8(None),

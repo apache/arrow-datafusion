@@ -176,7 +176,7 @@ fn sum_decimal_batch(
 pub(crate) fn sum_batch(values: &ArrayRef, sum_type: &DataType) -> Result<ScalarValue> {
     let values = &cast(values, sum_type)?;
     Ok(match values.data_type() {
-        DataType::Decimal(precision, scale) => {
+        DataType::Decimal128(precision, scale) => {
             sum_decimal_batch(values, precision, scale)?
         }
         DataType::Float64 => typed_sum_delta_batch!(values, Float64Array, Float64),
@@ -544,7 +544,7 @@ mod tests {
                 .collect::<Decimal128Array>()
                 .with_precision_and_scale(10, 0)?,
         );
-        let result = sum_batch(&array, &DataType::Decimal(10, 0))?;
+        let result = sum_batch(&array, &DataType::Decimal128(10, 0))?;
         assert_eq!(ScalarValue::Decimal128(Some(15), 10, 0), result);
 
         // test agg
@@ -557,10 +557,10 @@ mod tests {
 
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Sum,
             ScalarValue::Decimal128(Some(15), 20, 0),
-            DataType::Decimal(20, 0)
+            DataType::Decimal128(20, 0)
         )
     }
 
@@ -579,7 +579,7 @@ mod tests {
                 .collect::<Decimal128Array>()
                 .with_precision_and_scale(10, 0)?,
         );
-        let result = sum_batch(&array, &DataType::Decimal(10, 0))?;
+        let result = sum_batch(&array, &DataType::Decimal128(10, 0))?;
         assert_eq!(ScalarValue::Decimal128(Some(13), 10, 0), result);
 
         // test agg
@@ -591,10 +591,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(35, 0),
+            DataType::Decimal128(35, 0),
             Sum,
             ScalarValue::Decimal128(Some(13), 38, 0),
-            DataType::Decimal(38, 0)
+            DataType::Decimal128(38, 0)
         )
     }
 
@@ -613,16 +613,16 @@ mod tests {
                 .collect::<Decimal128Array>()
                 .with_precision_and_scale(10, 0)?,
         );
-        let result = sum_batch(&array, &DataType::Decimal(10, 0))?;
+        let result = sum_batch(&array, &DataType::Decimal128(10, 0))?;
         assert_eq!(ScalarValue::Decimal128(None, 10, 0), result);
 
         // test agg
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Sum,
             ScalarValue::Decimal128(None, 20, 0),
-            DataType::Decimal(20, 0)
+            DataType::Decimal128(20, 0)
         )
     }
 

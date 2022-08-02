@@ -34,3 +34,7 @@ exclude = ["datafusion-cli"]
 [profile.release]
 codegen-units = 1
 lto = true
+
+[patch.crates-io]
+arrow = { path = "../arrow-rs/arrow" }
+parquet = { path = "../arrow-rs/parquet" }
