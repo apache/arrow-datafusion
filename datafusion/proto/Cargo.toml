@@ -37,13 +37,13 @@ default = []
 json = ["pbjson", "pbjson-build", "serde", "serde_json"]
 
 [dependencies]
-arrow = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = [], optional = false }
+arrow = { path = "../../../arrow-rs/arrow", features = [], optional = false }
 datafusion = { path = "../core", features = [], optional = false }
 datafusion-common = { path = "../common", features = [], optional = false }
 datafusion-expr = { path = "../expr", features = [], optional = false }
 pbjson = { version = "0.3", optional = true }
 pbjson-types = { version = "0.3", optional = true }
-prost = "0.10"
+prost = "0.11.0"
 serde = { version = "1.0", optional = true }
 serde_json = { version = "1.0", optional = true }
 
@@ -53,4 +53,4 @@ tokio = "1.18"
 
 [build-dependencies]
 pbjson-build = { version = "0.3", optional = true }
-prost-build = { version = "0.10" }
+prost-build = { version = "0.11.1" }

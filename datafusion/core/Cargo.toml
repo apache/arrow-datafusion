@@ -55,7 +55,7 @@ unicode_expressions = ["datafusion-physical-expr/regex_expressions", "datafusion
 
 [dependencies]
 ahash = { version = "0.7", default-features = false }
-arrow = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = ["prettyprint"], optional = false }
+arrow = { path = "../../../arrow-rs/arrow", features = ["prettyprint"], optional = false }
 async-trait = "0.1.41"
 avro-rs = { version = "0.13", features = ["snappy"], optional = true }
 bytes = "1.1"
@@ -75,10 +75,10 @@ lazy_static = { version = "^1.4.0" }
 log = "^0.4"
 num-traits = { version = "0.2", optional = true }
 num_cpus = "1.13.0"
-object_store = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = [], optional = false }
+object_store = { path = "../../../arrow-rs/object_store", features = [], optional = false }
 ordered-float = "3.0"
 parking_lot = "0.12"
-parquet = { git = "https://github.com/apache/arrow-rs.git", rev = "6bb4b5ee16488c2a6427a5897bb6fbe334cc280e", features = ["arrow", "async"], optional = false }
+parquet = { path = "../../../arrow-rs/parquet", features = ["arrow", "async"], optional = false }
 paste = "^1.0"
 pin-project-lite = "^0.2.7"
 pyo3 = { version = "0.16", optional = true }
