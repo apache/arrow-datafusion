@@ -34,3 +34,7 @@ exclude = ["datafusion-cli"]
 [profile.release]
 codegen-units = 1
 lto = true
+
+[patch.crates-io]
+arrow = { git = "https://github.com/stuartcarnie/arrow-rs.git", rev = "7340b1935479c5338a75980e69080508d0a76bf7" }
+parquet = { git = "https://github.com/stuartcarnie/arrow-rs.git", rev = "7340b1935479c5338a75980e69080508d0a76bf7" }

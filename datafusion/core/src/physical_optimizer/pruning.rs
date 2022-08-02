@@ -1457,7 +1457,7 @@ mod tests {
         // decimal(9,2)
         let schema = Arc::new(Schema::new(vec![Field::new(
             "s1",
-            DataType::Decimal(9, 2),
+            DataType::Decimal128(9, 2),
             true,
         )]));
         // s1 > 5
@@ -1479,7 +1479,7 @@ mod tests {
         // decimal(18,2)
         let schema = Arc::new(Schema::new(vec![Field::new(
             "s1",
-            DataType::Decimal(18, 2),
+            DataType::Decimal128(18, 2),
             true,
         )]));
         // s1 > 5
@@ -1501,7 +1501,7 @@ mod tests {
         // decimal(23,2)
         let schema = Arc::new(Schema::new(vec![Field::new(
             "s1",
-            DataType::Decimal(23, 2),
+            DataType::Decimal128(23, 2),
             true,
         )]));
         // s1 > 5

@@ -288,9 +288,9 @@ mod tests {
         );
         generic_test_sum_distinct!(
             array,
-            DataType::Decimal(35, 0),
+            DataType::Decimal128(35, 0),
             ScalarValue::Decimal128(Some(1), 38, 0),
-            DataType::Decimal(38, 0)
+            DataType::Decimal128(38, 0)
         )
     }
 }

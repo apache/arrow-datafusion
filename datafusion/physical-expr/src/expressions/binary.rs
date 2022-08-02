@@ -68,7 +68,7 @@ macro_rules! make_dyn_comp_op {
                     // Call `op_decimal` (e.g. `eq_decimal) until
                     // arrow has native support
                     // https://github.com/apache/arrow-rs/issues/1200
-                    (DataType::Decimal(_, _), DataType::Decimal(_, _)) => {
+                    (DataType::Decimal128(_, _), DataType::Decimal128(_, _)) => {
                         [<$OP _decimal>](as_decimal_array(left), as_decimal_array(right))
                     },
                     // By default call the arrow kernel
@@ -132,7 +132,7 @@ where
 {
     Ok(left
         .iter()
-        .map(|left| left.map(|left| op(left, right)))
+        .map(|left| left.map(|left| op(left.as_i128(), right)))
         .collect())
 }
 
@@ -151,7 +151,7 @@ where
         .zip(right.iter())
         .map(|(left, right)| {
             if let (Some(left), Some(right)) = (left, right) {
-                Some(op(left, right))
+                Some(op(left.as_i128(), right.as_i128()))
             } else {
                 None
             }
@@ -263,7 +263,7 @@ where
         .zip(right.iter())
         .map(|(left, right)| {
             if let (Some(left), Some(right)) = (left, right) {
-                Some(op(left, right)).transpose()
+                Some(op(left.as_i128(), right.as_i128())).transpose()
             } else {
                 Ok(None)
             }
@@ -282,7 +282,7 @@ where
     left.iter()
         .map(|left| {
             if let Some(left) = left {
-                Some(op(left, right)).transpose()
+                Some(op(left.as_i128(), right)).transpose()
             } else {
                 Ok(None)
             }
@@ -824,7 +824,7 @@ macro_rules! binary_primitive_array_op {
         match $LEFT.data_type() {
             // TODO support decimal type
             // which is not the primitive type
-            DataType::Decimal(_,_) => compute_decimal_op!($LEFT, $RIGHT, $OP, Decimal128Array),
+            DataType::Decimal128(_,_) => compute_decimal_op!($LEFT, $RIGHT, $OP, Decimal128Array),
             DataType::Int8 => compute_op!($LEFT, $RIGHT, $OP, Int8Array),
             DataType::Int16 => compute_op!($LEFT, $RIGHT, $OP, Int16Array),
             DataType::Int32 => compute_op!($LEFT, $RIGHT, $OP, Int32Array),
@@ -849,7 +849,7 @@ macro_rules! binary_primitive_array_op {
 macro_rules! binary_primitive_array_op_scalar {
     ($LEFT:expr, $RIGHT:expr, $OP:ident) => {{
         let result: Result<Arc<dyn Array>> = match $LEFT.data_type() {
-            DataType::Decimal(_,_) => compute_decimal_op_scalar!($LEFT, $RIGHT, $OP, Decimal128Array),
+            DataType::Decimal128(_,_) => compute_decimal_op_scalar!($LEFT, $RIGHT, $OP, Decimal128Array),
             DataType::Int8 => compute_op_scalar!($LEFT, $RIGHT, $OP, Int8Array),
             DataType::Int16 => compute_op_scalar!($LEFT, $RIGHT, $OP, Int16Array),
             DataType::Int32 => compute_op_scalar!($LEFT, $RIGHT, $OP, Int32Array),
@@ -876,7 +876,7 @@ macro_rules! binary_array_op {
     ($LEFT:expr, $RIGHT:expr, $OP:ident) => {{
         match $LEFT.data_type() {
             DataType::Null => compute_null_op!($LEFT, $RIGHT, $OP, NullArray),
-            DataType::Decimal(_,_) => compute_decimal_op!($LEFT, $RIGHT, $OP, Decimal128Array),
+            DataType::Decimal128(_,_) => compute_decimal_op!($LEFT, $RIGHT, $OP, Decimal128Array),
             DataType::Int8 => compute_op!($LEFT, $RIGHT, $OP, Int8Array),
             DataType::Int16 => compute_op!($LEFT, $RIGHT, $OP, Int16Array),
             DataType::Int32 => compute_op!($LEFT, $RIGHT, $OP, Int32Array),
@@ -2876,7 +2876,7 @@ mod tests {
         // compare decimal array with other array type
         let schema = Arc::new(Schema::new(vec![
             Field::new("a", DataType::Int64, true),
-            Field::new("b", DataType::Decimal(10, 0), true),
+            Field::new("b", DataType::Decimal128(10, 0), true),
         ]));
 
         let value: i64 = 123;
@@ -2920,7 +2920,7 @@ mod tests {
 
         let schema = Arc::new(Schema::new(vec![
             Field::new("a", DataType::Float64, true),
-            Field::new("b", DataType::Decimal(10, 2), true),
+            Field::new("b", DataType::Decimal128(10, 2), true),
         ]));
 
         let value: i128 = 123;
@@ -3101,7 +3101,7 @@ mod tests {
     fn arithmetic_decimal_expr_test() -> Result<()> {
         let schema = Arc::new(Schema::new(vec![
             Field::new("a", DataType::Int32, true),
-            Field::new("b", DataType::Decimal(10, 2), true),
+            Field::new("b", DataType::Decimal128(10, 2), true),
         ]));
         let value: i128 = 123;
         let decimal_array = Arc::new(create_decimal_array(
@@ -3139,7 +3139,7 @@ mod tests {
         // subtract: decimal array subtract int32 array
         let schema = Arc::new(Schema::new(vec![
             Field::new("b", DataType::Int32, true),
-            Field::new("a", DataType::Decimal(10, 2), true),
+            Field::new("a", DataType::Decimal128(10, 2), true),
         ]));
         let expect = Arc::new(create_decimal_array(
             &[Some(-12177), None, Some(-12178), Some(-12276)],
@@ -3172,7 +3172,7 @@ mod tests {
         // divide: int32 array divide decimal array
         let schema = Arc::new(Schema::new(vec![
             Field::new("a", DataType::Int32, true),
-            Field::new("b", DataType::Decimal(10, 2), true),
+            Field::new("b", DataType::Decimal128(10, 2), true),
         ]));
         let expect = Arc::new(create_decimal_array(
             &[
@@ -3195,7 +3195,7 @@ mod tests {
         // modulus: int32 array modulus decimal array
         let schema = Arc::new(Schema::new(vec![
             Field::new("a", DataType::Int32, true),
-            Field::new("b", DataType::Decimal(10, 2), true),
+            Field::new("b", DataType::Decimal128(10, 2), true),
         ]));
         let expect = Arc::new(create_decimal_array(
             &[Some(000), None, Some(100), Some(000)],

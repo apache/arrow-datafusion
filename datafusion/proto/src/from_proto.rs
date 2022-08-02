@@ -226,7 +226,7 @@ impl From<protobuf::PrimitiveScalarType> for DataType {
                 DataType::Time64(TimeUnit::Nanosecond)
             }
             protobuf::PrimitiveScalarType::Null => DataType::Null,
-            protobuf::PrimitiveScalarType::Decimal128 => DataType::Decimal(0, 0),
+            protobuf::PrimitiveScalarType::Decimal128 => DataType::Decimal128(0, 0),
             protobuf::PrimitiveScalarType::Date64 => DataType::Date64,
             protobuf::PrimitiveScalarType::TimeSecond => {
                 DataType::Timestamp(TimeUnit::Second, None)
@@ -309,7 +309,7 @@ impl TryFrom<&protobuf::arrow_type::ArrowTypeEnum> for DataType {
             arrow_type::ArrowTypeEnum::Decimal(protobuf::Decimal {
                 whole,
                 fractional,
-            }) => DataType::Decimal(*whole as usize, *fractional as usize),
+            }) => DataType::Decimal128(*whole as usize, *fractional as usize),
             arrow_type::ArrowTypeEnum::List(list) => {
                 let list_type =
                     list.as_ref().field_type.as_deref().required("field_type")?;

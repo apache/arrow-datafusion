@@ -140,7 +140,7 @@ fn schema_to_field_with_props(
         AvroSchema::Fixed { size, .. } => DataType::FixedSizeBinary(*size as i32),
         AvroSchema::Decimal {
             precision, scale, ..
-        } => DataType::Decimal(*precision, *scale),
+        } => DataType::Decimal128(*precision, *scale),
         AvroSchema::Uuid => DataType::FixedSizeBinary(16),
         AvroSchema::Date => DataType::Date32,
         AvroSchema::TimeMillis => DataType::Time32(TimeUnit::Millisecond),
@@ -216,7 +216,7 @@ fn default_field_name(dt: &DataType) -> &str {
         DataType::Union(_, _, _) => "union",
         DataType::Dictionary(_, _) => "map",
         DataType::Map(_, _) => unimplemented!("Map support not implemented"),
-        DataType::Decimal(_, _) => "decimal",
+        DataType::Decimal128(_, _) => "decimal",
         DataType::Decimal256(_, _) => "decimal",
     }
 }

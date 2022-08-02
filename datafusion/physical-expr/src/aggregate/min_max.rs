@@ -207,7 +207,7 @@ macro_rules! typed_min_max_batch_decimal128 {
 macro_rules! min_max_batch {
     ($VALUES:expr, $OP:ident) => {{
         match $VALUES.data_type() {
-            DataType::Decimal(precision, scale) => {
+            DataType::Decimal128(precision, scale) => {
                 typed_min_max_batch_decimal128!($VALUES, precision, scale, $OP)
             }
             // all types that have a natural order
@@ -803,10 +803,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Min,
             ScalarValue::Decimal128(Some(1), 10, 0),
-            DataType::Decimal(10, 0)
+            DataType::Decimal128(10, 0)
         )
     }
 
@@ -821,10 +821,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Min,
             ScalarValue::Decimal128(None, 10, 0),
-            DataType::Decimal(10, 0)
+            DataType::Decimal128(10, 0)
         )
     }
 
@@ -840,10 +840,10 @@ mod tests {
 
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Min,
             ScalarValue::Decimal128(Some(1), 10, 0),
-            DataType::Decimal(10, 0)
+            DataType::Decimal128(10, 0)
         )
     }
 
@@ -892,10 +892,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Max,
             ScalarValue::Decimal128(Some(5), 10, 0),
-            DataType::Decimal(10, 0)
+            DataType::Decimal128(10, 0)
         )
     }
 
@@ -909,10 +909,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Max,
             ScalarValue::Decimal128(Some(5), 10, 0),
-            DataType::Decimal(10, 0)
+            DataType::Decimal128(10, 0)
         )
     }
 
@@ -926,10 +926,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Min,
             ScalarValue::Decimal128(None, 10, 0),
-            DataType::Decimal(10, 0)
+            DataType::Decimal128(10, 0)
         )
     }
 

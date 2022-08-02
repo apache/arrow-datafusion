@@ -497,7 +497,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             SQLDataType::Double => Ok(DataType::Float64),
             SQLDataType::Boolean => Ok(DataType::Boolean),
             SQLDataType::Date => Ok(DataType::Date32),
-            SQLDataType::Time => Ok(DataType::Time64(TimeUnit::Millisecond)),
+            SQLDataType::Time => Ok(DataType::Time64(TimeUnit::Nanosecond)),
             SQLDataType::Timestamp => Ok(DataType::Timestamp(TimeUnit::Nanosecond, None)),
             _ => Err(DataFusionError::NotImplemented(format!(
                 "The SQL data type {:?} is not implemented",
@@ -2566,6 +2566,7 @@ pub fn convert_simple_data_type(sql_type: &SQLDataType) -> Result<DataType> {
         | SQLDataType::String => Ok(DataType::Utf8),
         SQLDataType::Timestamp => Ok(DataType::Timestamp(TimeUnit::Nanosecond, None)),
         SQLDataType::Date => Ok(DataType::Date32),
+        SQLDataType::Time => Ok(DataType::Time64(TimeUnit::Nanosecond)),
         SQLDataType::Decimal(precision, scale) => make_decimal_type(*precision, *scale),
         other => Err(DataFusionError::NotImplemented(format!(
             "Unsupported SQL type {:?}",
@@ -2624,7 +2625,7 @@ mod tests {
     fn test_int_decimal_default() {
         quick_test(
             "SELECT CAST(10 AS DECIMAL)",
-            "Projection: CAST(Int64(10) AS Decimal(38, 10))\
+            "Projection: CAST(Int64(10) AS Decimal128(38, 10))\
              \n  EmptyRelation",
         );
     }
@@ -2633,7 +2634,7 @@ mod tests {
     fn test_int_decimal_no_scale() {
         quick_test(
             "SELECT CAST(10 AS DECIMAL(5))",
-            "Projection: CAST(Int64(10) AS Decimal(5, 0))\
+            "Projection: CAST(Int64(10) AS Decimal128(5, 0))\
              \n  EmptyRelation",
         );
     }
@@ -4357,6 +4358,15 @@ mod tests {
     }
 
     #[test]
+    fn select_typedstring_time() {
+        let sql = "SELECT TIME '08:09:10.123' AS time FROM person";
+        let expected =
+            "Projection: CAST(Utf8(\"08:09:10.123\") AS Time64(Nanosecond)) AS time\
+            \n  TableScan: person";
+        quick_test(sql, expected);
+    }
+
+    #[test]
     fn select_multibyte_column() {
         let sql = r#"SELECT "😀" FROM person"#;
         let expected = "Projection: #person.😀\
@@ -4403,7 +4413,7 @@ mod tests {
                 ])),
                 "test_decimal" => Ok(Schema::new(vec![
                     Field::new("id", DataType::Int32, false),
-                    Field::new("price", DataType::Decimal(10, 2), false),
+                    Field::new("price", DataType::Decimal128(10, 2), false),
                 ])),
                 "person" => Ok(Schema::new(vec![
                     Field::new("id", DataType::UInt32, false),

@@ -986,6 +986,26 @@ async fn sub_interval_day() -> Result<()> {
 }
 
 #[tokio::test]
+async fn cast_string_to_time() -> Result<()> {
+    let ctx = SessionContext::new();
+
+    let sql = "select time '08:09:10.123456789' as time;";
+    let results = execute_to_batches(&ctx, sql).await;
+
+    let expected = vec![
+        "+--------------------+",
+        "| time               |",
+        "+--------------------+",
+        "| 08:09:10.123456789 |",
+        "+--------------------+",
+    ];
+
+    assert_batches_eq!(expected, &results);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn cast_to_timestamp_twice() -> Result<()> {
     let ctx = SessionContext::new();
 

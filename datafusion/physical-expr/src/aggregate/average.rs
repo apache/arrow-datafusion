@@ -54,7 +54,7 @@ impl Avg {
         // the result of avg just support FLOAT64 and Decimal data type.
         assert!(matches!(
             data_type,
-            DataType::Float64 | DataType::Decimal(_, _)
+            DataType::Float64 | DataType::Decimal128(_, _)
         ));
         Self {
             name: name.into(),
@@ -298,10 +298,10 @@ mod tests {
 
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Avg,
             ScalarValue::Decimal128(Some(35000), 14, 4),
-            DataType::Decimal(14, 4)
+            DataType::Decimal128(14, 4)
         )
     }
 
@@ -315,10 +315,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Avg,
             ScalarValue::Decimal128(Some(32500), 14, 4),
-            DataType::Decimal(14, 4)
+            DataType::Decimal128(14, 4)
         )
     }
 
@@ -333,10 +333,10 @@ mod tests {
         );
         generic_test_op!(
             array,
-            DataType::Decimal(10, 0),
+            DataType::Decimal128(10, 0),
             Avg,
             ScalarValue::Decimal128(None, 14, 4),
-            DataType::Decimal(14, 4)
+            DataType::Decimal128(14, 4)
         )
     }
 
