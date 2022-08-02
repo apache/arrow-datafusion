@@ -1073,7 +1073,7 @@ mod tests {
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(4, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(4, 2), column.data_type());
 
         // parquet use the int64 as the physical type to store decimal
         let exec = get_exec("int64_decimal.parquet", None, None).await?;
@@ -1081,7 +1081,7 @@ mod tests {
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(10, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(10, 2), column.data_type());
 
         // parquet use the fixed length binary as the physical type to store decimal
         let exec = get_exec("fixed_length_decimal.parquet", None, None).await?;
@@ -1089,14 +1089,14 @@ mod tests {
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(25, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(25, 2), column.data_type());
 
         let exec = get_exec("fixed_length_decimal_legacy.parquet", None, None).await?;
         let batches = collect(exec, task_ctx.clone()).await?;
         assert_eq!(1, batches.len());
         assert_eq!(1, batches[0].num_columns());
         let column = batches[0].column(0);
-        assert_eq!(&DataType::Decimal(13, 2), column.data_type());
+        assert_eq!(&DataType::Decimal128(13, 2), column.data_type());
 
         // parquet use the fixed length binary as the physical type to store decimal
         // TODO: arrow-rs don't support convert the physical type of binary to decimal

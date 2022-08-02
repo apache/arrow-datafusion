@@ -653,7 +653,7 @@ mod tests {
 
     #[test]
     fn test_decimal_binary_comparison_coercion() -> Result<()> {
-        let input_decimal = DataType::Decimal(20, 3);
+        let input_decimal = DataType::Decimal128(20, 3);
         let input_types = [
             DataType::Int8,
             DataType::Int16,
@@ -661,18 +661,18 @@ mod tests {
             DataType::Int64,
             DataType::Float32,
             DataType::Float64,
-            DataType::Decimal(38, 10),
-            DataType::Decimal(20, 8),
+            DataType::Decimal128(38, 10),
+            DataType::Decimal128(20, 8),
         ];
         let result_types = [
-            DataType::Decimal(20, 3),
-            DataType::Decimal(20, 3),
-            DataType::Decimal(20, 3),
-            DataType::Decimal(23, 3),
-            DataType::Decimal(24, 7),
-            DataType::Decimal(32, 15),
-            DataType::Decimal(38, 10),
-            DataType::Decimal(25, 8),
+            DataType::Decimal128(20, 3),
+            DataType::Decimal128(20, 3),
+            DataType::Decimal128(20, 3),
+            DataType::Decimal128(23, 3),
+            DataType::Decimal128(24, 7),
+            DataType::Decimal128(32, 15),
+            DataType::Decimal128(38, 10),
+            DataType::Decimal128(25, 8),
         ];
         let comparison_op_types = [
             Operator::NotEq,
@@ -699,66 +699,66 @@ mod tests {
     fn test_decimal_mathematics_op_type() {
         assert_eq!(
             coerce_numeric_type_to_decimal(&DataType::Int8).unwrap(),
-            DataType::Decimal(3, 0)
+            DataType::Decimal128(3, 0)
         );
         assert_eq!(
             coerce_numeric_type_to_decimal(&DataType::Int16).unwrap(),
-            DataType::Decimal(5, 0)
+            DataType::Decimal128(5, 0)
         );
         assert_eq!(
             coerce_numeric_type_to_decimal(&DataType::Int32).unwrap(),
-            DataType::Decimal(10, 0)
+            DataType::Decimal128(10, 0)
         );
         assert_eq!(
             coerce_numeric_type_to_decimal(&DataType::Int64).unwrap(),
-            DataType::Decimal(20, 0)
+            DataType::Decimal128(20, 0)
         );
         assert_eq!(
             coerce_numeric_type_to_decimal(&DataType::Float32).unwrap(),
-            DataType::Decimal(14, 7)
+            DataType::Decimal128(14, 7)
         );
         assert_eq!(
             coerce_numeric_type_to_decimal(&DataType::Float64).unwrap(),
-            DataType::Decimal(30, 15)
+            DataType::Decimal128(30, 15)
         );
 
         let op = Operator::Plus;
-        let left_decimal_type = DataType::Decimal(10, 3);
-        let right_decimal_type = DataType::Decimal(20, 4);
+        let left_decimal_type = DataType::Decimal128(10, 3);
+        let right_decimal_type = DataType::Decimal128(20, 4);
         let result = coercion_decimal_mathematics_type(
             &op,
             &left_decimal_type,
             &right_decimal_type,
         );
-        assert_eq!(DataType::Decimal(21, 4), result.unwrap());
+        assert_eq!(DataType::Decimal128(21, 4), result.unwrap());
         let op = Operator::Minus;
         let result = coercion_decimal_mathematics_type(
             &op,
             &left_decimal_type,
             &right_decimal_type,
         );
-        assert_eq!(DataType::Decimal(21, 4), result.unwrap());
+        assert_eq!(DataType::Decimal128(21, 4), result.unwrap());
         let op = Operator::Multiply;
         let result = coercion_decimal_mathematics_type(
             &op,
             &left_decimal_type,
             &right_decimal_type,
         );
-        assert_eq!(DataType::Decimal(31, 7), result.unwrap());
+        assert_eq!(DataType::Decimal128(31, 7), result.unwrap());
         let op = Operator::Divide;
         let result = coercion_decimal_mathematics_type(
             &op,
             &left_decimal_type,
             &right_decimal_type,
         );
-        assert_eq!(DataType::Decimal(35, 24), result.unwrap());
+        assert_eq!(DataType::Decimal128(35, 24), result.unwrap());
         let op = Operator::Modulo;
         let result = coercion_decimal_mathematics_type(
             &op,
             &left_decimal_type,
             &right_decimal_type,
         );
-        assert_eq!(DataType::Decimal(11, 4), result.unwrap());
+        assert_eq!(DataType::Decimal128(11, 4), result.unwrap());
     }
 
     #[test]

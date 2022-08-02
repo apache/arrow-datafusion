@@ -2176,7 +2176,7 @@ mod tests {
     #[test]
     fn scalar_decimal_test() {
         let decimal_value = ScalarValue::Decimal128(Some(123), 10, 1);
-        assert_eq!(DataType::Decimal(10, 1), decimal_value.get_datatype());
+        assert_eq!(DataType::Decimal128(10, 1), decimal_value.get_datatype());
         let try_into_value: i128 = decimal_value.clone().try_into().unwrap();
         assert_eq!(123_i128, try_into_value);
         assert!(!decimal_value.is_null());
@@ -2194,14 +2194,14 @@ mod tests {
         let array = decimal_value.to_array();
         let array = array.as_any().downcast_ref::<Decimal128Array>().unwrap();
         assert_eq!(1, array.len());
-        assert_eq!(DataType::Decimal(10, 1), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 1), array.data_type().clone());
         assert_eq!(123i128, array.value(0).as_i128());
 
         // decimal scalar to array with size
         let array = decimal_value.to_array_of_size(10);
         let array_decimal = array.as_any().downcast_ref::<Decimal128Array>().unwrap();
         assert_eq!(10, array.len());
-        assert_eq!(DataType::Decimal(10, 1), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 1), array.data_type().clone());
         assert_eq!(123i128, array_decimal.value(0).as_i128());
         assert_eq!(123i128, array_decimal.value(9).as_i128());
         // test eq array
@@ -2239,7 +2239,7 @@ mod tests {
         // convert the vec to decimal array and check the result
         let array = ScalarValue::iter_to_array(decimal_vec.into_iter()).unwrap();
         assert_eq!(3, array.len());
-        assert_eq!(DataType::Decimal(10, 2), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 2), array.data_type().clone());
 
         let decimal_vec = vec![
             ScalarValue::Decimal128(Some(1), 10, 2),
@@ -2249,7 +2249,7 @@ mod tests {
         ];
         let array = ScalarValue::iter_to_array(decimal_vec.into_iter()).unwrap();
         assert_eq!(4, array.len());
-        assert_eq!(DataType::Decimal(10, 2), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 2), array.data_type().clone());
 
         assert!(ScalarValue::try_new_decimal128(1, 10, 2)
             .unwrap()

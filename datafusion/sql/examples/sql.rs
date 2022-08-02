@@ -75,7 +75,7 @@ impl MySchemaProvider {
             "state".to_string(),
             create_table_source(vec![
                 Field::new("id", DataType::Int32, false),
-                Field::new("sales_tax", DataType::Decimal(10, 2), false),
+                Field::new("sales_tax", DataType::Decimal128(10, 2), false),
             ]),
         );
         tables.insert(
@@ -85,7 +85,7 @@ impl MySchemaProvider {
                 Field::new("customer_id", DataType::Int32, false),
                 Field::new("item_id", DataType::Int32, false),
                 Field::new("quantity", DataType::Int32, false),
-                Field::new("price", DataType::Decimal(10, 2), false),
+                Field::new("price", DataType::Decimal128(10, 2), false),
             ]),
         );
         Self { tables }

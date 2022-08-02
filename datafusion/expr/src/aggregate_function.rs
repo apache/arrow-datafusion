@@ -748,7 +748,7 @@ mod tests {
         ];
         let input_types = vec![
             vec![DataType::Int32],
-            vec![DataType::Decimal(10, 2)],
+            vec![DataType::Decimal128(10, 2)],
             vec![DataType::Utf8],
         ];
         for fun in funs {
@@ -763,7 +763,7 @@ mod tests {
         let input_types = vec![
             vec![DataType::Int32],
             vec![DataType::Float32],
-            vec![DataType::Decimal(20, 3)],
+            vec![DataType::Decimal128(20, 3)],
         ];
         for fun in funs {
             for input_type in &input_types {
@@ -800,13 +800,13 @@ mod tests {
 
     #[test]
     fn test_avg_return_data_type() -> Result<()> {
-        let data_type = DataType::Decimal(10, 5);
+        let data_type = DataType::Decimal128(10, 5);
         let result_type = avg_return_type(&data_type)?;
-        assert_eq!(DataType::Decimal(14, 9), result_type);
+        assert_eq!(DataType::Decimal128(14, 9), result_type);
 
-        let data_type = DataType::Decimal(36, 10);
+        let data_type = DataType::Decimal128(36, 10);
         let result_type = avg_return_type(&data_type)?;
-        assert_eq!(DataType::Decimal(38, 14), result_type);
+        assert_eq!(DataType::Decimal128(38, 14), result_type);
         Ok(())
     }
 
@@ -816,20 +816,20 @@ mod tests {
         let result_type = variance_return_type(&data_type)?;
         assert_eq!(DataType::Float64, result_type);
 
-        let data_type = DataType::Decimal(36, 10);
+        let data_type = DataType::Decimal128(36, 10);
         assert!(variance_return_type(&data_type).is_err());
         Ok(())
     }
 
     #[test]
     fn test_sum_return_data_type() -> Result<()> {
-        let data_type = DataType::Decimal(10, 5);
+        let data_type = DataType::Decimal128(10, 5);
         let result_type = sum_return_type(&data_type)?;
-        assert_eq!(DataType::Decimal(20, 5), result_type);
+        assert_eq!(DataType::Decimal128(20, 5), result_type);
 
-        let data_type = DataType::Decimal(36, 10);
+        let data_type = DataType::Decimal128(36, 10);
         let result_type = sum_return_type(&data_type)?;
-        assert_eq!(DataType::Decimal(38, 10), result_type);
+        assert_eq!(DataType::Decimal128(38, 10), result_type);
         Ok(())
     }
 
@@ -839,7 +839,7 @@ mod tests {
         let result_type = stddev_return_type(&data_type)?;
         assert_eq!(DataType::Float64, result_type);
 
-        let data_type = DataType::Decimal(36, 10);
+        let data_type = DataType::Decimal128(36, 10);
         assert!(stddev_return_type(&data_type).is_err());
         Ok(())
     }
@@ -850,7 +850,7 @@ mod tests {
         let result_type = covariance_return_type(&data_type)?;
         assert_eq!(DataType::Float64, result_type);
 
-        let data_type = DataType::Decimal(36, 10);
+        let data_type = DataType::Decimal128(36, 10);
         assert!(covariance_return_type(&data_type).is_err());
         Ok(())
     }
@@ -861,7 +861,7 @@ mod tests {
         let result_type = correlation_return_type(&data_type)?;
         assert_eq!(DataType::Float64, result_type);
 
-        let data_type = DataType::Decimal(36, 10);
+        let data_type = DataType::Decimal128(36, 10);
         assert!(correlation_return_type(&data_type).is_err());
         Ok(())
     }
