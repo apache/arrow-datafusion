@@ -1613,6 +1613,13 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                                 &schema,
                                 &mut HashMap::new(),
                             ),
+                        SQLExpr::TypedString {
+                            ref data_type,
+                            ref value,
+                        } => Ok(Expr::Cast {
+                            expr: Box::new(lit(&**value)),
+                            data_type: convert_data_type(data_type)?,
+                        }),
                         other => Err(DataFusionError::NotImplemented(format!(
                             "Unsupported value {:?} in a values list expression",
                             other
@@ -3244,6 +3251,17 @@ mod tests {
             "Projection: #MIN(person.age) AS a, #MIN(person.age) AS b\
              \n  Aggregate: groupBy=[[]], aggr=[[MIN(#person.age)]]\
              \n    TableScan: person",
+        );
+    }
+
+    #[test]
+    fn select_from_typed_string_values() {
+        quick_test(
+            "SELECT col1, col2 FROM (VALUES (TIMESTAMP '2021-06-10 17:01:00Z', DATE '2004-04-09')) as t (col1, col2)",
+            "Projection: #t.col1, #t.col2\
+            \n  Projection: #t.column1 AS col1, #t.column2 AS col2, alias=t\
+            \n    Projection: #column1, #column2, alias=t\
+            \n      Values: (CAST(Utf8(\"2021-06-10 17:01:00Z\") AS Timestamp(Nanosecond, None)), CAST(Utf8(\"2004-04-09\") AS Date32))",
         );
     }
 
