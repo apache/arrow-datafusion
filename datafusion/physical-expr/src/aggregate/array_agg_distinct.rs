@@ -29,7 +29,7 @@ use crate::expressions::format_state_name;
 use crate::{AggregateExpr, PhysicalExpr};
 use datafusion_common::Result;
 use datafusion_common::ScalarValue;
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 
 /// Expression for a ARRAY_AGG(DISTINCT) aggregation.
 #[derive(Debug)]
@@ -119,11 +119,11 @@ impl DistinctArrayAggAccumulator {
 }
 
 impl Accumulator for DistinctArrayAggAccumulator {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        Ok(vec![ScalarValue::List(
+    fn state(&self) -> Result<Vec<AggregateState>> {
+        Ok(vec![AggregateState::Scalar(ScalarValue::List(
             Some(self.values.clone().into_iter().collect()),
             Box::new(Field::new("item", self.datatype.clone(), true)),
-        )])
+        ))])
     }
 
     fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {

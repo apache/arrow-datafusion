@@ -30,7 +30,7 @@ use arrow::datatypes::{
 };
 use datafusion_common::ScalarValue;
 use datafusion_common::{DataFusionError, Result};
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 use std::any::type_name;
 use std::any::Any;
 use std::convert::TryFrom;
@@ -232,8 +232,8 @@ macro_rules! default_accumulator_impl {
             Ok(())
         }
 
-        fn state(&self) -> Result<Vec<ScalarValue>> {
-            let value = ScalarValue::from(&self.hll);
+        fn state(&self) -> Result<Vec<AggregateState>> {
+            let value = AggregateState::Scalar(ScalarValue::from(&self.hll));
             Ok(vec![value])
         }
 

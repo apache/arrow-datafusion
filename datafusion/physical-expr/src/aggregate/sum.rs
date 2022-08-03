@@ -32,7 +32,7 @@ use arrow::{
     datatypes::Field,
 };
 use datafusion_common::{DataFusionError, Result, ScalarValue};
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 
 use crate::aggregate::row_accumulator::RowAccumulator;
 use crate::expressions::format_state_name;
@@ -435,8 +435,8 @@ pub(crate) fn add_to_row(
 }
 
 impl Accumulator for SumAccumulator {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        Ok(vec![self.sum.clone()])
+    fn state(&self) -> Result<Vec<AggregateState>> {
+        Ok(vec![AggregateState::Scalar(self.sum.clone())])
     }
 
     fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {

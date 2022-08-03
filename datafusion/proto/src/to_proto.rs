@@ -354,6 +354,7 @@ impl From<&AggregateFunction> for protobuf::AggregateFunction {
             }
             AggregateFunction::ApproxMedian => Self::ApproxMedian,
             AggregateFunction::Grouping => Self::Grouping,
+            AggregateFunction::Median => Self::Median,
         }
     }
 }
@@ -540,6 +541,7 @@ impl TryFrom<&Expr> for protobuf::LogicalExprNode {
                         protobuf::AggregateFunction::ApproxMedian
                     }
                     AggregateFunction::Grouping => protobuf::AggregateFunction::Grouping,
+                    AggregateFunction::Median => protobuf::AggregateFunction::Median,
                 };
 
                 let aggregate_expr = protobuf::AggregateExprNode {

@@ -428,8 +428,10 @@ fn create_batch_from_map(
                 AggregateMode::Partial => {
                     let res = ScalarValue::iter_to_array(
                         accumulators.group_states.iter().map(|group_state| {
-                            let x = group_state.accumulator_set[x].state().unwrap();
-                            x[y].clone()
+                            group_state.accumulator_set[x]
+                                .state()
+                                .and_then(|x| x[y].as_scalar().map(|v| v.clone()))
+                                .expect("unexpected accumulator state in hash aggregate")
                         }),
                     )?;
 

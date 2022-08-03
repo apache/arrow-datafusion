@@ -29,7 +29,7 @@ use arrow::datatypes::DataType;
 use arrow::{array::ArrayRef, datatypes::Field};
 use datafusion_common::Result;
 use datafusion_common::ScalarValue;
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 use datafusion_row::accessor::RowAccessor;
 
 use crate::expressions::format_state_name;
@@ -134,8 +134,10 @@ impl Accumulator for CountAccumulator {
         Ok(())
     }
 
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        Ok(vec![ScalarValue::Int64(Some(self.count))])
+    fn state(&self) -> Result<Vec<AggregateState>> {
+        Ok(vec![AggregateState::Scalar(ScalarValue::Int64(Some(
+            self.count,
+        )))])
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {

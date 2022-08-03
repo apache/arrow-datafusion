@@ -37,6 +37,7 @@ pub(crate) mod count;
 pub(crate) mod count_distinct;
 pub(crate) mod covariance;
 pub(crate) mod grouping;
+pub(crate) mod median;
 #[macro_use]
 pub(crate) mod min_max;
 pub mod build_in;
@@ -47,6 +48,7 @@ pub(crate) mod stddev;
 pub(crate) mod sum;
 pub(crate) mod sum_distinct;
 mod tdigest;
+pub mod utils;
 pub(crate) mod variance;
 
 /// An aggregate expression that:

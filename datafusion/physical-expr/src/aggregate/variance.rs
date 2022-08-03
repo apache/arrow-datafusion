@@ -32,7 +32,7 @@ use arrow::{
 };
 use datafusion_common::ScalarValue;
 use datafusion_common::{DataFusionError, Result};
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 
 /// VAR and VAR_SAMP aggregate expression
 #[derive(Debug)]
@@ -210,11 +210,11 @@ impl VarianceAccumulator {
 }
 
 impl Accumulator for VarianceAccumulator {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
+    fn state(&self) -> Result<Vec<AggregateState>> {
         Ok(vec![
-            ScalarValue::from(self.count),
-            ScalarValue::from(self.mean),
-            ScalarValue::from(self.m2),
+            AggregateState::Scalar(ScalarValue::from(self.count)),
+            AggregateState::Scalar(ScalarValue::from(self.mean)),
+            AggregateState::Scalar(ScalarValue::from(self.m2)),
         ])
     }
 
@@ -296,6 +296,7 @@ impl Accumulator for VarianceAccumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::utils::get_accum_scalar_values_as_arrays;
     use crate::expressions::col;
     use crate::expressions::tests::aggregate;
     use crate::generic_test_op;
@@ -522,12 +523,7 @@ mod tests {
             .collect::<Result<Vec<_>>>()?;
         accum1.update_batch(&values1)?;
         accum2.update_batch(&values2)?;
-        let state2 = accum2
-            .state()?
-            .iter()
-            .map(|v| vec![v.clone()])
-            .map(|x| ScalarValue::iter_to_array(x).unwrap())
-            .collect::<Vec<_>>();
+        let state2 = get_accum_scalar_values_as_arrays(accum2.as_ref())?;
         accum1.merge_batch(&state2)?;
         accum1.evaluate()
     }

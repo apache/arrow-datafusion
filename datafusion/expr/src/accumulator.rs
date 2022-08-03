@@ -18,7 +18,7 @@
 //! Accumulator module contains the trait definition for aggregation function's accumulators.
 
 use arrow::array::ArrayRef;
-use datafusion_common::{Result, ScalarValue};
+use datafusion_common::{DataFusionError, Result, ScalarValue};
 use std::fmt::Debug;
 
 /// An accumulator represents a stateful object that lives throughout the evaluation of multiple rows and
@@ -33,7 +33,7 @@ pub trait Accumulator: Send + Sync + Debug {
     /// Returns the state of the accumulator at the end of the accumulation.
     // in the case of an average on which we track `sum` and `n`, this function should return a vector
     // of two values, sum and n.
-    fn state(&self) -> Result<Vec<ScalarValue>>;
+    fn state(&self) -> Result<Vec<AggregateState>>;
 
     /// updates the accumulator's state from a vector of arrays.
     fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()>;
@@ -43,4 +43,28 @@ pub trait Accumulator: Send + Sync + Debug {
 
     /// returns its value based on its current state.
     fn evaluate(&self) -> Result<ScalarValue>;
+}
+
+#[derive(Debug)]
+pub enum AggregateState {
+    Scalar(ScalarValue),
+    Array(ArrayRef),
+}
+
+impl AggregateState {
+    pub fn as_scalar(&self) -> Result<&ScalarValue> {
+        match &self {
+            Self::Scalar(v) => Ok(v),
+            _ => Err(DataFusionError::Execution(
+                "not a scalar aggregate".to_string(),
+            )),
+        }
+    }
+
+    pub fn to_array(&self) -> ArrayRef {
+        match &self {
+            Self::Scalar(v) => v.to_array(),
+            Self::Array(array) => array.clone(),
+        }
+    }
 }

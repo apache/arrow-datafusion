@@ -45,4 +45,5 @@ object_store = { version = "0.3", optional = true }
 ordered-float = "3.0"
 parquet = { version = "19.0.0", features = ["arrow"], optional = true }
 pyo3 = { version = "0.16", optional = true }
+serde_json = "1.0"
 sqlparser = "0.19"

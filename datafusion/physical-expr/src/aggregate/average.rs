@@ -33,7 +33,7 @@ use arrow::{
 };
 use datafusion_common::ScalarValue;
 use datafusion_common::{DataFusionError, Result};
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 use datafusion_row::accessor::RowAccessor;
 
 /// AVG aggregate expression
@@ -150,8 +150,11 @@ impl AvgAccumulator {
 }
 
 impl Accumulator for AvgAccumulator {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        Ok(vec![ScalarValue::from(self.count), self.sum.clone()])
+    fn state(&self) -> Result<Vec<AggregateState>> {
+        Ok(vec![
+            AggregateState::Scalar(ScalarValue::from(self.count)),
+            AggregateState::Scalar(self.sum.clone()),
+        ])
     }
 
     fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {

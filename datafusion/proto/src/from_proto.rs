@@ -504,6 +504,7 @@ impl From<protobuf::AggregateFunction> for AggregateFunction {
             }
             protobuf::AggregateFunction::ApproxMedian => Self::ApproxMedian,
             protobuf::AggregateFunction::Grouping => Self::Grouping,
+            protobuf::AggregateFunction::Median => Self::Median,
         }
     }
 }

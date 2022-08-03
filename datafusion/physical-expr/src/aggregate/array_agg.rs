@@ -23,7 +23,7 @@ use arrow::array::ArrayRef;
 use arrow::datatypes::{DataType, Field};
 use datafusion_common::ScalarValue;
 use datafusion_common::{DataFusionError, Result};
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 use std::any::Any;
 use std::sync::Arc;
 
@@ -143,8 +143,8 @@ impl Accumulator for ArrayAggAccumulator {
         })
     }
 
-    fn state(&self) -> Result<Vec<ScalarValue>> {
-        Ok(vec![self.evaluate()?])
+    fn state(&self) -> Result<Vec<AggregateState>> {
+        Ok(vec![AggregateState::Scalar(self.evaluate()?)])
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {

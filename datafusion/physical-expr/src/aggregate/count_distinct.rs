@@ -28,7 +28,7 @@ use crate::expressions::format_state_name;
 use crate::{AggregateExpr, PhysicalExpr};
 use datafusion_common::ScalarValue;
 use datafusion_common::{DataFusionError, Result};
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 struct DistinctScalarValues(Vec<ScalarValue>);
@@ -177,7 +177,7 @@ impl Accumulator for DistinctCountAccumulator {
             self.merge(&v)
         })
     }
-    fn state(&self) -> Result<Vec<ScalarValue>> {
+    fn state(&self) -> Result<Vec<AggregateState>> {
         let mut cols_out = self
             .state_data_types
             .iter()
@@ -206,7 +206,10 @@ impl Accumulator for DistinctCountAccumulator {
             )
         });
 
-        Ok(cols_out)
+        Ok(cols_out
+            .iter()
+            .map(|v| AggregateState::Scalar(v.clone()))
+            .collect())
     }
 
     fn evaluate(&self) -> Result<ScalarValue> {
@@ -223,6 +226,7 @@ impl Accumulator for DistinctCountAccumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::utils::get_accum_scalar_values;
     use arrow::array::{
         ArrayRef, BooleanArray, Float32Array, Float64Array, Int16Array, Int32Array,
         Int64Array, Int8Array, ListArray, UInt16Array, UInt32Array, UInt64Array,
@@ -341,7 +345,7 @@ mod tests {
         let mut accum = agg.create_accumulator()?;
         accum.update_batch(arrays)?;
 
-        Ok((accum.state()?, accum.evaluate()?))
+        Ok((get_accum_scalar_values(accum.as_ref())?, accum.evaluate()?))
     }
 
     fn run_update(
@@ -372,7 +376,7 @@ mod tests {
 
         accum.update_batch(&arrays)?;
 
-        Ok((accum.state()?, accum.evaluate()?))
+        Ok((get_accum_scalar_values(accum.as_ref())?, accum.evaluate()?))
     }
 
     fn run_merge_batch(arrays: &[ArrayRef]) -> Result<(Vec<ScalarValue>, ScalarValue)> {
@@ -390,7 +394,7 @@ mod tests {
         let mut accum = agg.create_accumulator()?;
         accum.merge_batch(arrays)?;
 
-        Ok((accum.state()?, accum.evaluate()?))
+        Ok((get_accum_scalar_values(accum.as_ref())?, accum.evaluate()?))
     }
 
     // Used trait to create associated constant for f32 and f64

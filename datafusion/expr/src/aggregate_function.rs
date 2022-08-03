@@ -62,6 +62,8 @@ pub enum AggregateFunction {
     Max,
     /// avg
     Avg,
+    /// median
+    Median,
     /// Approximate aggregate function
     ApproxDistinct,
     /// array_agg
@@ -107,6 +109,7 @@ impl FromStr for AggregateFunction {
             "avg" => AggregateFunction::Avg,
             "mean" => AggregateFunction::Avg,
             "sum" => AggregateFunction::Sum,
+            "median" => AggregateFunction::Median,
             "approx_distinct" => AggregateFunction::ApproxDistinct,
             "array_agg" => AggregateFunction::ArrayAgg,
             "var" => AggregateFunction::Variance,
@@ -175,7 +178,9 @@ pub fn return_type(
         AggregateFunction::ApproxPercentileContWithWeight => {
             Ok(coerced_data_types[0].clone())
         }
-        AggregateFunction::ApproxMedian => Ok(coerced_data_types[0].clone()),
+        AggregateFunction::ApproxMedian | AggregateFunction::Median => {
+            Ok(coerced_data_types[0].clone())
+        }
         AggregateFunction::Grouping => Ok(DataType::Int32),
     }
 }
@@ -330,6 +335,7 @@ pub fn coerce_types(
             }
             Ok(input_types.to_vec())
         }
+        AggregateFunction::Median => Ok(input_types.to_vec()),
         AggregateFunction::Grouping => Ok(vec![input_types[0].clone()]),
     }
 }
@@ -358,6 +364,7 @@ pub fn signature(fun: &AggregateFunction) -> Signature {
         | AggregateFunction::VariancePop
         | AggregateFunction::Stddev
         | AggregateFunction::StddevPop
+        | AggregateFunction::Median
         | AggregateFunction::ApproxMedian => {
             Signature::uniform(1, NUMERICS.to_vec(), Volatility::Immutable)
         }

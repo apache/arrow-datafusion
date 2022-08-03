@@ -30,7 +30,7 @@ use arrow::{
 };
 use datafusion_common::ScalarValue;
 use datafusion_common::{DataFusionError, Result};
-use datafusion_expr::Accumulator;
+use datafusion_expr::{Accumulator, AggregateState};
 
 use crate::aggregate::stats::StatsType;
 use crate::expressions::format_state_name;
@@ -237,12 +237,12 @@ impl CovarianceAccumulator {
 }
 
 impl Accumulator for CovarianceAccumulator {
-    fn state(&self) -> Result<Vec<ScalarValue>> {
+    fn state(&self) -> Result<Vec<AggregateState>> {
         Ok(vec![
-            ScalarValue::from(self.count),
-            ScalarValue::from(self.mean1),
-            ScalarValue::from(self.mean2),
-            ScalarValue::from(self.algo_const),
+            AggregateState::Scalar(ScalarValue::from(self.count)),
+            AggregateState::Scalar(ScalarValue::from(self.mean1)),
+            AggregateState::Scalar(ScalarValue::from(self.mean2)),
+            AggregateState::Scalar(ScalarValue::from(self.algo_const)),
         ])
     }
 
@@ -352,6 +352,7 @@ impl Accumulator for CovarianceAccumulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::aggregate::utils::get_accum_scalar_values_as_arrays;
     use crate::expressions::col;
     use crate::expressions::tests::aggregate;
     use crate::generic_test_op2;
@@ -644,12 +645,7 @@ mod tests {
             .collect::<Result<Vec<_>>>()?;
         accum1.update_batch(&values1)?;
         accum2.update_batch(&values2)?;
-        let state2 = accum2
-            .state()?
-            .iter()
-            .map(|v| vec![v.clone()])
-            .map(|x| ScalarValue::iter_to_array(x).unwrap())
-            .collect::<Vec<_>>();
+        let state2 = get_accum_scalar_values_as_arrays(accum2.as_ref())?;
         accum1.merge_batch(&state2)?;
         accum1.evaluate()
     }

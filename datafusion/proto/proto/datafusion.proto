@@ -466,6 +466,7 @@ enum AggregateFunction {
   APPROX_MEDIAN=15;
   APPROX_PERCENTILE_CONT_WITH_WEIGHT = 16;
   GROUPING = 17;
+  MEDIAN=18;
 }
 
 message AggregateExprNode {
