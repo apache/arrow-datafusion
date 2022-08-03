@@ -150,6 +150,8 @@ pub enum BuiltinScalarFunction {
     ToTimestampMicros,
     /// to_timestamp_seconds
     ToTimestampSeconds,
+    /// to_timestamp_nanos
+    ToTimestampNanos,
     /// from_unixtime
     FromUnixtime,
     ///now
@@ -239,6 +241,7 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::ToTimestampMillis => Volatility::Immutable,
             BuiltinScalarFunction::ToTimestampMicros => Volatility::Immutable,
             BuiltinScalarFunction::ToTimestampSeconds => Volatility::Immutable,
+            BuiltinScalarFunction::ToTimestampNanos => Volatility::Immutable,
             BuiltinScalarFunction::Translate => Volatility::Immutable,
             BuiltinScalarFunction::Trim => Volatility::Immutable,
             BuiltinScalarFunction::Upper => Volatility::Immutable,
@@ -334,6 +337,7 @@ impl FromStr for BuiltinScalarFunction {
             "to_timestamp_millis" => BuiltinScalarFunction::ToTimestampMillis,
             "to_timestamp_micros" => BuiltinScalarFunction::ToTimestampMicros,
             "to_timestamp_seconds" => BuiltinScalarFunction::ToTimestampSeconds,
+            "to_timestamp_nanos" => BuiltinScalarFunction::ToTimestampNanos,
             "now" => BuiltinScalarFunction::Now,
             "translate" => BuiltinScalarFunction::Translate,
             "trim" => BuiltinScalarFunction::Trim,

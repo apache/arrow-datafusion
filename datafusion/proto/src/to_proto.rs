@@ -1117,6 +1117,7 @@ impl TryFrom<&BuiltinScalarFunction> for protobuf::ScalarFunction {
             BuiltinScalarFunction::ToHex => Self::ToHex,
             BuiltinScalarFunction::ToTimestampMicros => Self::ToTimestampMicros,
             BuiltinScalarFunction::ToTimestampSeconds => Self::ToTimestampSeconds,
+            BuiltinScalarFunction::ToTimestampNanos => Self::ToTimestampNanos,
             BuiltinScalarFunction::Now => Self::Now,
             BuiltinScalarFunction::Translate => Self::Translate,
             BuiltinScalarFunction::RegexpMatch => Self::RegexpMatch,

@@ -54,7 +54,7 @@ pub use datafusion_expr::{
     nullif, octet_length, or, power, random, regexp_match, regexp_replace, repeat,
     replace, reverse, right, round, rpad, rtrim, scalar_subquery, sha224, sha256, sha384,
     sha512, signum, sin, split_part, sqrt, starts_with, strpos, substr, sum, tan, to_hex,
-    to_timestamp_micros, to_timestamp_millis, to_timestamp_seconds, translate, trim,
-    trunc, unalias, upper, when, Expr, ExprSchemable, Literal, Operator,
+    to_timestamp_micros, to_timestamp_millis, to_timestamp_nanos, to_timestamp_seconds,
+    translate, trim, trunc, unalias, upper, when, Expr, ExprSchemable, Literal, Operator,
 };
 pub use datafusion_optimizer::expr_simplifier::{ExprSimplifiable, SimplifyInfo};

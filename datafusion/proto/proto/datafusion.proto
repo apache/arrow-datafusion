@@ -440,6 +440,7 @@ enum ScalarFunction {
   StructFun=65;
   FromUnixtime=66;
   Atan2=67;
+  ToTimestampNanos=68;
 }
 
 message ScalarFunctionNode {

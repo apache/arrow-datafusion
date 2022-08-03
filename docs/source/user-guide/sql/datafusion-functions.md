@@ -21,9 +21,9 @@
 
 These SQL functions are specific to DataFusion, or they are well known and have functionality which is specific to DataFusion. Specifically, the `to_timestamp_xx()` functions exist due to Arrow's support for multiple timestamp resolutions.
 
-## `to_timestamp`
+## `to_timestamp_nanos`
 
-`to_timestamp()` is similar to the standard SQL function. It performs conversions to type `Timestamp(Nanoseconds, None)`, from:
+`to_timestamp_nanos()` is similar to the standard SQL function. It performs conversions to type `Timestamp(Nanoseconds, None)`, from:
 
 - Timestamp strings
   - `1997-01-31T09:26:56.123Z` # RCF3339
@@ -72,6 +72,22 @@ Note that `CAST(.. AS Timestamp)` converts to Timestamps with Nanosecond resolut
 ## `to_timestamp_seconds`
 
 `to_timestamp_seconds()` does conversions to type `Timestamp(Seconds, None)`, from:
+
+- Timestamp strings, the same as supported by the regular timestamp() function (except the output is a timestamp of secondseconds resolution)
+  - `1997-01-31T09:26:56.123Z` # RCF3339
+  - `1997-01-31T09:26:56.123-05:00` # RCF3339
+  - `1997-01-31 09:26:56.123-05:00` # close to RCF3339 but with a space er than T
+  - `1997-01-31T09:26:56.123` # close to RCF3339 but no timezone et specified
+  - `1997-01-31 09:26:56.123` # close to RCF3339 but uses a space and timezone offset
+  - `1997-01-31 09:26:56` # close to RCF3339, no fractional seconds
+- An Int64 array/column, values are seconds since Epoch UTC
+- Other Timestamp() columns or values
+
+Note that `CAST(.. AS Timestamp)` converts to Timestamps with Nanosecond resolution; this function is the only way to convert/cast to seconds resolution.
+
+## `to_timestamp`
+
+`to_timestamp()` does conversions to type `Timestamp(Seconds, None)`, from:
 
 - Timestamp strings, the same as supported by the regular timestamp() function (except the output is a timestamp of secondseconds resolution)
   - `1997-01-31T09:26:56.123Z` # RCF3339

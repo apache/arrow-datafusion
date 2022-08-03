@@ -39,9 +39,10 @@ use datafusion_expr::{
     lower, lpad, ltrim, md5, now_expr, nullif, octet_length, power, random, regexp_match,
     regexp_replace, repeat, replace, reverse, right, round, rpad, rtrim, sha224, sha256,
     sha384, sha512, signum, sin, split_part, sqrt, starts_with, strpos, substr, tan,
-    to_hex, to_timestamp_micros, to_timestamp_millis, to_timestamp_seconds, translate,
-    trim, trunc, upper, AggregateFunction, BuiltInWindowFunction, BuiltinScalarFunction,
-    Expr, Operator, WindowFrame, WindowFrameBound, WindowFrameUnits,
+    to_hex, to_timestamp_micros, to_timestamp_millis, to_timestamp_nanos,
+    to_timestamp_seconds, translate, trim, trunc, upper, AggregateFunction,
+    BuiltInWindowFunction, BuiltinScalarFunction, Expr, Operator, WindowFrame,
+    WindowFrameBound, WindowFrameUnits,
 };
 use std::sync::Arc;
 
@@ -467,6 +468,7 @@ impl From<&protobuf::ScalarFunction> for BuiltinScalarFunction {
             ScalarFunction::ToHex => Self::ToHex,
             ScalarFunction::ToTimestampMicros => Self::ToTimestampMicros,
             ScalarFunction::ToTimestampSeconds => Self::ToTimestampSeconds,
+            ScalarFunction::ToTimestampNanos => Self::ToTimestampNanos,
             ScalarFunction::Now => Self::Now,
             ScalarFunction::Translate => Self::Translate,
             ScalarFunction::RegexpMatch => Self::RegexpMatch,
@@ -1108,6 +1110,9 @@ pub fn parse_expr(
                 }
                 ScalarFunction::ToTimestampSeconds => {
                     Ok(to_timestamp_seconds(parse_expr(&args[0], registry)?))
+                }
+                ScalarFunction::ToTimestampNanos => {
+                    Ok(to_timestamp_nanos(parse_expr(&args[0], registry)?))
                 }
                 ScalarFunction::Now => Ok(now_expr(
                     args.to_owned()

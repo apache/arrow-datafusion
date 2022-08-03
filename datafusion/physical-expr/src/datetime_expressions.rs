@@ -132,10 +132,19 @@ fn string_to_timestamp_nanos_shim(s: &str) -> Result<i64> {
 
 /// to_timestamp SQL function
 pub fn to_timestamp(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    handle::<TimestampSecondType, _, TimestampSecondType>(
+        args,
+        |s| string_to_timestamp_nanos_shim(s).map(|n| n / 1_000_000_000),
+        "to_timestamp",
+    )
+}
+
+/// to_timestamp_nanos SQL function
+pub fn to_timestamp_nanos(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     handle::<TimestampNanosecondType, _, TimestampNanosecondType>(
         args,
         string_to_timestamp_nanos_shim,
-        "to_timestamp",
+        "to_timestamp_nanos",
     )
 }
 

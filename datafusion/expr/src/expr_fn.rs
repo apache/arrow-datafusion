@@ -353,6 +353,7 @@ scalar_expr!(DateTrunc, date_trunc, part, date);
 scalar_expr!(ToTimestampMillis, to_timestamp_millis, date);
 scalar_expr!(ToTimestampMicros, to_timestamp_micros, date);
 scalar_expr!(ToTimestampSeconds, to_timestamp_seconds, date);
+scalar_expr!(ToTimestampNanos, to_timestamp_nanos, date);
 scalar_expr!(FromUnixtime, from_unixtime, unixtime);
 
 /// Returns an array of fixed size with each argument on it.
