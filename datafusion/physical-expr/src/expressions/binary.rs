@@ -21,8 +21,7 @@ use std::{any::Any, sync::Arc};
 use arrow::array::TimestampMillisecondArray;
 use arrow::array::*;
 use arrow::compute::kernels::arithmetic::{
-    add, add_scalar, divide, divide_scalar, modulus, modulus_scalar, multiply,
-    multiply_scalar, subtract, subtract_scalar,
+    add_scalar, divide_scalar, modulus_scalar, multiply_scalar, subtract_scalar,
 };
 use arrow::compute::kernels::boolean::{and_kleene, not, or_kleene};
 use arrow::compute::kernels::comparison::{
@@ -55,9 +54,9 @@ use datafusion_common::{DataFusionError, Result};
 use datafusion_expr::binary_rule::binary_operator_data_type;
 use datafusion_expr::{binary_rule::coerce_types, ColumnarValue, Operator};
 
-/// create a `dyn_op` wrapper function for the specified operation
-/// that call the underlying dyn_op arrow kernel if the type is
-/// supported, and translates ArrowError to DataFusionError
+/// create a `dyn_op` function that call the underlying arrow
+/// comparison kernel if the type is supported, and translates
+/// ArrowError to DataFusionError
 macro_rules! make_dyn_comp_op {
     ($OP:tt) => {
         paste::paste! {
@@ -83,6 +82,35 @@ macro_rules! make_dyn_comp_op {
     };
 }
 
+/// create a `dyn_op` function that call the underlying arrow
+/// arithmetic kernel if the type is supported, and translates
+/// ArrowError to DataFusionError
+macro_rules! make_dyn_arithmetic_op {
+    ($OP:tt) => {
+        paste::paste! {
+            /// wrapper over arrow compute kernel that maps Error types and
+            /// patches missing support in arrow
+            fn [<$OP _dyn>] (left: &dyn Array, right: &dyn Array) -> Result<ArrayRef> {
+                match (left.data_type(), right.data_type()) {
+                    // Call `op_decimal` (e.g. `eq_decimal) until
+                    // arrow has native support
+                    // https://github.com/apache/arrow-rs/issues/1200
+                    (DataType::Decimal(_, _), DataType::Decimal(_, _)) => {
+                        let res = [<$OP _decimal>](as_decimal_array(left), as_decimal_array(right))?;
+                        Ok(Arc::new(res) as ArrayRef)
+                    },
+                    // By default call the arrow kernel
+                    _ => {
+                    arrow::compute::kernels::arithmetic::[<$OP _dyn>](left, right)
+                            .map_err(|e| e.into())
+                    }
+                }
+                .map(|a| Arc::new(a) as ArrayRef)
+            }
+        }
+    };
+}
+
 // create eq_dyn, gt_dyn, wrappers etc
 make_dyn_comp_op!(eq);
 make_dyn_comp_op!(gt);
@@ -90,6 +118,51 @@ make_dyn_comp_op!(gt_eq);
 make_dyn_comp_op!(lt);
 make_dyn_comp_op!(lt_eq);
 make_dyn_comp_op!(neq);
+make_dyn_arithmetic_op!(add);
+make_dyn_arithmetic_op!(subtract);
+make_dyn_arithmetic_op!(multiply);
+make_dyn_arithmetic_op!(divide);
+
+// Explicit modulus_dyn wrapper until it is added to arrow:
+// TODO file arrow ticket
+fn modulus_dyn(left: &dyn Array, right: &dyn Array) -> Result<ArrayRef> {
+    use arrow::compute::modulus;
+    use arrow::datatypes::{
+        Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, UInt16Type,
+        UInt32Type, UInt64Type, UInt8Type,
+    };
+    use DataType::*;
+    macro_rules! call_modulus {
+        // makes a call to modules after downcasting to $TY primtive
+        // type
+        ($TY:tt) => {{
+            Ok(Arc::new(modulus(
+                as_primitive_array::<$TY>(left),
+                as_primitive_array::<$TY>(right),
+            )?) as ArrayRef)
+        }};
+    }
+
+    match (left.data_type(), right.data_type()) {
+        (Float32, Float32) => call_modulus!(Float32Type),
+        (Float64, Float64) => call_modulus!(Float64Type),
+        (Int8, Int8) => call_modulus!(Int8Type),
+        (Int16, Int16) => call_modulus!(Int16Type),
+        (Int32, Int32) => call_modulus!(Int32Type),
+        (Int64, Int64) => call_modulus!(Int64Type),
+        (UInt8, UInt8) => call_modulus!(UInt8Type),
+        (UInt16, UInt16) => call_modulus!(UInt16Type),
+        (UInt32, UInt32) => call_modulus!(UInt32Type),
+        (UInt64, UInt64) => call_modulus!(UInt64Type),
+        (DataType::Decimal(_, _), DataType::Decimal(_, _)) => Ok(Arc::new(
+            modulus_decimal(as_decimal_array(left), as_decimal_array(right))?,
+        )),
+        other => Err(DataFusionError::Internal(format!(
+            "Data type {:?} not supported for binary operation 'modulus' on dyn arrays",
+            other
+        ))),
+    }
+}
 
 // Simple (low performance) kernels until optimized kernels are added to arrow
 // See https://github.com/apache/arrow-rs/issues/960
@@ -816,33 +889,6 @@ macro_rules! binary_string_array_op {
     }};
 }
 
-/// Invoke a compute kernel on a pair of arrays
-/// The binary_primitive_array_op macro only evaluates for primitive types
-/// like integers and floats.
-macro_rules! binary_primitive_array_op {
-    ($LEFT:expr, $RIGHT:expr, $OP:ident) => {{
-        match $LEFT.data_type() {
-            // TODO support decimal type
-            // which is not the primitive type
-            DataType::Decimal(_,_) => compute_decimal_op!($LEFT, $RIGHT, $OP, Decimal128Array),
-            DataType::Int8 => compute_op!($LEFT, $RIGHT, $OP, Int8Array),
-            DataType::Int16 => compute_op!($LEFT, $RIGHT, $OP, Int16Array),
-            DataType::Int32 => compute_op!($LEFT, $RIGHT, $OP, Int32Array),
-            DataType::Int64 => compute_op!($LEFT, $RIGHT, $OP, Int64Array),
-            DataType::UInt8 => compute_op!($LEFT, $RIGHT, $OP, UInt8Array),
-            DataType::UInt16 => compute_op!($LEFT, $RIGHT, $OP, UInt16Array),
-            DataType::UInt32 => compute_op!($LEFT, $RIGHT, $OP, UInt32Array),
-            DataType::UInt64 => compute_op!($LEFT, $RIGHT, $OP, UInt64Array),
-            DataType::Float32 => compute_op!($LEFT, $RIGHT, $OP, Float32Array),
-            DataType::Float64 => compute_op!($LEFT, $RIGHT, $OP, Float64Array),
-            other => Err(DataFusionError::Internal(format!(
-                "Data type {:?} not supported for binary operation '{}' on primitive arrays",
-                other, stringify!($OP)
-            ))),
-        }
-    }};
-}
-
 /// Invoke a compute kernel on an array and a scalar
 /// The binary_primitive_array_op_scalar macro only evaluates for primitive
 /// types like integers and floats.
@@ -1299,11 +1345,11 @@ impl BinaryExpr {
             Operator::IsNotDistinctFrom => {
                 binary_array_op!(left, right, is_not_distinct_from)
             }
-            Operator::Plus => binary_primitive_array_op!(left, right, add),
-            Operator::Minus => binary_primitive_array_op!(left, right, subtract),
-            Operator::Multiply => binary_primitive_array_op!(left, right, multiply),
-            Operator::Divide => binary_primitive_array_op!(left, right, divide),
-            Operator::Modulo => binary_primitive_array_op!(left, right, modulus),
+            Operator::Plus => add_dyn(&left, &right),
+            Operator::Minus => subtract_dyn(&left, &right),
+            Operator::Multiply => multiply_dyn(&left, &right),
+            Operator::Divide => divide_dyn(&left, &right),
+            Operator::Modulo => modulus_dyn(&left, &right),
             Operator::And => {
                 if left_data_type == &DataType::Boolean {
                     boolean_op!(left, right, and_kleene)
