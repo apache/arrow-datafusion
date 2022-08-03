@@ -22,7 +22,7 @@ SQL Reference
    :maxdepth: 2
 
    sql_status
-   select
    ddl
+   select
    aggregate_functions
    DataFusion Functions <datafusion-functions>

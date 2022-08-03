@@ -17,7 +17,7 @@
   under the License.
 -->
 
-# Roadmap
+# Quarterly Roadmap
 
 A quarterly roadmap will be published to give the DataFusion community visibility into the priorities of the projects contributors. This roadmap is not binding.
 

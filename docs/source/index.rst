@@ -29,7 +29,6 @@ Table of Contents
    :caption: Supported Environments
 
    Rust <https://docs.rs/crate/datafusion/>
-   Python <python/index>
    Command line <cli/index>
 
 .. _toc.guide:
@@ -41,7 +40,6 @@ Table of Contents
    user-guide/introduction
    user-guide/example-usage
    user-guide/library
-   user-guide/cli
    user-guide/sql/index
    user-guide/configs
    user-guide/faq
@@ -53,9 +51,9 @@ Table of Contents
    :caption: Specification
 
    specification/roadmap
+   specification/quarterly_roadmap
    specification/invariants
    specification/output-field-name-semantic
-   specification/quarterly_roadmap
 
 .. _toc.readme:
 

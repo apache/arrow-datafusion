@@ -72,8 +72,10 @@
   - [x] to_hex
   - [x] translate
   - [x] trim
-- Miscellaneous/Boolean functions
+- Conditional expressions
   - [x] nullif
+  - [x] case
+  - [x] coalesce
 - Approximation functions
   - [x] approx_distinct
   - [x] approx_median
@@ -94,7 +96,7 @@
 - [x] Schema Queries
   - [x] SHOW TABLES
   - [x] SHOW COLUMNS
-  - [x] information_schema.{tables, columns}
+  - [x] information_schema.{tables, columns, views}
   - [ ] information_schema other views
 - [x] Sorting
 - [ ] Nested types
@@ -126,6 +128,8 @@
 ## Data Sources
 
 - [x] CSV
+- [x] JSON
+- [x] Avro
 - [x] Parquet primitive types
 - [ ] Parquet nested types
 
@@ -165,7 +169,7 @@ Currently, only a subset of the PostgreSQL dialect is implemented, and we will d
 
 ## Schema Metadata / Information Schema Support
 
-DataFusion supports the showing metadata about the tables available. This information can be accessed using the views of the ISO SQL `information_schema` schema or the DataFusion specific `SHOW TABLES` and `SHOW COLUMNS` commands.
+DataFusion supports the showing metadata about the tables available. This information can be accessed using the views of the ISO SQL `information_schema` schema or the DataFusion-specific `SHOW TABLES` and `SHOW COLUMNS` commands.
 
 More information can be found in the [Postgres docs](https://www.postgresql.org/docs/13/infoschema-schema.html)).
 
@@ -188,6 +192,13 @@ To show tables available for use in DataFusion, use the `SHOW TABLES` command or
 | datafusion    | public             | t          | BASE TABLE   |
 | datafusion    | information_schema | TABLES     | SYSTEM TABLE |
 +---------------+--------------------+------------+--------------+
+```
+
+To show views, use the `SHOW VIEWS` command or the or `information_schema.views` view:
+
+```sql
+> select * from information_schema.views;
+
 ```
 
 To show the schema of a table in DataFusion, use the `SHOW COLUMNS` command or the or `information_schema.columns` view:
@@ -216,7 +227,7 @@ To show the schema of a table in DataFusion, use the `SHOW COLUMNS` command or t
 
 DataFusion uses Arrow, and thus the Arrow type system, for query
 execution. The SQL types from
-[sqlparser-rs](https://github.com/ballista-compute/sqlparser-rs/blob/main/src/ast/data_type.rs#L57)
+[sqlparser-rs](https://github.com/sqlparser-rs/sqlparser-rs/blob/main/src/ast/data_type.rs#L27)
 are mapped to Arrow types according to the following table
 
 | SQL Data Type | Arrow DataType                    |

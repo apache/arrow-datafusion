@@ -24,11 +24,11 @@
 Add the following to your `Cargo.toml` file:
 
 ```toml
-datafusion = "8.0.0"
+datafusion = "10"
 tokio = "1.0"
 ```
 
-## Run a SQL query against data stored in a CSV:
+## Run a SQL query against data stored in a CSV
 
 ```rust
 use datafusion::prelude::*;
@@ -48,7 +48,7 @@ async fn main() -> datafusion::error::Result<()> {
 }
 ```
 
-## Use the DataFrame API to process data stored in a CSV:
+## Use the DataFrame API to process data stored in a CSV
 
 ```rust
 use datafusion::prelude::*;

@@ -16,5 +16,4 @@
 # under the License.
 
 build
-source/python/generated
 venv/

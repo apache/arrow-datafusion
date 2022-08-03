@@ -106,7 +106,7 @@
 //! Specifically, when DataFusion receives an SQL query, there are different steps
 //! that it passes through until a result is obtained. Broadly, they are:
 //!
-//! 1. The string is parsed to an Abstract syntax tree (AST) using [sqlparser](https://docs.rs/sqlparser/0.6.1/sqlparser/).
+//! 1. The string is parsed to an Abstract syntax tree (AST) using [sqlparser](https://docs.rs/sqlparser/latest/sqlparser/).
 //! 2. The planner [`SqlToRel`](sql::planner::SqlToRel) converts logical expressions on the AST to logical expressions [`Expr`s](logical_plan::Expr).
 //! 3. The planner [`SqlToRel`](sql::planner::SqlToRel) converts logical nodes on the AST to a [`LogicalPlan`](logical_plan::LogicalPlan).
 //! 4. [`OptimizerRules`](optimizer::optimizer::OptimizerRule) are applied to the [`LogicalPlan`](logical_plan::LogicalPlan) to optimize it.
@@ -139,12 +139,12 @@
 //!
 //! A [`ExecutionPlan`](physical_plan::ExecutionPlan) is composed by nodes (implement the trait [`ExecutionPlan`](physical_plan::ExecutionPlan)),
 //! and each node is composed by physical expressions ([`PhysicalExpr`](physical_plan::PhysicalExpr))
-//! or aggreagate expressions ([`AggregateExpr`](physical_plan::AggregateExpr)).
+//! or aggregate expressions ([`AggregateExpr`](physical_plan::AggregateExpr)).
 //! All of these are located in the module [`physical_plan`](physical_plan).
 //!
 //! Broadly speaking,
 //!
-//! * an [`ExecutionPlan`](physical_plan::ExecutionPlan) receives a partition number and asyncronosly returns
+//! * an [`ExecutionPlan`](physical_plan::ExecutionPlan) receives a partition number and asynchronously returns
 //!   an iterator over [`RecordBatch`](arrow::record_batch::RecordBatch)
 //!   (a node-specific struct that implements [`RecordBatchReader`](arrow::record_batch::RecordBatchReader))
 //! * a [`PhysicalExpr`](physical_plan::PhysicalExpr) receives a [`RecordBatch`](arrow::record_batch::RecordBatch)
@@ -249,5 +249,5 @@ doc_comment::doctest!("../../../README.md", readme_example_test);
 #[cfg(doctest)]
 doc_comment::doctest!(
     "../../../docs/source/user-guide/example-usage.md",
-    user_guid_example_tests
+    user_guide_example_usage
 );

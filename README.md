@@ -19,7 +19,7 @@
 
 # DataFusion
 
-<img src="docs/source/_static/images/DataFusion-Logo-Background-White.svg" width="256"/>
+<img src="docs/source/_static/images/DataFusion-Logo-Background-White.svg" width="256" alt="logo"/>
 
 DataFusion is an extensible query planning, optimization, and execution framework, written in
 Rust, that uses [Apache Arrow](https://arrow.apache.org) as its
@@ -62,7 +62,7 @@ There are a number of community projects that extend DataFusion or provide integ
 ### Language Bindings
 
 - [datafusion-c](https://github.com/datafusion-contrib/datafusion-c)
-- [datafusion-python](https://github.com/datafusion-contrib/datafusion-python)
+- [datafusion-python](https://github.com/apache/arrow-datafusion-python)
 - [datafusion-ruby](https://github.com/datafusion-contrib/datafusion-ruby)
 - [datafusion-java](https://github.com/datafusion-contrib/datafusion-java)
 
@@ -104,7 +104,7 @@ Please see [Roadmap](docs/source/specification/roadmap.md) for information of wh
 
 There is no formal document describing DataFusion's architecture yet, but the following presentations offer a good overview of its different components and how they interact together.
 
-- (July 2022): DataFusion and Arrow: Supercharge Your Data Analytical Tool with a Rusty Query Engine: [recording](https://www.youtube.com/watch?v=Rii1VTn3seQ)
+- (July 2022): DataFusion and Arrow: Supercharge Your Data Analytical Tool with a Rusty Query Engine: [recording](https://www.youtube.com/watch?v=Rii1VTn3seQ) and [slides](https://docs.google.com/presentation/d/1q1bPibvu64k2b7LPi7Yyb0k3gA1BiUYiUbEklqW1Ckc/view#slide=id.g11054eeab4c_0_1165)
 - (March 2021): The DataFusion architecture is described in _Query Engine Design and the Rust-Based DataFusion in Apache Arrow_: [recording](https://www.youtube.com/watch?v=K6eCAVEk4kU) (DataFusion content starts [~ 15 minutes in](https://www.youtube.com/watch?v=K6eCAVEk4kU&t=875s)) and [slides](https://www.slideshare.net/influxdata/influxdb-iox-tech-talks-query-engine-design-and-the-rustbased-datafusion-in-apache-arrow-244161934)
 - (February 2021): How DataFusion is used within the Ballista Project is described in \*Ballista: Distributed Compute with Rust and Apache Arrow: [recording](https://www.youtube.com/watch?v=ZZHQaOap9pQ)
 

@@ -17,19 +17,15 @@
 
 FROM rust:1.59 as builder
 
-COPY ./datafusion /usr/src/datafusion
-
-COPY ./datafusion-cli /usr/src/datafusion-cli
-
-WORKDIR /usr/src/datafusion-cli
-
-RUN rustup component add rustfmt
+WORKDIR /usr/src/build
+COPY . .
+WORKDIR /usr/src/build/datafusion-cli
 
 RUN cargo build --release
 
 FROM debian:bullseye-slim
 
-COPY --from=builder /usr/src/datafusion-cli/target/release/datafusion-cli /usr/local/bin
+COPY --from=builder /usr/src/build/datafusion-cli/target/release/datafusion-cli /usr/local/bin
 
 ENTRYPOINT ["datafusion-cli"]
 

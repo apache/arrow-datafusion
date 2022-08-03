@@ -31,8 +31,6 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
-import datafusion
-
 # -- Project information -----------------------------------------------------
 
 project = 'Arrow DataFusion'
@@ -88,6 +86,7 @@ html_theme = 'pydata_sphinx_theme'
 
 html_theme_options = {
     "use_edit_page_button": True,
+    "show_toc_level": 2,
 }
 
 html_context = {

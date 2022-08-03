@@ -90,7 +90,7 @@ Note that `CAST(.. AS Timestamp)` converts to Timestamps with Nanosecond resolut
 `extract(field FROM source)`
 
 - The `extract` function retrieves subfields such as year or hour from date/time values.
-  `source` must be a value expression of type timestamp, Data32, or Data64. `field` is an identifier that selects what field to extract from the source value.
+  `source` must be a value expression of type timestamp, Date32, or Date64. `field` is an identifier that selects what field to extract from the source value.
   The `extract` function returns values of type u32.
   - `year` :`extract(year FROM to_timestamp('2020-09-08T12:00:00+00:00')) -> 2020`
   - `month`:`extract(month FROM to_timestamp('2020-09-08T12:00:00+00:00')) -> 9`

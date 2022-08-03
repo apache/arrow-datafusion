@@ -17,7 +17,7 @@
   under the License.
 -->
 
-# DataFusion's Invariants
+# Invariants
 
 This document enumerates invariants of DataFusion's logical and physical planes
 (functions, and nodes). Some of these invariants are currently not enforced.
