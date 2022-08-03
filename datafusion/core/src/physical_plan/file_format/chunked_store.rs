@@ -20,11 +20,12 @@ use bytes::Bytes;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use object_store::path::Path;
-use object_store::Result;
 use object_store::{GetResult, ListResult, ObjectMeta, ObjectStore};
+use object_store::{MultipartId, Result};
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Range;
 use std::sync::Arc;
+use tokio::io::AsyncWrite;
 
 /// Wraps a [`ObjectStore`] and makes its get response return chunks
 ///
@@ -51,6 +52,21 @@ impl Display for ChunkedStore {
 impl ObjectStore for ChunkedStore {
     async fn put(&self, location: &Path, bytes: Bytes) -> Result<()> {
         self.inner.put(location, bytes).await
+    }
+
+    async fn put_multipart(
+        &self,
+        location: &Path,
+    ) -> Result<(MultipartId, Box<dyn AsyncWrite + Unpin + Send>)> {
+        self.inner.put_multipart(location).await
+    }
+
+    async fn abort_multipart(
+        &self,
+        location: &Path,
+        multipart_id: &MultipartId,
+    ) -> Result<()> {
+        self.inner.abort_multipart(location, multipart_id).await
     }
 
     async fn get(&self, location: &Path) -> Result<GetResult> {

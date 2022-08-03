@@ -29,7 +29,7 @@ use crate::scheduler::pipeline::{
 };
 
 /// Identifies the [`Pipeline`] within the [`PipelinePlan`] to route output to
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutputLink {
     /// The index of the [`Pipeline`] in [`PipelinePlan`] to route output to
     pub pipeline: usize,

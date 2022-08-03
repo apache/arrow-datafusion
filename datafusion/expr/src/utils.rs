@@ -689,7 +689,7 @@ pub fn can_hash(data_type: &DataType) -> bool {
         },
         DataType::Utf8 => true,
         DataType::LargeUtf8 => true,
-        DataType::Decimal(_, _) => true,
+        DataType::Decimal128(_, _) => true,
         DataType::Date32 => true,
         DataType::Date64 => true,
         DataType::Dictionary(key_type, value_type)

@@ -368,9 +368,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         let table_ref: TableReference = table_name.as_str().into();
 
         // check if table_name exists
-        if let Err(e) = self.schema_provider.get_table_provider(table_ref) {
-            return Err(e);
-        }
+        let _ = self.schema_provider.get_table_provider(table_ref)?;
 
         if self.has_table("information_schema", "tables") {
             let sql = format!("SELECT column_name, data_type, is_nullable \
@@ -2286,9 +2284,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         let table_name = normalize_sql_object_name(sql_table_name);
         let table_ref: TableReference = table_name.as_str().into();
 
-        if let Err(e) = self.schema_provider.get_table_provider(table_ref) {
-            return Err(e);
-        }
+        let _ = self.schema_provider.get_table_provider(table_ref)?;
 
         // Figure out the where clause
         let columns = vec!["table_name", "table_schema", "table_catalog"].into_iter();
@@ -2333,9 +2329,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         let table_name = normalize_sql_object_name(sql_table_name);
         let table_ref: TableReference = table_name.as_str().into();
 
-        if let Err(e) = self.schema_provider.get_table_provider(table_ref) {
-            return Err(e);
-        }
+        let _ = self.schema_provider.get_table_provider(table_ref)?;
 
         // Figure out the where clause
         let columns = vec!["table_name", "table_schema", "table_catalog"].into_iter();
@@ -4403,7 +4397,7 @@ mod tests {
                 ])),
                 "test_decimal" => Ok(Schema::new(vec![
                     Field::new("id", DataType::Int32, false),
-                    Field::new("price", DataType::Decimal(10, 2), false),
+                    Field::new("price", DataType::Decimal128(10, 2), false),
                 ])),
                 "person" => Ok(Schema::new(vec![
                     Field::new("id", DataType::UInt32, false),

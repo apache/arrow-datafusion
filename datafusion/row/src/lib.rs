@@ -388,7 +388,7 @@ mod tests {
     fn test_unsupported_type_read() {
         let schema = Arc::new(Schema::new(vec![Field::new(
             "a",
-            DataType::Decimal(5, 2),
+            DataType::Decimal128(5, 2),
             false,
         )]));
         let vector = vec![0; 1024];

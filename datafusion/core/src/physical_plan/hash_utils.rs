@@ -336,7 +336,7 @@ pub fn create_hashes<'a>(
             DataType::Null => {
                 hash_null(random_state, hashes_buffer, multi_col);
             }
-            DataType::Decimal(_, _) => {
+            DataType::Decimal128(_, _) => {
                 hash_decimal128(col, random_state, hashes_buffer, multi_col);
             }
             DataType::UInt8 => {

@@ -137,7 +137,7 @@ impl Task {
         let partition = self.waker.partition;
 
         let waker = futures::task::waker_ref(&self.waker);
-        let mut cx = Context::from_waker(&*waker);
+        let mut cx = Context::from_waker(&waker);
 
         let pipelines = &self.context.pipelines;
         let routable = &pipelines[node];

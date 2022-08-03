@@ -27,7 +27,7 @@ use arrow::{
         IntervalMonthDayNanoType, IntervalUnit, IntervalYearMonthType, TimeUnit,
         TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
         TimestampSecondType, UInt16Type, UInt32Type, UInt64Type, UInt8Type,
-        DECIMAL_MAX_PRECISION,
+        DECIMAL128_MAX_PRECISION,
     },
     util::decimal::{BasicDecimal, Decimal128},
 };
@@ -611,7 +611,7 @@ impl ScalarValue {
         scale: usize,
     ) -> Result<Self> {
         // make sure the precision and scale is valid
-        if precision <= DECIMAL_MAX_PRECISION && scale <= precision {
+        if precision <= DECIMAL128_MAX_PRECISION && scale <= precision {
             return Ok(ScalarValue::Decimal128(Some(value), precision, scale));
         }
         Err(DataFusionError::Internal(format!(
@@ -654,7 +654,7 @@ impl ScalarValue {
             ScalarValue::Int32(_) => DataType::Int32,
             ScalarValue::Int64(_) => DataType::Int64,
             ScalarValue::Decimal128(_, precision, scale) => {
-                DataType::Decimal(*precision, *scale)
+                DataType::Decimal128(*precision, *scale)
             }
             ScalarValue::TimestampSecond(_, tz_opt) => {
                 DataType::Timestamp(TimeUnit::Second, tz_opt.clone())
@@ -935,7 +935,7 @@ impl ScalarValue {
         }
 
         let array: ArrayRef = match &data_type {
-            DataType::Decimal(precision, scale) => {
+            DataType::Decimal128(precision, scale) => {
                 let decimal_array =
                     ScalarValue::iter_to_decimal_array(scalars, precision, scale)?;
                 Arc::new(decimal_array)
@@ -1448,7 +1448,7 @@ impl ScalarValue {
 
         Ok(match array.data_type() {
             DataType::Null => ScalarValue::Null,
-            DataType::Decimal(precision, scale) => {
+            DataType::Decimal128(precision, scale) => {
                 ScalarValue::get_decimal_value_from_array(array, index, precision, scale)
             }
             DataType::Boolean => typed_cast!(array, index, BooleanArray, Boolean),
@@ -1899,7 +1899,7 @@ impl TryFrom<&DataType> for ScalarValue {
             DataType::UInt16 => ScalarValue::UInt16(None),
             DataType::UInt32 => ScalarValue::UInt32(None),
             DataType::UInt64 => ScalarValue::UInt64(None),
-            DataType::Decimal(precision, scale) => {
+            DataType::Decimal128(precision, scale) => {
                 ScalarValue::Decimal128(None, *precision, *scale)
             }
             DataType::Utf8 => ScalarValue::Utf8(None),
@@ -2145,7 +2145,7 @@ mod tests {
     #[test]
     fn scalar_decimal_test() {
         let decimal_value = ScalarValue::Decimal128(Some(123), 10, 1);
-        assert_eq!(DataType::Decimal(10, 1), decimal_value.get_datatype());
+        assert_eq!(DataType::Decimal128(10, 1), decimal_value.get_datatype());
         let try_into_value: i128 = decimal_value.clone().try_into().unwrap();
         assert_eq!(123_i128, try_into_value);
         assert!(!decimal_value.is_null());
@@ -2163,14 +2163,14 @@ mod tests {
         let array = decimal_value.to_array();
         let array = array.as_any().downcast_ref::<Decimal128Array>().unwrap();
         assert_eq!(1, array.len());
-        assert_eq!(DataType::Decimal(10, 1), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 1), array.data_type().clone());
         assert_eq!(123i128, array.value(0).as_i128());
 
         // decimal scalar to array with size
         let array = decimal_value.to_array_of_size(10);
         let array_decimal = array.as_any().downcast_ref::<Decimal128Array>().unwrap();
         assert_eq!(10, array.len());
-        assert_eq!(DataType::Decimal(10, 1), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 1), array.data_type().clone());
         assert_eq!(123i128, array_decimal.value(0).as_i128());
         assert_eq!(123i128, array_decimal.value(9).as_i128());
         // test eq array
@@ -2208,7 +2208,7 @@ mod tests {
         // convert the vec to decimal array and check the result
         let array = ScalarValue::iter_to_array(decimal_vec.into_iter()).unwrap();
         assert_eq!(3, array.len());
-        assert_eq!(DataType::Decimal(10, 2), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 2), array.data_type().clone());
 
         let decimal_vec = vec![
             ScalarValue::Decimal128(Some(1), 10, 2),
@@ -2218,7 +2218,7 @@ mod tests {
         ];
         let array = ScalarValue::iter_to_array(decimal_vec.into_iter()).unwrap();
         assert_eq!(4, array.len());
-        assert_eq!(DataType::Decimal(10, 2), array.data_type().clone());
+        assert_eq!(DataType::Decimal128(10, 2), array.data_type().clone());
 
         assert!(ScalarValue::try_new_decimal128(1, 10, 2)
             .unwrap()

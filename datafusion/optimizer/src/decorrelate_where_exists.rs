@@ -56,8 +56,7 @@ impl DecorrelateWhereExists {
         for it in filters.iter() {
             match it {
                 Expr::Exists { subquery, negated } => {
-                    let subquery =
-                        self.optimize(&*subquery.subquery, optimizer_config)?;
+                    let subquery = self.optimize(&subquery.subquery, optimizer_config)?;
                     let subquery = Arc::new(subquery);
                     let subquery = Subquery { subquery };
                     let subquery = SubqueryInfo::new(subquery.clone(), *negated);

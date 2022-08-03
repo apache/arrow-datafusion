@@ -101,12 +101,10 @@ impl<'a, R: Read> AvroArrowArrayReader<'a, R> {
                     "Failed to parse avro value: {:?}",
                     e
                 ))),
-                other => {
-                    return Err(ArrowError::ParseError(format!(
-                        "Row needs to be of type object, got: {:?}",
-                        other
-                    )))
-                }
+                other => Err(ArrowError::ParseError(format!(
+                    "Row needs to be of type object, got: {:?}",
+                    other
+                ))),
             })
             .collect::<ArrowResult<Vec<Vec<(String, Value)>>>>()?;
         if rows.is_empty() {
