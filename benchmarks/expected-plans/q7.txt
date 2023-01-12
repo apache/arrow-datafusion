@@ -3,20 +3,19 @@ Sort: shipping.supp_nation ASC NULLS LAST, shipping.cust_nation ASC NULLS LAST, 
     Aggregate: groupBy=[[shipping.supp_nation, shipping.cust_nation, shipping.l_year]], aggr=[[SUM(shipping.volume)]]
       SubqueryAlias: shipping
         Projection: n1.n_name AS supp_nation, n2.n_name AS cust_nation, datepart(Utf8("YEAR"), lineitem.l_shipdate) AS l_year, CAST(lineitem.l_extendedprice AS Decimal128(38, 4)) * CAST(Decimal128(Some(100),23,2) - CAST(lineitem.l_discount AS Decimal128(23, 2)) AS Decimal128(38, 4)) AS volume
-          Filter: n1.n_name = Utf8("FRANCE") AND n2.n_name = Utf8("GERMANY") OR n1.n_name = Utf8("GERMANY") AND n2.n_name = Utf8("FRANCE")
-            Inner Join: customer.c_nationkey = n2.n_nationkey
-              Inner Join: supplier.s_nationkey = n1.n_nationkey
-                Inner Join: orders.o_custkey = customer.c_custkey
-                  Inner Join: lineitem.l_orderkey = orders.o_orderkey
-                    Inner Join: supplier.s_suppkey = lineitem.l_suppkey
-                      TableScan: supplier projection=[s_suppkey, s_nationkey]
-                      Filter: lineitem.l_shipdate >= Date32("9131") AND lineitem.l_shipdate <= Date32("9861")
-                        TableScan: lineitem projection=[l_orderkey, l_suppkey, l_extendedprice, l_discount, l_shipdate]
-                    TableScan: orders projection=[o_orderkey, o_custkey]
-                  TableScan: customer projection=[c_custkey, c_nationkey]
-                SubqueryAlias: n1
-                  Filter: nation.n_name = Utf8("FRANCE") OR nation.n_name = Utf8("GERMANY")
-                    TableScan: nation projection=[n_nationkey, n_name]
-              SubqueryAlias: n2
-                Filter: nation.n_name = Utf8("GERMANY") OR nation.n_name = Utf8("FRANCE")
+          Inner Join: customer.c_nationkey = n2.n_nationkey Filter: n1.n_name = Utf8("FRANCE") AND n2.n_name = Utf8("GERMANY") OR n1.n_name = Utf8("GERMANY") AND n2.n_name = Utf8("FRANCE")
+            Inner Join: supplier.s_nationkey = n1.n_nationkey
+              Inner Join: orders.o_custkey = customer.c_custkey
+                Inner Join: lineitem.l_orderkey = orders.o_orderkey
+                  Inner Join: supplier.s_suppkey = lineitem.l_suppkey
+                    TableScan: supplier projection=[s_suppkey, s_nationkey]
+                    Filter: lineitem.l_shipdate >= Date32("9131") AND lineitem.l_shipdate <= Date32("9861")
+                      TableScan: lineitem projection=[l_orderkey, l_suppkey, l_extendedprice, l_discount, l_shipdate]
+                  TableScan: orders projection=[o_orderkey, o_custkey]
+                TableScan: customer projection=[c_custkey, c_nationkey]
+              SubqueryAlias: n1
+                Filter: nation.n_name = Utf8("FRANCE") OR nation.n_name = Utf8("GERMANY")
                   TableScan: nation projection=[n_nationkey, n_name]
+            SubqueryAlias: n2
+              Filter: nation.n_name = Utf8("GERMANY") OR nation.n_name = Utf8("FRANCE")
+                TableScan: nation projection=[n_nationkey, n_name]

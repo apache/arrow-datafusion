@@ -16,17 +16,17 @@
 // under the License.
 
 //! Optimizer rule to eliminate cross join to inner join if join predicates are available in filters.
-use std::collections::HashSet;
 use std::sync::Arc;
 
+use crate::utils::{conjunction, split_conjunction_owned};
 use crate::{utils, OptimizerConfig, OptimizerRule};
-use datafusion_common::{DataFusionError, Result};
+use datafusion_common::{Column, DataFusionError, Result};
 use datafusion_expr::expr::{BinaryExpr, Expr};
 use datafusion_expr::logical_plan::{
-    CrossJoin, Filter, Join, JoinConstraint, JoinType, LogicalPlan, Projection,
+    CrossJoin, Filter, JoinType, LogicalPlan, Projection,
 };
-use datafusion_expr::utils::{can_hash, find_valid_equijoin_key_pair};
-use datafusion_expr::{and, build_join_schema, or, ExprSchemable, Operator};
+use datafusion_expr::utils::{find_valid_equijoin_key_pair, is_valid_join_predicate};
+use datafusion_expr::{build_join_schema, LogicalPlanBuilder, Operator};
 
 #[derive(Default)]
 pub struct EliminateCrossJoin;
@@ -58,8 +58,10 @@ impl OptimizerRule for EliminateCrossJoin {
             LogicalPlan::Filter(filter) => {
                 let input = filter.input.as_ref().clone();
 
-                let mut possible_join_keys: Vec<(Expr, Expr)> = vec![];
                 let mut all_inputs: Vec<LogicalPlan> = vec![];
+                let mut possible_join_predicates: Vec<Expr> =
+                    split_conjunction_owned(filter.predicate.clone());
+
                 match &input {
                     LogicalPlan::Join(join) if (join.join_type == JoinType::Inner) => {
                         // The filter of inner join will lost, skip this rule.
@@ -70,14 +72,14 @@ impl OptimizerRule for EliminateCrossJoin {
 
                         flatten_join_inputs(
                             &input,
-                            &mut possible_join_keys,
+                            &mut possible_join_predicates,
                             &mut all_inputs,
                         )?;
                     }
                     LogicalPlan::CrossJoin(_) => {
                         flatten_join_inputs(
                             &input,
-                            &mut possible_join_keys,
+                            &mut possible_join_predicates,
                             &mut all_inputs,
                         )?;
                     }
@@ -86,19 +88,12 @@ impl OptimizerRule for EliminateCrossJoin {
                     }
                 }
 
-                let predicate = &filter.predicate;
-                // join keys are handled locally
-                let mut all_join_keys: HashSet<(Expr, Expr)> = HashSet::new();
-
-                extract_possible_join_keys(predicate, &mut possible_join_keys)?;
-
                 let mut left = all_inputs.remove(0);
                 while !all_inputs.is_empty() {
                     left = find_inner_join(
                         &left,
                         &mut all_inputs,
-                        &mut possible_join_keys,
-                        &mut all_join_keys,
+                        &mut possible_join_predicates,
                     )?;
                 }
 
@@ -111,20 +106,15 @@ impl OptimizerRule for EliminateCrossJoin {
                     ));
                 }
 
-                // if there are no join keys then do nothing.
-                if all_join_keys.is_empty() {
+                // If the rest predicate is not empty.
+                let other_predicate = conjunction(possible_join_predicates);
+                if let Some(predicate) = other_predicate {
                     Ok(Some(LogicalPlan::Filter(Filter::try_new(
-                        predicate.clone(),
+                        predicate,
                         Arc::new(left),
                     )?)))
                 } else {
-                    // remove join expressions from filter
-                    match remove_join_expressions(predicate, &all_join_keys)? {
-                        Some(filter_expr) => Ok(Some(LogicalPlan::Filter(
-                            Filter::try_new(filter_expr, Arc::new(left))?,
-                        ))),
-                        _ => Ok(Some(left)),
-                    }
+                    Ok(Some(left))
                 }
             }
 
@@ -139,12 +129,24 @@ impl OptimizerRule for EliminateCrossJoin {
 
 fn flatten_join_inputs(
     plan: &LogicalPlan,
-    possible_join_keys: &mut Vec<(Expr, Expr)>,
+    possible_join_predicates: &mut Vec<Expr>,
     all_inputs: &mut Vec<LogicalPlan>,
 ) -> Result<()> {
     let children = match plan {
         LogicalPlan::Join(join) => {
-            possible_join_keys.extend(join.on.clone());
+            let equijoin_predicates: Vec<Expr> = join
+                .on
+                .iter()
+                .map(|(l, r)| Expr::eq(l.clone(), r.clone()))
+                .collect();
+            let non_equijoin_predicates = join
+                .filter
+                .as_ref()
+                .map(|expr| split_conjunction_owned(expr.clone()))
+                .unwrap_or_else(Vec::new);
+            possible_join_predicates.extend(equijoin_predicates);
+            possible_join_predicates.extend(non_equijoin_predicates);
+
             let left = &*(join.left);
             let right = &*(join.right);
             Ok::<Vec<&LogicalPlan>, DataFusionError>(vec![left, right])
@@ -165,13 +167,13 @@ fn flatten_join_inputs(
         match *child {
             LogicalPlan::Join(left_join) => {
                 if left_join.join_type == JoinType::Inner {
-                    flatten_join_inputs(child, possible_join_keys, all_inputs)?;
+                    flatten_join_inputs(child, possible_join_predicates, all_inputs)?;
                 } else {
                     all_inputs.push((*child).clone());
                 }
             }
             LogicalPlan::CrossJoin(_) => {
-                flatten_join_inputs(child, possible_join_keys, all_inputs)?;
+                flatten_join_inputs(child, possible_join_predicates, all_inputs)?;
             }
             _ => all_inputs.push((*child).clone()),
         }
@@ -182,159 +184,138 @@ fn flatten_join_inputs(
 fn find_inner_join(
     left_input: &LogicalPlan,
     rights: &mut Vec<LogicalPlan>,
-    possible_join_keys: &mut Vec<(Expr, Expr)>,
-    all_join_keys: &mut HashSet<(Expr, Expr)>,
+    possible_join_predicates: &mut Vec<Expr>,
 ) -> Result<LogicalPlan> {
+    let mut candidate_right_input: Option<(usize, Vec<Expr>)> = None;
     for (i, right_input) in rights.iter().enumerate() {
-        let mut join_keys = vec![];
+        let predicate_schemas =
+            [left_input.schema().clone(), right_input.schema().clone()];
 
-        for (l, r) in &mut *possible_join_keys {
-            let key_pair = find_valid_equijoin_key_pair(
-                l,
-                r,
-                left_input.schema().clone(),
-                right_input.schema().clone(),
+        // equijoin_flag indicct if join_predicates contains equijoin expr.
+        let (join_predicates, equijoin_flag): (Vec<Expr>, bool) =
+            possible_join_predicates.iter().try_fold(
+                (Vec::<Expr>::new(), false),
+                |(mut join_filters, mut equijoin_flag), expr| {
+                    let is_join_filter =
+                        is_valid_join_predicate(expr, &predicate_schemas)?;
+                    if is_join_filter {
+                        join_filters.push(expr.clone());
+                    }
+
+                    let has_equijoin = match expr {
+                        Expr::BinaryExpr(BinaryExpr {
+                            left,
+                            op: Operator::Eq,
+                            right,
+                        }) => find_valid_equijoin_key_pair(
+                            left,
+                            right,
+                            left_input.schema().clone(),
+                            right_input.schema().clone(),
+                        )?
+                        .is_some(),
+                        _ => false,
+                    };
+
+                    if has_equijoin && !equijoin_flag {
+                        equijoin_flag = !equijoin_flag;
+                    }
+
+                    Result::Ok((join_filters, equijoin_flag))
+                },
             )?;
 
-            // Save join keys
-            match key_pair {
-                Some((valid_l, valid_r)) => {
-                    if can_hash(&valid_l.get_type(left_input.schema())?) {
-                        join_keys.push((valid_l, valid_r));
-                    }
-                }
-                _ => continue,
-            }
-        }
+        // if there are equijoin expr, choose it first.
+        if !join_predicates.is_empty() && equijoin_flag {
+            possible_join_predicates
+                .retain(|expr| join_predicates.iter().all(|filter| expr != filter));
 
-        if !join_keys.is_empty() {
-            all_join_keys.extend(join_keys.clone());
+            let join_filter = conjunction(join_predicates);
             let right_input = rights.remove(i);
-            let join_schema = Arc::new(build_join_schema(
-                left_input.schema(),
-                right_input.schema(),
-                &JoinType::Inner,
-            )?);
 
-            return Ok(LogicalPlan::Join(Join {
-                left: Arc::new(left_input.clone()),
-                right: Arc::new(right_input),
-                join_type: JoinType::Inner,
-                join_constraint: JoinConstraint::On,
-                on: join_keys,
-                filter: None,
-                schema: join_schema,
-                null_equals_null: false,
-            }));
+            return LogicalPlanBuilder::from(left_input.clone())
+                .join(
+                    right_input,
+                    JoinType::Inner,
+                    (Vec::<Column>::new(), Vec::<Column>::new()),
+                    join_filter,
+                )?
+                .build();
+            // let join_schema = Arc::new(build_join_schema(
+            //     left_input.schema(),
+            //     right_input.schema(),
+            //     &JoinType::Inner,
+            // )?);
+
+            // return Ok(LogicalPlan::Join(Join {
+            //     left: Arc::new(left_input.clone()),
+            //     right: Arc::new(right_input),
+            //     join_type: JoinType::Inner,
+            //     join_constraint: JoinConstraint::On,
+            //     on: Vec::<(Expr, Expr)>::new(),
+            //     filter: join_filter,
+            //     schema: join_schema,
+            //     null_equals_null: false,
+            // }));
+        }
+
+        // If there is non equijoin predicate for the left and right,
+        // choose the first plan whose join predicates is not empty.
+        if !join_predicates.is_empty() && candidate_right_input.is_none() {
+            candidate_right_input = Some((i, join_predicates));
         }
     }
-    let right = rights.remove(0);
-    let join_schema = Arc::new(build_join_schema(
-        left_input.schema(),
-        right.schema(),
-        &JoinType::Inner,
-    )?);
 
-    Ok(LogicalPlan::CrossJoin(CrossJoin {
-        left: Arc::new(left_input.clone()),
-        right: Arc::new(right),
-        schema: join_schema,
-    }))
-}
+    if let Some((right_idx, join_filters)) = candidate_right_input {
+        let right_input = rights.remove(right_idx);
+        possible_join_predicates
+            .retain(|expr| join_filters.iter().all(|filter| expr != filter));
+        let join_filter = conjunction(join_filters);
 
-fn intersect(
-    accum: &mut Vec<(Expr, Expr)>,
-    vec1: &[(Expr, Expr)],
-    vec2: &[(Expr, Expr)],
-) {
-    for x1 in vec1.iter() {
-        for x2 in vec2.iter() {
-            if x1.0 == x2.0 && x1.1 == x2.1 || x1.1 == x2.0 && x1.0 == x2.1 {
-                accum.push((x1.0.clone(), x1.1.clone()));
-            }
-        }
-    }
-}
+        LogicalPlanBuilder::from(left_input.clone())
+            .join(
+                right_input,
+                JoinType::Inner,
+                (Vec::<Column>::new(), Vec::<Column>::new()),
+                join_filter,
+            )?
+            .build()
+        // let join_schema = Arc::new(build_join_schema(
+        //     left_input.schema(),
+        //     right_input.schema(),
+        //     &JoinType::Inner,
+        // )?);
 
-/// Extract join keys from a WHERE clause
-fn extract_possible_join_keys(expr: &Expr, accum: &mut Vec<(Expr, Expr)>) -> Result<()> {
-    if let Expr::BinaryExpr(BinaryExpr { left, op, right }) = expr {
-        match op {
-            Operator::Eq => {
-                // Ensure that we don't add the same Join keys multiple times
-                if !(accum.contains(&(*left.clone(), *right.clone()))
-                    || accum.contains(&(*right.clone(), *left.clone())))
-                {
-                    accum.push((*left.clone(), *right.clone()));
-                }
-            }
-            Operator::And => {
-                extract_possible_join_keys(left, accum)?;
-                extract_possible_join_keys(right, accum)?
-            }
-            // Fix for issue#78 join predicates from inside of OR expr also pulled up properly.
-            Operator::Or => {
-                let mut left_join_keys = vec![];
-                let mut right_join_keys = vec![];
+        // Ok(LogicalPlan::Join(Join {
+        //     left: Arc::new(left_input.clone()),
+        //     right: Arc::new(right_input),
+        //     join_type: JoinType::Inner,
+        //     join_constraint: JoinConstraint::On,
+        //     on: Vec::<(Expr, Expr)>::new(),
+        //     filter: join_filter,
+        //     schema: join_schema,
+        //     null_equals_null: false,
+        // }))
+    } else {
+        // if no join predicate exists, choose first with cross join
+        let right = rights.remove(0);
+        let join_schema = Arc::new(build_join_schema(
+            left_input.schema(),
+            right.schema(),
+            &JoinType::Inner,
+        )?);
 
-                extract_possible_join_keys(left, &mut left_join_keys)?;
-                extract_possible_join_keys(right, &mut right_join_keys)?;
-
-                intersect(accum, &left_join_keys, &right_join_keys)
-            }
-            _ => (),
-        };
-    }
-    Ok(())
-}
-
-/// Remove join expressions from a filter expression
-/// Returns Some() when there are few remaining predicates in filter_expr
-/// Returns None otherwise
-fn remove_join_expressions(
-    expr: &Expr,
-    join_keys: &HashSet<(Expr, Expr)>,
-) -> Result<Option<Expr>> {
-    match expr {
-        Expr::BinaryExpr(BinaryExpr { left, op, right }) => match op {
-            Operator::Eq => {
-                if join_keys.contains(&(*left.clone(), *right.clone()))
-                    || join_keys.contains(&(*right.clone(), *left.clone()))
-                {
-                    Ok(None)
-                } else {
-                    Ok(Some(expr.clone()))
-                }
-            }
-            Operator::And => {
-                let l = remove_join_expressions(left, join_keys)?;
-                let r = remove_join_expressions(right, join_keys)?;
-                match (l, r) {
-                    (Some(ll), Some(rr)) => Ok(Some(and(ll, rr))),
-                    (Some(ll), _) => Ok(Some(ll)),
-                    (_, Some(rr)) => Ok(Some(rr)),
-                    _ => Ok(None),
-                }
-            }
-            // Fix for issue#78 join predicates from inside of OR expr also pulled up properly.
-            Operator::Or => {
-                let l = remove_join_expressions(left, join_keys)?;
-                let r = remove_join_expressions(right, join_keys)?;
-                match (l, r) {
-                    (Some(ll), Some(rr)) => Ok(Some(or(ll, rr))),
-                    (Some(ll), _) => Ok(Some(ll)),
-                    (_, Some(rr)) => Ok(Some(rr)),
-                    _ => Ok(None),
-                }
-            }
-            _ => Ok(Some(expr.clone())),
-        },
-        _ => Ok(Some(expr.clone())),
+        Ok(LogicalPlan::CrossJoin(CrossJoin {
+            left: Arc::new(left_input.clone()),
+            right: Arc::new(right),
+            schema: join_schema,
+        }))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use datafusion_common::Column;
     use datafusion_expr::{
         binary_expr, col, lit,
         logical_plan::builder::LogicalPlanBuilder,
@@ -379,10 +360,9 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t2.c < UInt32(20) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(20) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -406,11 +386,16 @@ mod tests {
             ))?
             .build()?;
 
+        // let expected = vec![
+        //     "Filter: t1.a = t2.a OR t2.b = t1.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+        //     "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+        //     "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+        //     "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+        // ];
         let expected = vec![
-            "Filter: t1.a = t2.a OR t2.b = t1.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a = t2.a OR t2.b = t1.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -434,10 +419,9 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t2.c < UInt32(20) AND t2.c = UInt32(10) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(20) AND t1.a = t2.a AND t2.c = UInt32(10) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -465,10 +449,9 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t2.c < UInt32(15) OR t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
         assert_optimized_plan_eq(&plan, expected);
 
@@ -495,11 +478,11 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.b = t2.b AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.b = t2.b AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
+
         assert_optimized_plan_eq(&plan, expected);
 
         Ok(())
@@ -521,11 +504,11 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a OR t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a OR t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
+
         assert_optimized_plan_eq(&plan, expected);
 
         Ok(())
@@ -564,13 +547,12 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t3.c < UInt32(15) AND t3.b < UInt32(15) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Projection: t1.a, t1.b, t1.c, t2.a, t2.b, t2.c, t3.a, t3.b, t3.c [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Inner Join: t3.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t1.a = t3.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "      TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Projection: t1.a, t1.b, t1.c, t2.a, t2.b, t2.c, t3.a, t3.b, t3.c [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t3.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    Inner Join:  Filter: t3.a = t1.a AND t3.c < UInt32(15) AND t3.b < UInt32(15) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -637,17 +619,18 @@ mod tests {
             ))?
             .build()?;
 
+        // the filter of (t1 join t2): t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688).
+        // the filter of (t3 join t4): t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b
+        // the outer filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688)
+        // they are all `OR` expressions, so can not be split.
         let expected = vec![
-            "Filter: t4.c < UInt32(15) OR t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a = t3.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t2.c < UInt32(15) OR t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t4.c < UInt32(15) OR t3.c = UInt32(688) OR t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t3.a = t4.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -712,17 +695,17 @@ mod tests {
             ))?
             .build()?;
 
+        // the filter of (t1 join t2): t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688).
+        // the filter of (t3 join t4): t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b.
+        // the outer filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a OR t4.c = UInt32(688)
         let expected = vec![
-            "Filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a OR t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t2.c < UInt32(15) OR t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t4.c < UInt32(15) OR t3.c = UInt32(688) OR t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t3.a = t4.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a OR t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -787,17 +770,17 @@ mod tests {
             ))?
             .build()?;
 
+        // the filter of (t1 join t2): t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688).
+        // the filter of (t3 join t4): t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b.
+        // the outer filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a OR t4.c = UInt32(688)
         let expected = vec![
-            "Filter: t4.c < UInt32(15) OR t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a = t3.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t2.c < UInt32(15) OR t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a OR t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t1.a = t2.a AND t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a OR t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -866,17 +849,17 @@ mod tests {
             ))?
             .build()?;
 
+        // the filter of (t1 join t2): t1.a = t2.a OR t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688).
+        // the filter of (t3 join t4): t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b.
+        // the outer filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688)
         let expected = vec![
-            "Filter: t4.c < UInt32(15) OR t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a = t3.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t1.a = t2.a OR t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
-            "    Filter: t4.c < UInt32(15) OR t3.c = UInt32(688) OR t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t3.a = t4.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t1.a = t2.a OR t2.c < UInt32(15) OR t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -950,16 +933,17 @@ mod tests {
             ))?
             .build()?;
 
+        // the filter of (t1 join t2): (t1.a = t2.a OR t2.c < UInt32(15)) AND t1.a = t2.a AND t2.c = UInt32(688).
+        // the filter of (t3 join (t1 + t2)): empty.
+        // the outer filter: (t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688)) AND (t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b)
         let expected = vec![
-            "Filter: (t4.c < UInt32(15) OR t4.c = UInt32(688)) AND (t4.c < UInt32(15) OR t3.c = UInt32(688) OR t3.b = t4.b) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t3.a = t4.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Inner Join: t1.a = t3.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Filter: t2.c < UInt32(15) AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "          TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "          TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
-            "      TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: (t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688)) AND (t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    Inner Join:  Filter: (t1.a = t2.a OR t2.c < UInt32(15)) AND t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -1038,15 +1022,17 @@ mod tests {
             ))?
             .build()?;
 
+        // the filter of (t1 join t2): (t1.a = t2.a OR t2.c < UInt32(15)) AND t1.a = t2.a AND t2.c = UInt32(688).
+        // the filter of (t3 join (t1 + t2)): empty.
+        // the outer filter: (t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688)) AND (t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b)
         let expected = vec![
-            "Filter: (t4.c < UInt32(15) OR t4.c = UInt32(688)) AND (t4.c < UInt32(15) OR t3.c = UInt32(688) OR t3.b = t4.b) AND t2.c < UInt32(15) AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t3.a = t4.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Inner Join: t1.a = t3.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t1.a = t2.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
-            "      TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: (t3.a = t1.a AND t4.c < UInt32(15) OR t3.a = t1.a AND t4.c = UInt32(688)) AND (t3.a = t4.a AND t4.c < UInt32(15) OR t3.a = t4.a AND t3.c = UInt32(688) OR t3.a = t4.a AND t3.b = t4.b) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    Inner Join:  Filter: (t1.a = t2.a OR t2.c < UInt32(15)) AND t1.a = t2.a AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t4 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -1070,10 +1056,10 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t2.c < UInt32(20) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a + UInt32(100) = t2.a * UInt32(2) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]"];
+            "Inner Join:  Filter: t1.a + UInt32(100) = t2.a * UInt32(2) AND t2.c < UInt32(20) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+        ];
 
         assert_optimized_plan_eq(&plan, expected);
 
@@ -1097,10 +1083,9 @@ mod tests {
             .build()?;
 
         let expected = vec![
-              "Filter: t1.a + UInt32(100) = t2.a * UInt32(2) OR t2.b = t1.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-              "  CrossJoin: [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-              "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-              "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a + UInt32(100) = t2.a * UInt32(2) OR t2.b = t1.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -1125,10 +1110,9 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t2.c < UInt32(20) AND t2.c = UInt32(10) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Inner Join: t1.a + UInt32(100) = t2.a * UInt32(2) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a + UInt32(100) = t2.a * UInt32(2) AND t2.c < UInt32(20) AND t1.a + UInt32(100) = t2.a * UInt32(2) AND t2.c = UInt32(10) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -1153,10 +1137,9 @@ mod tests {
             .build()?;
 
         let expected = vec![
-        "Filter: t2.c < UInt32(15) OR t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-        "  Inner Join: t1.a + UInt32(100) = t2.a * UInt32(2) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-        "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-        "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Inner Join:  Filter: t1.a + UInt32(100) = t2.a * UInt32(2) AND t2.c < UInt32(15) OR t1.a + UInt32(100) = t2.a * UInt32(2) AND t2.c = UInt32(688) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);
@@ -1190,13 +1173,45 @@ mod tests {
             .build()?;
 
         let expected = vec![
-            "Filter: t3.c < UInt32(15) AND t3.b < UInt32(15) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "  Projection: t1.a, t1.b, t1.c, t2.a, t2.b, t2.c, t3.a, t3.b, t3.c [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "    Inner Join: t3.a + UInt32(100) = t2.a * UInt32(2) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "      Inner Join: t1.a * UInt32(2) = t3.a + UInt32(100) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
-            "        TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
-            "      TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "Projection: t1.a, t1.b, t1.c, t2.a, t2.b, t2.c, t3.a, t3.b, t3.c [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t3.a + UInt32(100) = t2.a * UInt32(2) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    Inner Join:  Filter: t3.a + UInt32(100) = t1.a * UInt32(2) AND t3.c < UInt32(15) AND t3.b < UInt32(15) [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "      TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+        ];
+
+        assert_optimized_plan_eq(&plan, expected);
+
+        Ok(())
+    }
+
+    #[test]
+    fn inner_join_with_join_filter() -> Result<()> {
+        let t1 = test_table_scan_with_name("t1")?;
+        let t2 = test_table_scan_with_name("t2")?;
+        let t3 = test_table_scan_with_name("t3")?;
+
+        let t1_join_t2 = LogicalPlanBuilder::from(t1)
+            .join(
+                t2,
+                JoinType::Inner,
+                (Vec::<Column>::new(), Vec::<Column>::new()),
+                Some(col("t1.b").gt(col("t2.b"))),
+            )?
+            .build()?;
+
+        let plan = LogicalPlanBuilder::from(t1_join_t2)
+            .cross_join(t3)?
+            .filter((col("t1.a").gt(col("t2.a"))).and(col("t1.c").lt(col("t3.a"))))?
+            .build()?;
+
+        let expected = vec![
+            "Inner Join:  Filter: t1.c < t3.a [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "  Inner Join:  Filter: t1.a > t2.a AND t1.b > t2.b [a:UInt32, b:UInt32, c:UInt32, a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]",
+            "    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]",
+            "  TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]",
         ];
 
         assert_optimized_plan_eq(&plan, expected);

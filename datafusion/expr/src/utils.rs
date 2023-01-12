@@ -971,6 +971,18 @@ fn check_all_column_from_schema(columns: &HashSet<Column>, schema: DFSchemaRef) 
         .all(|column| schema.index_of_column(column).is_ok())
 }
 
+/// Check whether all columns are from the schemas.
+pub fn is_valid_join_predicate(expr: &Expr, schemas: &[DFSchemaRef]) -> Result<bool> {
+    let cols = expr.to_columns()?;
+    let is_valid = cols.iter().all(|col| {
+        schemas
+            .iter()
+            .any(|schema| schema.index_of_column(col).is_ok())
+    });
+
+    Ok(is_valid)
+}
+
 /// Give two sides of the equijoin predicate, return a valid join key pair.
 /// If there is no valid join key pair, return None.
 ///

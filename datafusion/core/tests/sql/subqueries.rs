@@ -50,21 +50,20 @@ where c_acctbal < (
 
     let plan = dataframe.into_optimized_plan().unwrap();
     let actual = format!("{}", plan.display_indent());
-    let expected = r#"Sort: customer.c_custkey ASC NULLS LAST
-  Projection: customer.c_custkey
-    Filter: CAST(customer.c_acctbal AS Decimal128(25, 2)) < __scalar_sq_1.__value
-      Inner Join: customer.c_custkey = __scalar_sq_1.o_custkey
-        TableScan: customer projection=[c_custkey, c_acctbal]
-        SubqueryAlias: __scalar_sq_1
-          Projection: orders.o_custkey, SUM(orders.o_totalprice) AS __value
-            Aggregate: groupBy=[[orders.o_custkey]], aggr=[[SUM(orders.o_totalprice)]]
-              Filter: CAST(orders.o_totalprice AS Decimal128(25, 2)) < __scalar_sq_2.__value
-                Inner Join: orders.o_orderkey = __scalar_sq_2.l_orderkey
-                  TableScan: orders projection=[o_orderkey, o_custkey, o_totalprice]
-                  SubqueryAlias: __scalar_sq_2
-                    Projection: lineitem.l_orderkey, SUM(lineitem.l_extendedprice) AS price AS __value
-                      Aggregate: groupBy=[[lineitem.l_orderkey]], aggr=[[SUM(lineitem.l_extendedprice)]]
-                        TableScan: lineitem projection=[l_orderkey, l_extendedprice]"#;
+
+    let expected = "Sort: customer.c_custkey ASC NULLS LAST\
+    \n  Projection: customer.c_custkey\
+    \n    Inner Join: customer.c_custkey = __scalar_sq_1.o_custkey Filter: CAST(customer.c_acctbal AS Decimal128(25, 2)) < __scalar_sq_1.__value\
+    \n      TableScan: customer projection=[c_custkey, c_acctbal]\
+    \n      SubqueryAlias: __scalar_sq_1\
+    \n        Projection: orders.o_custkey, SUM(orders.o_totalprice) AS __value\
+    \n          Aggregate: groupBy=[[orders.o_custkey]], aggr=[[SUM(orders.o_totalprice)]]\
+    \n            Inner Join: orders.o_orderkey = __scalar_sq_2.l_orderkey Filter: CAST(orders.o_totalprice AS Decimal128(25, 2)) < __scalar_sq_2.__value\
+    \n              TableScan: orders projection=[o_orderkey, o_custkey, o_totalprice]\
+    \n              SubqueryAlias: __scalar_sq_2\
+    \n                Projection: lineitem.l_orderkey, SUM(lineitem.l_extendedprice) AS price AS __value\
+    \n                  Aggregate: groupBy=[[lineitem.l_orderkey]], aggr=[[SUM(lineitem.l_extendedprice)]]\
+    \n                    TableScan: lineitem projection=[l_orderkey, l_extendedprice]";
     assert_eq!(actual, expected);
 
     Ok(())

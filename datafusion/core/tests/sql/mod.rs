@@ -692,6 +692,40 @@ fn create_sort_merge_join_datatype_context() -> Result<SessionContext> {
     Ok(ctx)
 }
 
+fn create_muti_table_join_context() -> Result<SessionContext> {
+    let ctx = SessionContext::with_config(
+        SessionConfig::new()
+            .with_repartition_joins(false)
+            .with_target_partitions(2)
+            .with_batch_size(4096),
+    );
+
+    let t1_schema = Arc::new(Schema::new(vec![
+        Field::new("t1_id", DataType::UInt32, true),
+        Field::new("t1_name", DataType::Utf8, true),
+        Field::new("t1_int", DataType::UInt32, true),
+    ]));
+    let t1_data = RecordBatch::new_empty(t1_schema);
+    let t2_schema = Arc::new(Schema::new(vec![
+        Field::new("t2_id", DataType::UInt32, true),
+        Field::new("t2_name", DataType::Utf8, true),
+        Field::new("t2_int", DataType::UInt32, true),
+    ]));
+    let t2_data = RecordBatch::new_empty(t2_schema);
+    let t3_schema = Arc::new(Schema::new(vec![
+        Field::new("t3_id", DataType::UInt32, true),
+        Field::new("t3_name", DataType::Utf8, true),
+        Field::new("t3_int", DataType::UInt32, true),
+    ]));
+    let t3_data = RecordBatch::new_empty(t3_schema);
+
+    ctx.register_batch("t1", t1_data)?;
+    ctx.register_batch("t2", t2_data)?;
+    ctx.register_batch("t3", t3_data)?;
+
+    Ok(ctx)
+}
+
 fn get_tpch_table_schema(table: &str) -> Schema {
     match table {
         "customer" => Schema::new(vec![

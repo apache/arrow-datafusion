@@ -152,11 +152,46 @@ impl OptimizerRule for RewriteDisjunctivePredicate {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 enum Predicate {
     And { args: Vec<Predicate> },
     Or { args: Vec<Predicate> },
     Other { expr: Box<Expr> },
+}
+
+impl PartialEq<Predicate> for Predicate {
+    fn eq(&self, other: &Predicate) -> bool {
+        match (self, other) {
+            // For BinaryExpr, A = B should be the same as B = A
+            // when extract A = B in expr like (A = B and C > D) OR (B = A and C = E).
+            (Predicate::Other { expr: l }, Predicate::Other { expr: r }) => {
+                match (l.as_ref(), r.as_ref()) {
+                    (
+                        Expr::BinaryExpr(BinaryExpr {
+                            left: ll,
+                            op: l_op,
+                            right: lr,
+                        }),
+                        Expr::BinaryExpr(BinaryExpr {
+                            left: rl,
+                            op: r_op,
+                            right: rr,
+                        }),
+                    ) => {
+                        l_op == r_op && ((ll == rl && lr == rr) || (ll == rr && lr == rl))
+                    }
+                    _ => false,
+                }
+            }
+            (Predicate::And { args: l_args }, Predicate::And { args: r_args }) => {
+                l_args == r_args
+            }
+            (Predicate::Or { args: l_args }, Predicate::Or { args: r_args }) => {
+                l_args == r_args
+            }
+            _ => false,
+        }
+    }
 }
 
 fn predicate(expr: &Expr) -> Result<Predicate> {
@@ -423,5 +458,17 @@ mod tests {
         let rewritten_expr = normalize_predicate(rewritten_predicate);
         assert_eq!(rewritten_expr, and(equi_expr, or(gt_expr, lt_expr)));
         Ok(())
+    }
+
+    #[test]
+    fn test_ignore_binay_order() {
+        let equi_expr1 = col("t1.a").eq(col("t2.b"));
+        let equi_expr2 = col("t1.b").eq(col("t2.a"));
+
+        let gt_expr = col("t1.c").gt(lit(ScalarValue::Int8(Some(1))));
+        let lt_expr = col("t1.d").lt(lit(ScalarValue::Int8(Some(2))));
+        let expr = or(and(equi_expr1, gt_expr), and(equi_expr2, lt_expr));
+
+        println!("{:?}", rewrite_predicate(predicate(&expr).unwrap()));
     }
 }

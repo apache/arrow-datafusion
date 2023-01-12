@@ -3,14 +3,13 @@ Sort: custsale.cntrycode ASC NULLS LAST
     Aggregate: groupBy=[[custsale.cntrycode]], aggr=[[COUNT(UInt8(1)), SUM(custsale.c_acctbal)]]
       SubqueryAlias: custsale
         Projection: substr(customer.c_phone, Int64(1), Int64(2)) AS cntrycode, customer.c_acctbal
-          Filter: CAST(customer.c_acctbal AS Decimal128(19, 6)) > __scalar_sq_1.__value
-            CrossJoin:
-              LeftAnti Join: customer.c_custkey = orders.o_custkey
-                Filter: substr(customer.c_phone, Int64(1), Int64(2)) IN ([Utf8("13"), Utf8("31"), Utf8("23"), Utf8("29"), Utf8("30"), Utf8("18"), Utf8("17")])
-                  TableScan: customer projection=[c_custkey, c_phone, c_acctbal]
-                TableScan: orders projection=[o_custkey]
-              SubqueryAlias: __scalar_sq_1
-                Projection: AVG(customer.c_acctbal) AS __value
-                  Aggregate: groupBy=[[]], aggr=[[AVG(customer.c_acctbal)]]
-                    Filter: customer.c_acctbal > Decimal128(Some(0),15,2) AND substr(customer.c_phone, Int64(1), Int64(2)) IN ([Utf8("13"), Utf8("31"), Utf8("23"), Utf8("29"), Utf8("30"), Utf8("18"), Utf8("17")])
-                      TableScan: customer projection=[c_phone, c_acctbal]
+          Inner Join:  Filter: CAST(customer.c_acctbal AS Decimal128(19, 6)) > __scalar_sq_1.__value
+            LeftAnti Join: customer.c_custkey = orders.o_custkey
+              Filter: substr(customer.c_phone, Int64(1), Int64(2)) IN ([Utf8("13"), Utf8("31"), Utf8("23"), Utf8("29"), Utf8("30"), Utf8("18"), Utf8("17")])
+                TableScan: customer projection=[c_custkey, c_phone, c_acctbal]
+              TableScan: orders projection=[o_custkey]
+            SubqueryAlias: __scalar_sq_1
+              Projection: AVG(customer.c_acctbal) AS __value
+                Aggregate: groupBy=[[]], aggr=[[AVG(customer.c_acctbal)]]
+                  Filter: customer.c_acctbal > Decimal128(Some(0),15,2) AND substr(customer.c_phone, Int64(1), Int64(2)) IN ([Utf8("13"), Utf8("31"), Utf8("23"), Utf8("29"), Utf8("30"), Utf8("18"), Utf8("17")])
+                    TableScan: customer projection=[c_phone, c_acctbal]
