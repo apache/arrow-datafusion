@@ -127,7 +127,7 @@ impl FileFormat for CsvFormat {
 
         for object in objects {
             // stream to only read as many rows as needed into memory
-            let stream = read_to_delimited_chunks(store, object).await;
+            let stream = self.read_to_delimited_chunks(store, object).await;
             let (schema, records_read) = self
                 .infer_schema_from_stream(records_to_read, stream)
                 .await?;
@@ -168,31 +168,42 @@ impl FileFormat for CsvFormat {
     }
 }
 
-/// Return a newline delimited stream from the specified file on
-/// object store
-///
-/// Each returned `Bytes` has a whole number of newline delimited rows
-async fn read_to_delimited_chunks(
-    store: &Arc<dyn ObjectStore>,
-    object: &ObjectMeta,
-) -> impl Stream<Item = Result<Bytes>> {
-    // stream to only read as many rows as needed into memory
-    let stream = store
-        .get(&object.location)
-        .await
-        .map_err(DataFusionError::ObjectStore);
-
-    match stream {
-        Ok(s) => newline_delimited_stream(
-            s.into_stream()
-                .map_err(|e| DataFusionError::External(Box::new(e))),
-        )
-        .left_stream(),
-        Err(e) => futures::stream::iter(vec![Err(e)]).right_stream(),
-    }
-}
-
 impl CsvFormat {
+    /// Return a newline delimited stream from the specified file on
+    /// object store, decompressing if necessary
+    ///
+    /// Each returned `Bytes` has a whole number of newline delimited rows
+    async fn read_to_delimited_chunks(
+        &self,
+        store: &Arc<dyn ObjectStore>,
+        object: &ObjectMeta,
+    ) -> impl Stream<Item = Result<Bytes>> {
+        let file_compression_type = self.file_compression_type.to_owned();
+        // stream to only read as many rows as needed into memory
+        let stream = store
+            .get(&object.location)
+            .await
+            .map_err(DataFusionError::ObjectStore);
+
+        match stream {
+            Ok(s) => {
+                let file_stream = s.into_stream().map_err(DataFusionError::ObjectStore);
+                let decoder = file_compression_type
+                    .convert_stream(file_stream)
+                    .map_err(|e| DataFusionError::External(Box::new(e)));
+                match decoder {
+                    Ok(decoded_stream) => newline_delimited_stream(
+                        decoded_stream
+                            .map_err(|e| DataFusionError::External(Box::new(e))),
+                    )
+                    .left_stream(),
+                    Err(e) => futures::stream::iter(vec![Err(e)]).right_stream(),
+                }
+            }
+            Err(e) => futures::stream::iter(vec![Err(e)]).right_stream(),
+        }
+    }
+
     /// Return the inferred schema reading up to records_to_read from a
     /// stream of delimited chunks returning the inferred schema and the
     /// number of lines that were read
@@ -211,7 +222,7 @@ impl CsvFormat {
         while let Some(chunk) = stream.next().await.transpose()? {
             let (Schema { fields, .. }, records_read) =
                 arrow::csv::reader::infer_reader_schema(
-                    self.file_compression_type.convert_read(chunk.reader())?,
+                    chunk.reader(),
                     self.delimiter,
                     Some(records_to_read),
                     // only consider header for first chunk
