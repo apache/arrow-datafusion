@@ -31,8 +31,10 @@ use arrow::compute::kernels::comparison::{
     ilike_utf8, like_utf8, nilike_utf8, nlike_utf8,
 };
 use arrow::compute::kernels::comparison::{
-    ilike_utf8_scalar, like_utf8_scalar, nilike_utf8_scalar, nlike_utf8_scalar,
+    ilike_utf8_scalar_dyn, like_utf8_scalar_dyn, nilike_utf8_scalar_dyn,
+    nlike_utf8_scalar_dyn,
 };
+use datafusion_expr::type_coercion::binary::like_coercion;
 
 // Like expression
 #[derive(Debug)]
@@ -204,13 +206,8 @@ impl PartialEq<dyn Any> for LikeExpr {
 
 macro_rules! binary_string_array_op_scalar {
     ($LEFT:expr, $RIGHT:expr, $OP:ident, $OP_TYPE:expr) => {{
-        let result: Result<Arc<dyn Array>> = match $LEFT.data_type() {
-            DataType::Utf8 => compute_utf8_op_scalar!($LEFT, $RIGHT, $OP, StringArray, $OP_TYPE),
-            other => Err(DataFusionError::Internal(format!(
-                "Data type {:?} not supported for scalar operation '{}' on string array",
-                other, stringify!($OP)
-            ))),
-        };
+        let result: Result<Arc<dyn Array>> =
+            compute_utf8_op_scalar_dyn!($LEFT, $RIGHT, $OP, $OP_TYPE);
         Some(result)
     }};
 }
@@ -276,9 +273,9 @@ pub fn like(
 ) -> Result<Arc<dyn PhysicalExpr>> {
     let expr_type = &expr.data_type(input_schema)?;
     let pattern_type = &pattern.data_type(input_schema)?;
-    if !expr_type.eq(pattern_type) {
+    if like_coercion(expr_type, pattern_type).is_none() {
         return Err(DataFusionError::Internal(format!(
-            "The type of {expr_type} AND {pattern_type} of like physical should be same"
+            "The type of {expr_type} AND {pattern_type} of like physical must be coercible"
         )));
     }
     Ok(Arc::new(LikeExpr::new(

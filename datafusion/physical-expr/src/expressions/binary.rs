@@ -216,34 +216,29 @@ macro_rules! compute_utf8_op {
 }
 
 /// Invoke a compute kernel on a data array and a scalar value
-macro_rules! compute_utf8_op_scalar {
-    ($LEFT:expr, $RIGHT:expr, $OP:ident, $DT:ident, $OP_TYPE:expr) => {{
-        let ll = $LEFT
-            .as_any()
-            .downcast_ref::<$DT>()
-            .expect("compute_op failed to downcast array");
-        if let ScalarValue::Utf8(Some(string_value)) = $RIGHT {
-            Ok(Arc::new(paste::expr! {[<$OP _utf8_scalar>]}(
-                &ll,
+macro_rules! compute_utf8_op_dyn_scalar {
+    ($LEFT:expr, $RIGHT:expr, $OP:ident, $OP_TYPE:expr) => {{
+        if let Some(string_value) = $RIGHT {
+            Ok(Arc::new(paste::expr! {[<$OP _dyn_utf8_scalar>]}(
+                $LEFT,
                 &string_value,
             )?))
-        } else if $RIGHT.is_null() {
-            Ok(Arc::new(new_null_array($OP_TYPE, $LEFT.len())))
         } else {
-            Err(DataFusionError::Internal(format!(
-                "compute_utf8_op_scalar for '{}' failed to cast literal value {}",
-                stringify!($OP),
-                $RIGHT
-            )))
+            // when the $RIGHT is a NULL, generate a NULL array of $OP_TYPE
+            Ok(Arc::new(new_null_array($OP_TYPE, $LEFT.len())))
         }
     }};
 }
 
 /// Invoke a compute kernel on a data array and a scalar value
-macro_rules! compute_utf8_op_dyn_scalar {
+///
+/// NOTE: This differs from [compute_utf8_op_dyn_scalar] because the naming
+/// convention used for dynamic type handling for the string comparison
+/// functions is `<op>_utf8_scalar_dyn` instead of `<op>_dyn_utf8_scalar`.
+macro_rules! compute_utf8_op_scalar_dyn {
     ($LEFT:expr, $RIGHT:expr, $OP:ident, $OP_TYPE:expr) => {{
-        if let Some(string_value) = $RIGHT {
-            Ok(Arc::new(paste::expr! {[<$OP _dyn_utf8_scalar>]}(
+        if let ScalarValue::Utf8(Some(string_value)) = $RIGHT {
+            Ok(Arc::new(paste::expr! {[<$OP _utf8_scalar_dyn>]}(
                 $LEFT,
                 &string_value,
             )?))
