@@ -56,6 +56,8 @@ pub enum TypeSignature {
     Any(usize),
     /// One of a list of signatures
     OneOf(Vec<TypeSignature>),
+    /// Arbitrary number of arguments of arbitrary types
+    Arbitrary,
 }
 
 ///The Signature of a function defines its supported input types as well as its volatility.

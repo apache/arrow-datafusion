@@ -329,6 +329,8 @@ impl OptimizerRule for PushDownProjection {
                     let new_proj =
                         plan.with_new_inputs(&[filter.input.as_ref().clone()])?;
                     child_plan.with_new_inputs(&[new_proj])?
+                } else if filter.predicate.contains_hidden_columns() {
+                    return Ok(None);
                 } else {
                     let mut required_columns = HashSet::new();
                     exprlist_to_columns(&projection.expr, &mut required_columns)?;

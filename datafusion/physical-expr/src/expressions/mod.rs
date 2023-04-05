@@ -52,7 +52,6 @@ pub use crate::aggregate::correlation::Correlation;
 pub use crate::aggregate::count::Count;
 pub use crate::aggregate::count_distinct::DistinctCount;
 pub use crate::aggregate::covariance::{Covariance, CovariancePop};
-pub use crate::aggregate::grouping::Grouping;
 pub use crate::aggregate::median::Median;
 pub use crate::aggregate::min_max::{Max, Min};
 pub use crate::aggregate::min_max::{MaxAccumulator, MinAccumulator};
@@ -77,7 +76,7 @@ pub use case::{case, CaseExpr};
 pub use cast::{
     cast, cast_column, cast_with_options, CastExpr, DEFAULT_DATAFUSION_CAST_OPTIONS,
 };
-pub use column::{col, Column, UnKnownColumn};
+pub use column::{col, Column, HiddenColumn, UnKnownColumn};
 pub use datetime::DateTimeIntervalExpr;
 pub use get_indexed_field::GetIndexedFieldExpr;
 pub use in_list::{in_list, InListExpr};

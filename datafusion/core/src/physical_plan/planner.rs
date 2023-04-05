@@ -68,11 +68,10 @@ use datafusion_expr::logical_plan::builder::wrap_projection_for_join_if_necessar
 use datafusion_expr::{logical_plan, StringifiedPlan};
 use datafusion_expr::{WindowFrame, WindowFrameBound};
 use datafusion_optimizer::utils::unalias;
-use datafusion_physical_expr::expressions::Literal;
+use datafusion_physical_expr::expressions::{HiddenColumn, Literal};
 use datafusion_sql::utils::window_expr_common_partition_keys;
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt, TryStreamExt};
-use itertools::Itertools;
 use log::{debug, trace};
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -334,6 +333,8 @@ fn create_physical_name(e: &Expr, is_first_expr: bool) -> Result<String> {
                 Ok(format!("{expr} SIMILAR TO {pattern}{escape}"))
             }
         }
+        Expr::HiddenColumn(_dt, c) => Ok(format!("#{}", c)),
+        Expr::HiddenExpr(expr, _) => Ok(create_physical_name(expr, false)?),
         Expr::Sort { .. } => Err(DataFusionError::Internal(
             "Create physical name does not support sort expression".to_string(),
         )),
@@ -670,7 +671,7 @@ impl DefaultPhysicalPlanner {
                         final_group
                             .iter()
                             .enumerate()
-                            .map(|(i, expr)| (expr.clone(), groups.expr()[i].1.clone()))
+                            .map(|(i, expr)| (expr.clone(), groups.result_expr()[i].1.clone()))
                             .collect()
                     );
 
@@ -1242,20 +1243,12 @@ impl DefaultPhysicalPlanner {
                         session_state,
                     )
                 }
-                Expr::GroupingSet(GroupingSet::Cube(exprs)) => create_cube_physical_expr(
-                    exprs,
-                    input_dfschema,
-                    input_schema,
-                    session_state,
-                ),
-                Expr::GroupingSet(GroupingSet::Rollup(exprs)) => {
-                    create_rollup_physical_expr(
-                        exprs,
-                        input_dfschema,
-                        input_schema,
-                        session_state,
-                    )
-                }
+                Expr::GroupingSet(GroupingSet::Cube(_exprs)) => Err(DataFusionError::Internal(
+                    "Unsupported logical plan: GroupingSet::Cube should be replaced to GroupingSet::GroupingSets".to_string(),
+                )),
+                Expr::GroupingSet(GroupingSet::Rollup(_exprs)) => Err(DataFusionError::Internal(
+                    "Unsupported logical plan: GroupingSet::Rollup should be replaced to GroupingSet::GroupingSets".to_string(),
+                )),
                 expr => Ok(PhysicalGroupBy::new_single(vec![tuple_err((
                     self.create_physical_expr(
                         expr,
@@ -1304,143 +1297,79 @@ fn merge_grouping_set_physical_expr(
     session_state: &SessionState,
 ) -> Result<PhysicalGroupBy> {
     let num_groups = grouping_sets.len();
-    let mut all_exprs: Vec<Expr> = vec![];
-    let mut grouping_set_expr: Vec<(Arc<dyn PhysicalExpr>, String)> = vec![];
-    let mut null_exprs: Vec<(Arc<dyn PhysicalExpr>, String)> = vec![];
+    let mut all_normal_exprs: Vec<Expr> = vec![];
+    let mut all_hidden_result_exprs: Vec<Expr> = vec![];
+
+    let mut grouping_set_phy_expr: Vec<(Arc<dyn PhysicalExpr>, String)> = vec![];
+    let mut hidden_grouping_set_phy_expr: Vec<(Arc<dyn PhysicalExpr>, String)> = vec![];
+    let mut null_phy_exprs: Vec<(Arc<dyn PhysicalExpr>, String)> = vec![];
+
+    let mut hidden_grouping_set_result_phy_expr: Vec<(Arc<dyn PhysicalExpr>, String)> =
+        vec![];
+    let mut grouping_set_result_phy_expr: Vec<(Arc<dyn PhysicalExpr>, String)> = vec![];
 
     for expr in grouping_sets.iter().flatten() {
-        if !all_exprs.contains(expr) {
-            all_exprs.push(expr.clone());
+        if let Expr::HiddenExpr(first, second) = expr {
+            if let Expr::HiddenColumn(dt, _) = second.as_ref() {
+                hidden_grouping_set_phy_expr.push(get_physical_expr_pair(
+                    first,
+                    input_dfschema,
+                    input_schema,
+                    session_state,
+                )?);
 
-            grouping_set_expr.push(get_physical_expr_pair(
+                if !all_hidden_result_exprs.contains(second) {
+                    all_hidden_result_exprs.push(*second.clone());
+                    let hidden_column_name = second.display_name()?;
+                    // The second element in the hidden expr should be converted to a physic HiddenColumn
+                    hidden_grouping_set_result_phy_expr.push((
+                        Arc::new(HiddenColumn::new(&hidden_column_name, dt)),
+                        hidden_column_name,
+                    ));
+                }
+            } else {
+                return Err(DataFusionError::Internal(
+                    "The second part of the Expr::HiddenExpr should be a Expr::HiddenColumn"
+                        .to_string(),
+                ));
+            }
+        } else if !all_normal_exprs.contains(expr) {
+            all_normal_exprs.push(expr.clone());
+
+            let phy_expr = get_physical_expr_pair(
+                expr,
+                input_dfschema,
+                input_schema,
+                session_state,
+            )?;
+            grouping_set_phy_expr.push(phy_expr.clone());
+            null_phy_exprs.push(get_null_physical_expr_pair(
                 expr,
                 input_dfschema,
                 input_schema,
                 session_state,
             )?);
-
-            null_exprs.push(get_null_physical_expr_pair(
-                expr,
-                input_dfschema,
-                input_schema,
-                session_state,
-            )?);
+            grouping_set_result_phy_expr.push(phy_expr);
         }
     }
+    grouping_set_result_phy_expr.append(&mut hidden_grouping_set_result_phy_expr);
 
     let mut merged_sets: Vec<Vec<bool>> = Vec::with_capacity(num_groups);
-
     for expr_group in grouping_sets.iter() {
-        let group: Vec<bool> = all_exprs
+        let group: Vec<bool> = all_normal_exprs
             .iter()
             .map(|expr| !expr_group.contains(expr))
             .collect();
-
         merged_sets.push(group)
     }
 
     Ok(PhysicalGroupBy::new(
-        grouping_set_expr,
-        null_exprs,
+        grouping_set_phy_expr,
+        hidden_grouping_set_phy_expr,
+        grouping_set_result_phy_expr,
+        null_phy_exprs,
         merged_sets,
     ))
-}
-
-/// Expand and align a CUBE expression. This is a special case of GROUPING SETS
-/// (see https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-GROUPING-SETS)
-fn create_cube_physical_expr(
-    exprs: &[Expr],
-    input_dfschema: &DFSchema,
-    input_schema: &Schema,
-    session_state: &SessionState,
-) -> Result<PhysicalGroupBy> {
-    let num_of_exprs = exprs.len();
-    let num_groups = num_of_exprs * num_of_exprs;
-
-    let mut null_exprs: Vec<(Arc<dyn PhysicalExpr>, String)> =
-        Vec::with_capacity(num_of_exprs);
-    let mut all_exprs: Vec<(Arc<dyn PhysicalExpr>, String)> =
-        Vec::with_capacity(num_of_exprs);
-
-    for expr in exprs {
-        null_exprs.push(get_null_physical_expr_pair(
-            expr,
-            input_dfschema,
-            input_schema,
-            session_state,
-        )?);
-
-        all_exprs.push(get_physical_expr_pair(
-            expr,
-            input_dfschema,
-            input_schema,
-            session_state,
-        )?)
-    }
-
-    let mut groups: Vec<Vec<bool>> = Vec::with_capacity(num_groups);
-
-    groups.push(vec![false; num_of_exprs]);
-
-    for null_count in 1..=num_of_exprs {
-        for null_idx in (0..num_of_exprs).combinations(null_count) {
-            let mut next_group: Vec<bool> = vec![false; num_of_exprs];
-            null_idx.into_iter().for_each(|i| next_group[i] = true);
-            groups.push(next_group);
-        }
-    }
-
-    Ok(PhysicalGroupBy::new(all_exprs, null_exprs, groups))
-}
-
-/// Expand and align a ROLLUP expression. This is a special case of GROUPING SETS
-/// (see https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-GROUPING-SETS)
-fn create_rollup_physical_expr(
-    exprs: &[Expr],
-    input_dfschema: &DFSchema,
-    input_schema: &Schema,
-    session_state: &SessionState,
-) -> Result<PhysicalGroupBy> {
-    let num_of_exprs = exprs.len();
-
-    let mut null_exprs: Vec<(Arc<dyn PhysicalExpr>, String)> =
-        Vec::with_capacity(num_of_exprs);
-    let mut all_exprs: Vec<(Arc<dyn PhysicalExpr>, String)> =
-        Vec::with_capacity(num_of_exprs);
-
-    let mut groups: Vec<Vec<bool>> = Vec::with_capacity(num_of_exprs + 1);
-
-    for expr in exprs {
-        null_exprs.push(get_null_physical_expr_pair(
-            expr,
-            input_dfschema,
-            input_schema,
-            session_state,
-        )?);
-
-        all_exprs.push(get_physical_expr_pair(
-            expr,
-            input_dfschema,
-            input_schema,
-            session_state,
-        )?)
-    }
-
-    for total in 0..=num_of_exprs {
-        let mut group: Vec<bool> = Vec::with_capacity(num_of_exprs);
-
-        for index in 0..num_of_exprs {
-            if index < total {
-                group.push(false);
-            } else {
-                group.push(true);
-            }
-        }
-
-        groups.push(group)
-    }
-
-    Ok(PhysicalGroupBy::new(all_exprs, null_exprs, groups))
 }
 
 /// For a given logical expr, get a properly typed NULL ScalarValue physical expression
@@ -1897,60 +1826,6 @@ mod tests {
         // the cast here is implicit so has CastOptions with safe=true
         let expected = "BinaryExpr { left: Column { name: \"c7\", index: 2 }, op: Lt, right: Literal { value: Int64(5) } }";
         assert!(format!("{exec_plan:?}").contains(expected));
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_create_cube_expr() -> Result<()> {
-        let logical_plan = test_csv_scan().await?.build()?;
-
-        let plan = plan(&logical_plan).await?;
-
-        let exprs = vec![col("c1"), col("c2"), col("c3")];
-
-        let physical_input_schema = plan.schema();
-        let physical_input_schema = physical_input_schema.as_ref();
-        let logical_input_schema = logical_plan.schema();
-        let session_state = make_session_state();
-
-        let cube = create_cube_physical_expr(
-            &exprs,
-            logical_input_schema,
-            physical_input_schema,
-            &session_state,
-        );
-
-        let expected = r#"Ok(PhysicalGroupBy { expr: [(Column { name: "c1", index: 0 }, "c1"), (Column { name: "c2", index: 1 }, "c2"), (Column { name: "c3", index: 2 }, "c3")], null_expr: [(Literal { value: Utf8(NULL) }, "c1"), (Literal { value: Int64(NULL) }, "c2"), (Literal { value: Int64(NULL) }, "c3")], groups: [[false, false, false], [true, false, false], [false, true, false], [false, false, true], [true, true, false], [true, false, true], [false, true, true], [true, true, true]] })"#;
-
-        assert_eq!(format!("{cube:?}"), expected);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_create_rollup_expr() -> Result<()> {
-        let logical_plan = test_csv_scan().await?.build()?;
-
-        let plan = plan(&logical_plan).await?;
-
-        let exprs = vec![col("c1"), col("c2"), col("c3")];
-
-        let physical_input_schema = plan.schema();
-        let physical_input_schema = physical_input_schema.as_ref();
-        let logical_input_schema = logical_plan.schema();
-        let session_state = make_session_state();
-
-        let rollup = create_rollup_physical_expr(
-            &exprs,
-            logical_input_schema,
-            physical_input_schema,
-            &session_state,
-        );
-
-        let expected = r#"Ok(PhysicalGroupBy { expr: [(Column { name: "c1", index: 0 }, "c1"), (Column { name: "c2", index: 1 }, "c2"), (Column { name: "c3", index: 2 }, "c3")], null_expr: [(Literal { value: Utf8(NULL) }, "c1"), (Literal { value: Int64(NULL) }, "c2"), (Literal { value: Int64(NULL) }, "c3")], groups: [[true, true, true], [false, true, true], [false, false, true], [false, false, false]] })"#;
-
-        assert_eq!(format!("{rollup:?}"), expected);
-
         Ok(())
     }
 

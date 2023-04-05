@@ -60,6 +60,7 @@ impl TreeNode for Expr {
             Expr::Column(_)
             // Treat OuterReferenceColumn as a leaf expression
             | Expr::OuterReferenceColumn(_, _)
+            | Expr::HiddenColumn(_, _)
             | Expr::ScalarVariable(_, _)
             | Expr::Literal(_)
             | Expr::Exists { .. }
@@ -67,6 +68,9 @@ impl TreeNode for Expr {
             | Expr::Wildcard
             | Expr::QualifiedWildcard { .. }
             | Expr::Placeholder { .. } => vec![],
+            Expr::HiddenExpr(first, _) => {
+                vec![first.as_ref().clone()]
+            }
             Expr::BinaryExpr(BinaryExpr { left, right, .. }) => {
                 vec![left.as_ref().clone(), right.as_ref().clone()]
             }
@@ -148,6 +152,8 @@ impl TreeNode for Expr {
             }
             Expr::Column(_) => self,
             Expr::OuterReferenceColumn(_, _) => self,
+            Expr::HiddenColumn(_, _) => self,
+            Expr::HiddenExpr(_, _) => self,
             Expr::Exists { .. } => self,
             Expr::InSubquery {
                 expr,

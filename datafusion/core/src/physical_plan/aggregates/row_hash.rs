@@ -134,7 +134,7 @@ impl GroupedHashAggregateStream {
     ) -> Result<Self> {
         let timer = baseline_metrics.elapsed_compute().timer();
 
-        let mut start_idx = group_by.expr.len();
+        let mut start_idx = group_by.result_expr().len();
         let mut row_aggr_expr = vec![];
         let mut row_agg_indices = vec![];
         let mut row_aggregate_expressions = vec![];
@@ -175,7 +175,8 @@ impl GroupedHashAggregateStream {
 
         let row_aggr_schema = aggr_state_schema(&row_aggr_expr)?;
 
-        let group_schema = group_schema(&schema, group_by.expr.len());
+        let group_schema = group_schema(&schema, group_by.result_expr().len());
+
         let row_converter = RowConverter::new(
             group_schema
                 .fields()

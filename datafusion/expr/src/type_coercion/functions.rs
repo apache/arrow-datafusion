@@ -94,6 +94,9 @@ fn get_valid_types(
             .filter_map(|t| get_valid_types(t, current_types).ok())
             .flatten()
             .collect::<Vec<_>>(),
+        TypeSignature::Arbitrary => {
+            vec![current_types.to_vec()]
+        }
     };
 
     Ok(valid_types)

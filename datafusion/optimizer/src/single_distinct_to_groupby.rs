@@ -20,6 +20,7 @@
 use crate::optimizer::ApplyOrder;
 use crate::{OptimizerConfig, OptimizerRule};
 use datafusion_common::{DFSchema, Result};
+use datafusion_expr::utils::contains_grouping_set;
 use datafusion_expr::{
     col,
     expr::AggregateFunction,
@@ -80,11 +81,6 @@ fn is_single_distinct_agg(plan: &LogicalPlan) -> Result<bool> {
         }
         _ => Ok(false),
     }
-}
-
-/// Check if the first expr is [Expr::GroupingSet].
-fn contains_grouping_set(expr: &[Expr]) -> bool {
-    matches!(expr.first(), Some(Expr::GroupingSet(_)))
 }
 
 impl OptimizerRule for SingleDistinctToGroupBy {

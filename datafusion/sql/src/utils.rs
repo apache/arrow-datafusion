@@ -362,6 +362,8 @@ where
             ))),
             Expr::Column { .. }
             | Expr::OuterReferenceColumn(_, _)
+            | Expr::HiddenColumn(_, _)
+            | Expr::HiddenExpr(_, _)
             | Expr::Literal(_)
             | Expr::ScalarVariable(_, _)
             | Expr::Exists { .. }

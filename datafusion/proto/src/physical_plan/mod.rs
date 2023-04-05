@@ -448,7 +448,13 @@ impl AsExecutionPlan for PhysicalPlanNode {
 
                 Ok(Arc::new(AggregateExec::try_new(
                     agg_mode,
-                    PhysicalGroupBy::new(group_expr, null_expr, groups),
+                    PhysicalGroupBy::new(
+                        group_expr.clone(),
+                        vec![],
+                        group_expr,
+                        null_expr,
+                        groups,
+                    ),
                     physical_aggr_expr,
                     input,
                     Arc::new((&input_schema).try_into()?),

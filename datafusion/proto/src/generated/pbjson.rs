@@ -404,6 +404,7 @@ impl serde::Serialize for AggregateFunction {
             Self::ApproxPercentileContWithWeight => "APPROX_PERCENTILE_CONT_WITH_WEIGHT",
             Self::Grouping => "GROUPING",
             Self::Median => "MEDIAN",
+            Self::GroupingId => "GROUPING_ID",
         };
         serializer.serialize_str(variant)
     }
@@ -434,6 +435,7 @@ impl<'de> serde::Deserialize<'de> for AggregateFunction {
             "APPROX_PERCENTILE_CONT_WITH_WEIGHT",
             "GROUPING",
             "MEDIAN",
+            "GROUPING_ID",
         ];
 
         struct GeneratedVisitor;
@@ -495,6 +497,7 @@ impl<'de> serde::Deserialize<'de> for AggregateFunction {
                     "APPROX_PERCENTILE_CONT_WITH_WEIGHT" => Ok(AggregateFunction::ApproxPercentileContWithWeight),
                     "GROUPING" => Ok(AggregateFunction::Grouping),
                     "MEDIAN" => Ok(AggregateFunction::Median),
+                    "GROUPING_ID" => Ok(AggregateFunction::GroupingId),
                     _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
                 }
             }

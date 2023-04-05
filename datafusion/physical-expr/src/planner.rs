@@ -26,7 +26,9 @@ use crate::{
     PhysicalExpr,
 };
 use arrow::datatypes::{DataType, Schema};
-use datafusion_common::{DFSchema, DataFusionError, Result, ScalarValue};
+use datafusion_common::{
+    unqualified_field_not_found, DFSchema, DataFusionError, Result, ScalarValue,
+};
 use datafusion_expr::expr::Cast;
 use datafusion_expr::{
     binary_expr, Between, BinaryExpr, Expr, GetIndexedField, Like, Operator, TryCast,
@@ -498,6 +500,22 @@ pub fn create_physical_expr(
                 expressions::in_list(value_expr, list_exprs, negated, input_schema)
             }
         },
+        Expr::HiddenColumn(_, _) => {
+            let hidden_col_name = e.display_name()?;
+            let col_idx =
+                input_dfschema.index_of_column_by_name(None, &hidden_col_name)?;
+            if let Some(idx) = col_idx {
+                Ok(Arc::new(Column::new(&hidden_col_name, idx)))
+            } else {
+                Err(unqualified_field_not_found(
+                    &hidden_col_name,
+                    input_dfschema,
+                ))
+            }
+        }
+        Expr::HiddenExpr(expr, _) => {
+            create_physical_expr(expr, input_dfschema, input_schema, execution_props)
+        }
         other => Err(DataFusionError::NotImplemented(format!(
             "Physical plan does not support logical expression {other:?}"
         ))),

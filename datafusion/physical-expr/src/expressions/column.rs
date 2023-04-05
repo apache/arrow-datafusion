@@ -202,6 +202,77 @@ impl PartialEq<dyn Any> for UnKnownColumn {
     }
 }
 
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+pub struct HiddenColumn {
+    name: String,
+    data_type: DataType,
+}
+
+impl HiddenColumn {
+    /// Create a new hidden column
+    pub fn new(name: &str, data_type: &DataType) -> Self {
+        Self {
+            name: name.to_owned(),
+            data_type: data_type.clone(),
+        }
+    }
+
+    /// Get the column name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl std::fmt::Display for HiddenColumn {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+impl PhysicalExpr for HiddenColumn {
+    /// Return a reference to Any that can be used for downcasting
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    /// Get the data type of this expression, given the schema of the input
+    fn data_type(&self, _input_schema: &Schema) -> Result<DataType> {
+        Ok(self.data_type.clone())
+    }
+
+    /// Decide whehter this expression is nullable, given the schema of the input
+    fn nullable(&self, _input_schema: &Schema) -> Result<bool> {
+        Ok(false)
+    }
+
+    /// Evaluate the expression
+    fn evaluate(&self, _batch: &RecordBatch) -> Result<ColumnarValue> {
+        Err(DataFusionError::Plan(
+            "HiddenColumn::evaluate() should not be called".to_owned(),
+        ))
+    }
+
+    fn children(&self) -> Vec<Arc<dyn PhysicalExpr>> {
+        vec![]
+    }
+
+    fn with_new_children(
+        self: Arc<Self>,
+        _children: Vec<Arc<dyn PhysicalExpr>>,
+    ) -> Result<Arc<dyn PhysicalExpr>> {
+        Ok(self)
+    }
+}
+
+impl PartialEq<dyn Any> for HiddenColumn {
+    fn eq(&self, other: &dyn Any) -> bool {
+        down_cast_any_ref(other)
+            .downcast_ref::<Self>()
+            .map(|x| self == x)
+            .unwrap_or(false)
+    }
+}
+
 /// Create a column expression
 pub fn col(name: &str, schema: &Schema) -> Result<Arc<dyn PhysicalExpr>> {
     Ok(Arc::new(Column::new_with_schema(name, schema)?))

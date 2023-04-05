@@ -23,8 +23,8 @@ use crate::logical_plan::statement::{DmlStatement, Statement};
 
 use crate::logical_plan::plan;
 use crate::utils::{
-    enumerate_grouping_sets, exprlist_to_fields, find_out_reference_exprs, from_plan,
-    grouping_set_expr_count, grouping_set_to_exprlist, inspect_expr_pre,
+    distinct_group_exprs, exprlist_to_fields, find_out_reference_exprs, from_plan,
+    grouping_set_expr_count, inspect_expr_pre,
 };
 use crate::{
     build_join_schema, Expr, ExprSchemable, TableProviderFilterPushDown, TableSource,
@@ -1633,25 +1633,39 @@ pub struct Aggregate {
 }
 
 impl Aggregate {
-    /// Create a new aggregate operator.
+    /// Create a new aggregate operator, the group_expr might contain multiple [Expr::GroupingSet] expressions
     pub fn try_new(
         input: Arc<LogicalPlan>,
         group_expr: Vec<Expr>,
         aggr_expr: Vec<Expr>,
     ) -> Result<Self> {
-        let group_expr = enumerate_grouping_sets(group_expr)?;
-        let grouping_expr: Vec<Expr> = grouping_set_to_exprlist(group_expr.as_slice())?;
-        let all_expr = grouping_expr.iter().chain(aggr_expr.iter());
+        if group_expr.is_empty() && aggr_expr.is_empty() {
+            return Err(DataFusionError::Plan(
+                "Aggregate requires at least one grouping or aggregate expression"
+                    .to_string(),
+            ));
+        }
+        let distinct_grouping_expr: Vec<Expr> =
+            distinct_group_exprs(group_expr.as_slice(), true);
+
+        let all_expr = distinct_grouping_expr.iter().chain(aggr_expr.iter());
         validate_unique_names("Aggregations", all_expr.clone())?;
-        let schema = DFSchema::new_with_metadata(
+        let schema = Arc::new(DFSchema::new_with_metadata(
             exprlist_to_fields(all_expr, &input)?,
             input.schema().metadata().clone(),
-        )?;
-        Self::try_new_with_schema(input, group_expr, aggr_expr, Arc::new(schema))
+        )?);
+
+        Ok(Self {
+            input,
+            group_expr,
+            aggr_expr,
+            schema,
+        })
     }
 
     /// Create a new aggregate operator using the provided schema to avoid the overhead of
-    /// building the schema again when the schema is already known.
+    /// building the schema again when the schema is already known,
+    /// The group_expr can not contain multiple [Expr::GroupingSet] expressions.
     ///
     /// This method should only be called when you are absolutely sure that the schema being
     /// provided is correct for the aggregate. If in doubt, call [try_new](Self::try_new) instead.

@@ -2311,6 +2311,7 @@ pub enum AggregateFunction {
     ApproxPercentileContWithWeight = 16,
     Grouping = 17,
     Median = 18,
+    GroupingId = 19,
 }
 impl AggregateFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2340,6 +2341,7 @@ impl AggregateFunction {
             }
             AggregateFunction::Grouping => "GROUPING",
             AggregateFunction::Median => "MEDIAN",
+            AggregateFunction::GroupingId => "GROUPING_ID",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2366,6 +2368,7 @@ impl AggregateFunction {
             }
             "GROUPING" => Some(Self::Grouping),
             "MEDIAN" => Some(Self::Median),
+            "GROUPING_ID" => Some(Self::GroupingId),
             _ => None,
         }
     }

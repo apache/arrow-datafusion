@@ -62,11 +62,6 @@ pub fn create_aggregate_expr(
             input_phy_exprs[0].clone(),
             name,
         )),
-        (AggregateFunction::Grouping, _) => Arc::new(expressions::Grouping::new(
-            input_phy_exprs[0].clone(),
-            name,
-            return_type,
-        )),
         (AggregateFunction::Sum, false) => Arc::new(expressions::Sum::new(
             input_phy_exprs[0].clone(),
             name,
@@ -248,6 +243,16 @@ pub fn create_aggregate_expr(
         (AggregateFunction::Median, true) => {
             return Err(DataFusionError::NotImplemented(
                 "MEDIAN(DISTINCT) aggregations are not available".to_string(),
+            ));
+        }
+        (AggregateFunction::Grouping, _) => {
+            return Err(DataFusionError::Plan(
+                "GROUPING() aggregations are not evaluable, should be converted by the Analyzer".to_string(),
+            ));
+        }
+        (AggregateFunction::GroupingId, _) => {
+            return Err(DataFusionError::Plan(
+                "GROUPING_ID() aggregations are not evaluable, should be converted by the Analyzer".to_string(),
             ));
         }
     })

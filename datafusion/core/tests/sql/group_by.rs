@@ -111,6 +111,28 @@ async fn csv_query_group_by_boolean() -> Result<()> {
 }
 
 #[tokio::test]
+async fn csv_query_group_by_boolean2() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_simple_csv(&ctx).await?;
+
+    let sql =
+        "SELECT COUNT(*), c3 FROM aggregate_simple GROUP BY c3 ORDER BY COUNT(*) DESC";
+    let actual = execute_to_batches(&ctx, sql).await;
+
+    let expected = vec![
+        "+-----------------+-------+",
+        "| COUNT(UInt8(1)) | c3    |",
+        "+-----------------+-------+",
+        "| 9               | true  |",
+        "| 6               | false |",
+        "+-----------------+-------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn csv_query_group_by_two_columns() -> Result<()> {
     let ctx = SessionContext::new();
     register_aggregate_csv(&ctx).await?;
@@ -903,5 +925,543 @@ async fn csv_query_group_by_order_by_avg_group_by_substr() -> Result<()> {
         "+------+---------------------+",
     ];
     assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_with_dup_group_set() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, avg(c12) FROM aggregate_test_100 GROUP BY GROUPING SETS((c1),(c1),())";
+
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Projection: aggregate_test_100.c1, AVG(aggregate_test_100.c12) [c1:Utf8, AVG(aggregate_test_100.c12):Float64;N]",
+        "  Aggregate: groupBy=[[GROUPING SETS ((aggregate_test_100.c1, UInt32(1) AS #grouping_set_id), (aggregate_test_100.c1, UInt32(2) AS #grouping_set_id), (UInt32(3) AS #grouping_set_id))]], aggr=[[AVG(aggregate_test_100.c12)]] [c1:Utf8, #grouping_set_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "    TableScan: aggregate_test_100 projection=[c1, c12] [c1:Utf8, c12:Float64]",
+    ];
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+-----------------------------+",
+        "| c1 | AVG(aggregate_test_100.c12) |",
+        "+----+-----------------------------+",
+        "|    | 0.5089725099127211          |",
+        "| a  | 0.48754517466109415         |",
+        "| b  | 0.41040709263815384         |",
+        "| c  | 0.6600456536439784          |",
+        "| d  | 0.48855379387549824         |",
+        "| e  | 0.48600669271341534         |",
+        "| a  | 0.48754517466109415         |",
+        "| b  | 0.41040709263815384         |",
+        "| c  | 0.6600456536439784          |",
+        "| d  | 0.48855379387549824         |",
+        "| e  | 0.48600669271341534         |",
+        "+----+-----------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_with_grouping_id_func() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, c2, c3, GROUPING_ID(c1, c2, c3), avg(c12) FROM \
+    (select c1, c2, '0' as c3, c12 from aggregate_test_100)
+    GROUP BY GROUPING SETS((c1, c2), (c1, c3), (c3),())";
+
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Projection: aggregate_test_100.c1, aggregate_test_100.c2, c3, #grouping_id AS GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2,c3), AVG(aggregate_test_100.c12) [c1:Utf8, c2:UInt32, c3:Utf8, GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2,c3):UInt32;N, AVG(aggregate_test_100.c12):Float64;N]",
+        "  Aggregate: groupBy=[[GROUPING SETS ((aggregate_test_100.c1, aggregate_test_100.c2, UInt32(1) AS #grouping_id), (aggregate_test_100.c1, c3, UInt32(2) AS #grouping_id), (c3, UInt32(6) AS #grouping_id), (UInt32(7) AS #grouping_id))]], aggr=[[AVG(aggregate_test_100.c12)]] [c1:Utf8, c2:UInt32, c3:Utf8, #grouping_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "    Projection: aggregate_test_100.c1, aggregate_test_100.c2, Utf8(\"0\") AS c3, aggregate_test_100.c12 [c1:Utf8, c2:UInt32, c3:Utf8, c12:Float64]",
+        "      TableScan: aggregate_test_100 projection=[c1, c2, c12] [c1:Utf8, c2:UInt32, c12:Float64]",
+    ];
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+----+----+-------------------------------------------------------------+-----------------------------+",
+        "| c1 | c2 | c3 | GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2,c3) | AVG(aggregate_test_100.c12) |",
+        "+----+----+----+-------------------------------------------------------------+-----------------------------+",
+        "|    |    |    | 7                                                           | 0.5089725099127211          |",
+        "|    |    | 0  | 6                                                           | 0.5089725099127211          |",
+        "| a  |    | 0  | 2                                                           | 0.48754517466109415         |",
+        "| a  | 1  |    | 1                                                           | 0.4693685626367209          |",
+        "| a  | 2  |    | 1                                                           | 0.5945188963859894          |",
+        "| a  | 3  |    | 1                                                           | 0.5996111195922015          |",
+        "| a  | 4  |    | 1                                                           | 0.3653038379118398          |",
+        "| a  | 5  |    | 1                                                           | 0.3497223654469457          |",
+        "| b  |    | 0  | 2                                                           | 0.41040709263815384         |",
+        "| b  | 1  |    | 1                                                           | 0.16148594845154118         |",
+        "| b  | 2  |    | 1                                                           | 0.5857678873564655          |",
+        "| b  | 3  |    | 1                                                           | 0.42804338065410286         |",
+        "| b  | 4  |    | 1                                                           | 0.33400957036260354         |",
+        "| b  | 5  |    | 1                                                           | 0.4888141504446429          |",
+        "| c  |    | 0  | 2                                                           | 0.6600456536439784          |",
+        "| c  | 1  |    | 1                                                           | 0.6430620563927849          |",
+        "| c  | 2  |    | 1                                                           | 0.7736013221256991          |",
+        "| c  | 3  |    | 1                                                           | 0.421733279717472           |",
+        "| c  | 4  |    | 1                                                           | 0.6827805579021969          |",
+        "| c  | 5  |    | 1                                                           | 0.7277229477969185          |",
+        "| d  |    | 0  | 2                                                           | 0.48855379387549824         |",
+        "| d  | 1  |    | 1                                                           | 0.49931809179640024         |",
+        "| d  | 2  |    | 1                                                           | 0.5181987328311988          |",
+        "| d  | 3  |    | 1                                                           | 0.586369575965718           |",
+        "| d  | 4  |    | 1                                                           | 0.49575895804943215         |",
+        "| d  | 5  |    | 1                                                           | 0.2488799233225611          |",
+        "| e  |    | 0  | 2                                                           | 0.48600669271341534         |",
+        "| e  | 1  |    | 1                                                           | 0.780297346359783           |",
+        "| e  | 2  |    | 1                                                           | 0.660795726704708           |",
+        "| e  | 3  |    | 1                                                           | 0.5165824734324667          |",
+        "| e  | 4  |    | 1                                                           | 0.2720288398836001          |",
+        "| e  | 5  |    | 1                                                           | 0.29536905073188496         |",
+        "+----+----+----+-------------------------------------------------------------+-----------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_with_multi_grouping_funcs() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, c2, GROUPING(C1), GROUPING(C2), GROUPING_ID(c1, c2), avg(c12) FROM aggregate_test_100 GROUP BY CUBE(c1, c2)";
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Projection: aggregate_test_100.c1, aggregate_test_100.c2, CAST((#grouping_id AS #grouping_id AS #grouping_id AS #grouping_id >> UInt32(1)) & UInt32(1) AS UInt8) AS GROUPING(aggregate_test_100.c1), CAST(#grouping_id AS #grouping_id AS #grouping_id AS #grouping_id & UInt32(1) AS UInt8) AS GROUPING(aggregate_test_100.c2), #grouping_id AS #grouping_id AS #grouping_id AS #grouping_id AS GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2), AVG(aggregate_test_100.c12) [c1:Utf8, c2:UInt32, GROUPING(aggregate_test_100.c1):UInt8;N, GROUPING(aggregate_test_100.c2):UInt8;N, GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2):UInt32;N, AVG(aggregate_test_100.c12):Float64;N]",
+        "  Aggregate: groupBy=[[GROUPING SETS ((UInt32(3) AS #grouping_id), (aggregate_test_100.c1, UInt32(1) AS #grouping_id), (aggregate_test_100.c2, UInt32(2) AS #grouping_id), (aggregate_test_100.c1, aggregate_test_100.c2, UInt32(0) AS #grouping_id))]], aggr=[[AVG(aggregate_test_100.c12)]] [c1:Utf8, c2:UInt32, #grouping_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "    TableScan: aggregate_test_100 projection=[c1, c2, c12] [c1:Utf8, c2:UInt32, c12:Float64]",
+    ];
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+----+---------------------------------+---------------------------------+----------------------------------------------------------+-----------------------------+",
+        "| c1 | c2 | GROUPING(aggregate_test_100.c1) | GROUPING(aggregate_test_100.c2) | GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2) | AVG(aggregate_test_100.c12) |",
+        "+----+----+---------------------------------+---------------------------------+----------------------------------------------------------+-----------------------------+",
+        "|    |    | 1                               | 1                               | 3                                                        | 0.5089725099127211          |",
+        "|    | 1  | 1                               | 0                               | 2                                                        | 0.5108939802619781          |",
+        "|    | 2  | 1                               | 0                               | 2                                                        | 0.6545641966127662          |",
+        "|    | 3  | 1                               | 0                               | 2                                                        | 0.5245329062820169          |",
+        "|    | 4  | 1                               | 0                               | 2                                                        | 0.40234192123489837         |",
+        "|    | 5  | 1                               | 0                               | 2                                                        | 0.4312272637333415          |",
+        "| a  |    | 0                               | 1                               | 1                                                        | 0.48754517466109415         |",
+        "| a  | 1  | 0                               | 0                               | 0                                                        | 0.4693685626367209          |",
+        "| a  | 2  | 0                               | 0                               | 0                                                        | 0.5945188963859894          |",
+        "| a  | 3  | 0                               | 0                               | 0                                                        | 0.5996111195922015          |",
+        "| a  | 4  | 0                               | 0                               | 0                                                        | 0.3653038379118398          |",
+        "| a  | 5  | 0                               | 0                               | 0                                                        | 0.3497223654469457          |",
+        "| b  |    | 0                               | 1                               | 1                                                        | 0.41040709263815384         |",
+        "| b  | 1  | 0                               | 0                               | 0                                                        | 0.16148594845154118         |",
+        "| b  | 2  | 0                               | 0                               | 0                                                        | 0.5857678873564655          |",
+        "| b  | 3  | 0                               | 0                               | 0                                                        | 0.42804338065410286         |",
+        "| b  | 4  | 0                               | 0                               | 0                                                        | 0.33400957036260354         |",
+        "| b  | 5  | 0                               | 0                               | 0                                                        | 0.4888141504446429          |",
+        "| c  |    | 0                               | 1                               | 1                                                        | 0.6600456536439784          |",
+        "| c  | 1  | 0                               | 0                               | 0                                                        | 0.6430620563927849          |",
+        "| c  | 2  | 0                               | 0                               | 0                                                        | 0.7736013221256991          |",
+        "| c  | 3  | 0                               | 0                               | 0                                                        | 0.421733279717472           |",
+        "| c  | 4  | 0                               | 0                               | 0                                                        | 0.6827805579021969          |",
+        "| c  | 5  | 0                               | 0                               | 0                                                        | 0.7277229477969185          |",
+        "| d  |    | 0                               | 1                               | 1                                                        | 0.48855379387549824         |",
+        "| d  | 1  | 0                               | 0                               | 0                                                        | 0.49931809179640024         |",
+        "| d  | 2  | 0                               | 0                               | 0                                                        | 0.5181987328311988          |",
+        "| d  | 3  | 0                               | 0                               | 0                                                        | 0.586369575965718           |",
+        "| d  | 4  | 0                               | 0                               | 0                                                        | 0.49575895804943215         |",
+        "| d  | 5  | 0                               | 0                               | 0                                                        | 0.2488799233225611          |",
+        "| e  |    | 0                               | 1                               | 1                                                        | 0.48600669271341534         |",
+        "| e  | 1  | 0                               | 0                               | 0                                                        | 0.780297346359783           |",
+        "| e  | 2  | 0                               | 0                               | 0                                                        | 0.660795726704708           |",
+        "| e  | 3  | 0                               | 0                               | 0                                                        | 0.5165824734324667          |",
+        "| e  | 4  | 0                               | 0                               | 0                                                        | 0.2720288398836001          |",
+        "| e  | 5  | 0                               | 0                               | 0                                                        | 0.29536905073188496         |",
+        "+----+----+---------------------------------+---------------------------------+----------------------------------------------------------+-----------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_with_dup_group_set_and_grouping_func() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, avg(c12), GROUPING(C1) FROM aggregate_test_100 GROUP BY GROUPING SETS((c1),(c1),())";
+
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Projection: aggregate_test_100.c1, AVG(aggregate_test_100.c12), CAST(#grouping_id & UInt32(1) AS UInt8) AS GROUPING(aggregate_test_100.c1) [c1:Utf8, AVG(aggregate_test_100.c12):Float64;N, GROUPING(aggregate_test_100.c1):UInt8;N]",
+        "  Aggregate: groupBy=[[GROUPING SETS ((aggregate_test_100.c1, UInt32(0) AS #grouping_id, UInt32(1) AS #grouping_set_id), (aggregate_test_100.c1, UInt32(0) AS #grouping_id, UInt32(2) AS #grouping_set_id), (UInt32(1) AS #grouping_id, UInt32(3) AS #grouping_set_id))]], aggr=[[AVG(aggregate_test_100.c12)]] [c1:Utf8, #grouping_id:UInt32, #grouping_set_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "    TableScan: aggregate_test_100 projection=[c1, c12] [c1:Utf8, c12:Float64]",
+    ];
+
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+-----------------------------+---------------------------------+",
+        "| c1 | AVG(aggregate_test_100.c12) | GROUPING(aggregate_test_100.c1) |",
+        "+----+-----------------------------+---------------------------------+",
+        "|    | 0.5089725099127211          | 1                               |",
+        "| a  | 0.48754517466109415         | 0                               |",
+        "| a  | 0.48754517466109415         | 0                               |",
+        "| b  | 0.41040709263815384         | 0                               |",
+        "| b  | 0.41040709263815384         | 0                               |",
+        "| c  | 0.6600456536439784          | 0                               |",
+        "| c  | 0.6600456536439784          | 0                               |",
+        "| d  | 0.48855379387549824         | 0                               |",
+        "| d  | 0.48855379387549824         | 0                               |",
+        "| e  | 0.48600669271341534         | 0                               |",
+        "| e  | 0.48600669271341534         | 0                               |",
+        "+----+-----------------------------+---------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_with_grouping_func_and_having() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, avg(c12), GROUPING(C1) FROM aggregate_test_100 \
+    GROUP BY GROUPING SETS((c1),(c1),()) HAVING GROUPING(C1) = 1 and avg(c12) > 0";
+
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Projection: aggregate_test_100.c1, AVG(aggregate_test_100.c12), CAST(#grouping_id & UInt32(1) AS UInt8) AS GROUPING(aggregate_test_100.c1) [c1:Utf8, AVG(aggregate_test_100.c12):Float64;N, GROUPING(aggregate_test_100.c1):UInt8;N]",
+        "  Filter: (#grouping_id & UInt32(1)) = UInt32(1) AND AVG(aggregate_test_100.c12) > Float64(0) [c1:Utf8, #grouping_id:UInt32, #grouping_set_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "    Aggregate: groupBy=[[GROUPING SETS ((aggregate_test_100.c1, UInt32(0) AS #grouping_id, UInt32(1) AS #grouping_set_id), (aggregate_test_100.c1, UInt32(0) AS #grouping_id, UInt32(2) AS #grouping_set_id), (UInt32(1) AS #grouping_id, UInt32(3) AS #grouping_set_id))]], aggr=[[AVG(aggregate_test_100.c12)]] [c1:Utf8, #grouping_id:UInt32, #grouping_set_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "      TableScan: aggregate_test_100 projection=[c1, c12] [c1:Utf8, c12:Float64]",
+    ];
+
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+-----------------------------+---------------------------------+",
+        "| c1 | AVG(aggregate_test_100.c12) | GROUPING(aggregate_test_100.c1) |",
+        "+----+-----------------------------+---------------------------------+",
+        "|    | 0.5089725099127211          | 1                               |",
+        "+----+-----------------------------+---------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_with_grouping_func_as_expr() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, avg(c12), GROUPING(C1) + GROUPING(C2) as grouping_lvl FROM aggregate_test_100 \
+                    GROUP BY GROUPING SETS((c1),(c1),(c1, c2))\
+                    ORDER BY CASE WHEN grouping_lvl = 0 THEN 0 ELSE 1 END";
+
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Sort: CASE WHEN grouping_lvl = UInt8(0) THEN Int64(0) ELSE Int64(1) END AS CASE WHEN grouping_lvl = Int64(0) THEN Int64(0) ELSE Int64(1) END ASC NULLS LAST [c1:Utf8, AVG(aggregate_test_100.c12):Float64;N, grouping_lvl:UInt8;N]",
+        "  Projection: aggregate_test_100.c1, AVG(aggregate_test_100.c12), CAST((#grouping_id >> UInt32(1)) & UInt32(1) AS UInt8) + CAST(#grouping_id & UInt32(1) AS UInt8) AS grouping_lvl [c1:Utf8, AVG(aggregate_test_100.c12):Float64;N, grouping_lvl:UInt8;N]",
+        "    Aggregate: groupBy=[[GROUPING SETS ((aggregate_test_100.c1, UInt32(1) AS #grouping_id, UInt32(1) AS #grouping_set_id), (aggregate_test_100.c1, UInt32(1) AS #grouping_id, UInt32(2) AS #grouping_set_id), (aggregate_test_100.c1, aggregate_test_100.c2, UInt32(0) AS #grouping_id, UInt32(3) AS #grouping_set_id))]], aggr=[[AVG(aggregate_test_100.c12)]] [c1:Utf8, c2:UInt32, #grouping_id:UInt32, #grouping_set_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "      TableScan: aggregate_test_100 projection=[c1, c2, c12] [c1:Utf8, c2:UInt32, c12:Float64]",
+    ];
+
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+-----------------------------+--------------+",
+        "| c1 | AVG(aggregate_test_100.c12) | grouping_lvl |",
+        "+----+-----------------------------+--------------+",
+        "| a  | 0.3497223654469457          | 0            |",
+        "| a  | 0.3653038379118398          | 0            |",
+        "| a  | 0.4693685626367209          | 0            |",
+        "| a  | 0.48754517466109415         | 1            |",
+        "| a  | 0.48754517466109415         | 1            |",
+        "| a  | 0.5945188963859894          | 0            |",
+        "| a  | 0.5996111195922015          | 0            |",
+        "| b  | 0.16148594845154118         | 0            |",
+        "| b  | 0.33400957036260354         | 0            |",
+        "| b  | 0.41040709263815384         | 1            |",
+        "| b  | 0.41040709263815384         | 1            |",
+        "| b  | 0.42804338065410286         | 0            |",
+        "| b  | 0.4888141504446429          | 0            |",
+        "| b  | 0.5857678873564655          | 0            |",
+        "| c  | 0.421733279717472           | 0            |",
+        "| c  | 0.6430620563927849          | 0            |",
+        "| c  | 0.6600456536439784          | 1            |",
+        "| c  | 0.6600456536439784          | 1            |",
+        "| c  | 0.6827805579021969          | 0            |",
+        "| c  | 0.7277229477969185          | 0            |",
+        "| c  | 0.7736013221256991          | 0            |",
+        "| d  | 0.2488799233225611          | 0            |",
+        "| d  | 0.48855379387549824         | 1            |",
+        "| d  | 0.48855379387549824         | 1            |",
+        "| d  | 0.49575895804943215         | 0            |",
+        "| d  | 0.49931809179640024         | 0            |",
+        "| d  | 0.5181987328311988          | 0            |",
+        "| d  | 0.586369575965718           | 0            |",
+        "| e  | 0.2720288398836001          | 0            |",
+        "| e  | 0.29536905073188496         | 0            |",
+        "| e  | 0.48600669271341534         | 1            |",
+        "| e  | 0.48600669271341534         | 1            |",
+        "| e  | 0.5165824734324667          | 0            |",
+        "| e  | 0.660795726704708           | 0            |",
+        "| e  | 0.780297346359783           | 0            |",
+        "+----+-----------------------------+--------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_with_grouping_func_and_order_by() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, avg(c12), GROUPING_ID(C1, c2) FROM aggregate_test_100 \
+    GROUP BY CUBE(c1,c2) ORDER BY GROUPING_ID(C1, c2) DESC, avg(c12) ASC";
+
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Sort: GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2) DESC NULLS FIRST, AVG(aggregate_test_100.c12) ASC NULLS LAST [c1:Utf8, AVG(aggregate_test_100.c12):Float64;N, GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2):UInt32;N]",
+        "  Projection: aggregate_test_100.c1, AVG(aggregate_test_100.c12), #grouping_id AS GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2) [c1:Utf8, AVG(aggregate_test_100.c12):Float64;N, GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2):UInt32;N]",
+        "    Aggregate: groupBy=[[GROUPING SETS ((UInt32(3) AS #grouping_id), (aggregate_test_100.c1, UInt32(1) AS #grouping_id), (aggregate_test_100.c2, UInt32(2) AS #grouping_id), (aggregate_test_100.c1, aggregate_test_100.c2, UInt32(0) AS #grouping_id))]], aggr=[[AVG(aggregate_test_100.c12)]] [c1:Utf8, c2:UInt32, #grouping_id:UInt32, AVG(aggregate_test_100.c12):Float64;N]",
+        "      TableScan: aggregate_test_100 projection=[c1, c2, c12] [c1:Utf8, c2:UInt32, c12:Float64]",
+    ];
+
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+-----------------------------+----------------------------------------------------------+",
+        "| c1 | AVG(aggregate_test_100.c12) | GROUPING_ID(aggregate_test_100.c1,aggregate_test_100.c2) |",
+        "+----+-----------------------------+----------------------------------------------------------+",
+        "|    | 0.5089725099127211          | 3                                                        |",
+        "|    | 0.40234192123489837         | 2                                                        |",
+        "|    | 0.4312272637333415          | 2                                                        |",
+        "|    | 0.5108939802619781          | 2                                                        |",
+        "|    | 0.5245329062820169          | 2                                                        |",
+        "|    | 0.6545641966127662          | 2                                                        |",
+        "| b  | 0.41040709263815384         | 1                                                        |",
+        "| e  | 0.48600669271341534         | 1                                                        |",
+        "| a  | 0.48754517466109415         | 1                                                        |",
+        "| d  | 0.48855379387549824         | 1                                                        |",
+        "| c  | 0.6600456536439784          | 1                                                        |",
+        "| b  | 0.16148594845154118         | 0                                                        |",
+        "| d  | 0.2488799233225611          | 0                                                        |",
+        "| e  | 0.2720288398836001          | 0                                                        |",
+        "| e  | 0.29536905073188496         | 0                                                        |",
+        "| b  | 0.33400957036260354         | 0                                                        |",
+        "| a  | 0.3497223654469457          | 0                                                        |",
+        "| a  | 0.3653038379118398          | 0                                                        |",
+        "| c  | 0.421733279717472           | 0                                                        |",
+        "| b  | 0.42804338065410286         | 0                                                        |",
+        "| a  | 0.4693685626367209          | 0                                                        |",
+        "| b  | 0.4888141504446429          | 0                                                        |",
+        "| d  | 0.49575895804943215         | 0                                                        |",
+        "| d  | 0.49931809179640024         | 0                                                        |",
+        "| e  | 0.5165824734324667          | 0                                                        |",
+        "| d  | 0.5181987328311988          | 0                                                        |",
+        "| b  | 0.5857678873564655          | 0                                                        |",
+        "| d  | 0.586369575965718           | 0                                                        |",
+        "| a  | 0.5945188963859894          | 0                                                        |",
+        "| a  | 0.5996111195922015          | 0                                                        |",
+        "| c  | 0.6430620563927849          | 0                                                        |",
+        "| e  | 0.660795726704708           | 0                                                        |",
+        "| c  | 0.6827805579021969          | 0                                                        |",
+        "| c  | 0.7277229477969185          | 0                                                        |",
+        "| c  | 0.7736013221256991          | 0                                                        |",
+        "| e  | 0.780297346359783           | 0                                                        |",
+        "+----+-----------------------------+----------------------------------------------------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn group_by_rollup_with_count_wildcard_and_order_by() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, c2, c3, COUNT(*) \
+        FROM aggregate_test_100 \
+        WHERE c1 IN ('a', 'b', NULL) \
+        GROUP BY c1, ROLLUP (c2, c3) \
+        ORDER BY c1, c2, c3";
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let plan = dataframe.clone().into_optimized_plan()?;
+    let expected = vec![
+        "Sort: aggregate_test_100.c1 ASC NULLS LAST, aggregate_test_100.c2 ASC NULLS LAST, aggregate_test_100.c3 ASC NULLS LAST [c1:Utf8, c2:UInt32, c3:Int8, COUNT(UInt8(1)):Int64;N]",
+        "  Aggregate: groupBy=[[GROUPING SETS ((aggregate_test_100.c1), (aggregate_test_100.c1, aggregate_test_100.c2), (aggregate_test_100.c1, aggregate_test_100.c2, aggregate_test_100.c3))]], aggr=[[COUNT(UInt8(1))]] [c1:Utf8, c2:UInt32, c3:Int8, COUNT(UInt8(1)):Int64;N]",
+        "    Filter: aggregate_test_100.c1 = Utf8(NULL) OR aggregate_test_100.c1 = Utf8(\"b\") OR aggregate_test_100.c1 = Utf8(\"a\") [c1:Utf8, c2:UInt32, c3:Int8]",
+        "      TableScan: aggregate_test_100 projection=[c1, c2, c3], partial_filters=[aggregate_test_100.c1 = Utf8(NULL) OR aggregate_test_100.c1 = Utf8(\"b\") OR aggregate_test_100.c1 = Utf8(\"a\")] [c1:Utf8, c2:UInt32, c3:Int8]",
+    ];
+
+    let formatted = plan.display_indent_schema().to_string();
+    let actual: Vec<&str> = formatted.trim().lines().collect();
+    assert_eq!(
+        expected, actual,
+        "\n\nexpected:\n\n{expected:#?}\nactual:\n\n{actual:#?}\n\n"
+    );
+
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----+----+------+-----------------+",
+        "| c1 | c2 | c3   | COUNT(UInt8(1)) |",
+        "+----+----+------+-----------------+",
+        "| a  | 1  | -85  | 1               |",
+        "| a  | 1  | -56  | 1               |",
+        "| a  | 1  | -25  | 1               |",
+        "| a  | 1  | -5   | 1               |",
+        "| a  | 1  | 83   | 1               |",
+        "| a  | 1  |      | 5               |",
+        "| a  | 2  | -48  | 1               |",
+        "| a  | 2  | -43  | 1               |",
+        "| a  | 2  | 45   | 1               |",
+        "| a  | 2  |      | 3               |",
+        "| a  | 3  | -72  | 1               |",
+        "| a  | 3  | -12  | 1               |",
+        "| a  | 3  | 13   | 2               |",
+        "| a  | 3  | 14   | 1               |",
+        "| a  | 3  | 17   | 1               |",
+        "| a  | 3  |      | 6               |",
+        "| a  | 4  | -101 | 1               |",
+        "| a  | 4  | -54  | 1               |",
+        "| a  | 4  | -38  | 1               |",
+        "| a  | 4  | 65   | 1               |",
+        "| a  | 4  |      | 4               |",
+        "| a  | 5  | -101 | 1               |",
+        "| a  | 5  | -31  | 1               |",
+        "| a  | 5  | 36   | 1               |",
+        "| a  | 5  |      | 3               |",
+        "| a  |    |      | 21              |",
+        "| b  | 1  | 12   | 1               |",
+        "| b  | 1  | 29   | 1               |",
+        "| b  | 1  | 54   | 1               |",
+        "| b  | 1  |      | 3               |",
+        "| b  | 2  | -60  | 1               |",
+        "| b  | 2  | 31   | 1               |",
+        "| b  | 2  | 63   | 1               |",
+        "| b  | 2  | 68   | 1               |",
+        "| b  | 2  |      | 4               |",
+        "| b  | 3  | -101 | 1               |",
+        "| b  | 3  | 17   | 1               |",
+        "| b  | 3  |      | 2               |",
+        "| b  | 4  | -117 | 1               |",
+        "| b  | 4  | -111 | 1               |",
+        "| b  | 4  | -59  | 1               |",
+        "| b  | 4  | 17   | 1               |",
+        "| b  | 4  | 47   | 1               |",
+        "| b  | 4  |      | 5               |",
+        "| b  | 5  | -82  | 1               |",
+        "| b  | 5  | -44  | 1               |",
+        "| b  | 5  | -5   | 1               |",
+        "| b  | 5  | 62   | 1               |",
+        "| b  | 5  | 68   | 1               |",
+        "| b  | 5  |      | 5               |",
+        "| b  |    |      | 19              |",
+        "+----+----+------+-----------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn invalid_grouping_func() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, avg(c12), GROUPING(c3) FROM aggregate_test_100 GROUP BY GROUPING SETS((c1),(c2),())";
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let err = dataframe.into_optimized_plan().err().unwrap();
+    assert_eq!(
+        "Plan(\"Column of GROUPING(aggregate_test_100.c3) can't be found in GROUP BY columns [aggregate_test_100.c1, aggregate_test_100.c2]\")",
+        &format!("{err:?}")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invalid_grouping_id_func() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+    let sql = "SELECT c1, avg(c12), GROUPING_ID(c1) FROM aggregate_test_100 GROUP BY GROUPING SETS((c1),(c2),())";
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let err = dataframe.into_optimized_plan().err().unwrap();
+    assert_eq!(
+        "Plan(\"Columns of GROUPING_ID([aggregate_test_100.c1]) does not match GROUP BY columns [aggregate_test_100.c1, aggregate_test_100.c2]\")",
+        &format!("{err:?}")
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn invalid_grouping_id_func2() -> Result<()> {
+    let ctx = SessionContext::new();
+    register_aggregate_csv(&ctx).await?;
+
+    // The column ordering of the GROUPING_ID() matters
+    let sql = "SELECT c1, avg(c12), GROUPING_ID(c2, c1) FROM aggregate_test_100 GROUP BY CUBE(c1,c2)";
+    let msg = format!("Creating logical plan for '{sql}'");
+    let dataframe = ctx.sql(sql).await.expect(&msg);
+    let err = dataframe.into_optimized_plan().err().unwrap();
+    assert_eq!(
+        "Plan(\"Columns of GROUPING_ID([aggregate_test_100.c2, aggregate_test_100.c1]) does not match GROUP BY columns [aggregate_test_100.c1, aggregate_test_100.c2]\")",
+        &format!("{err:?}")
+    );
+
     Ok(())
 }
