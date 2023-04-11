@@ -30,7 +30,8 @@ use datafusion_common::ScalarValue;
 use datafusion_common::{DataFusionError, Result};
 use datafusion_expr::Accumulator;
 
-type DistinctScalarValues = ScalarValue;
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct DistinctScalarValues(Vec<ScalarValue>);
 
 /// Expression for a COUNT(DISTINCT) aggregation.
 #[derive(Debug)]
@@ -38,22 +39,22 @@ pub struct DistinctCount {
     /// Column name
     name: String,
     /// The DataType used to hold the state for each input
-    state_data_type: DataType,
+    state_data_types: Vec<DataType>,
     /// The input arguments
-    expr: Arc<dyn PhysicalExpr>,
+    exprs: Vec<Arc<dyn PhysicalExpr>>,
 }
 
 impl DistinctCount {
     /// Create a new COUNT(DISTINCT) aggregate function.
     pub fn new(
-        input_data_type: DataType,
-        expr: Arc<dyn PhysicalExpr>,
+        input_data_types: Vec<DataType>,
+        exprs: Vec<Arc<dyn PhysicalExpr>>,
         name: String,
     ) -> Self {
         Self {
             name,
-            state_data_type: input_data_type,
-            expr,
+            state_data_types: input_data_types,
+            exprs,
         }
     }
 }
@@ -68,27 +69,33 @@ impl AggregateExpr for DistinctCount {
         Ok(Field::new(&self.name, DataType::Int64, true))
     }
 
-    fn state_fields(&self) -> Result<Vec<Field>> {
-        Ok(vec![Field::new(
-            format_state_name(&self.name, "count distinct"),
-            DataType::List(Box::new(Field::new(
-                "item",
-                self.state_data_type.clone(),
-                true,
-            ))),
-            false,
-        )])
-    }
-
-    fn expressions(&self) -> Vec<Arc<dyn PhysicalExpr>> {
-        vec![self.expr.clone()]
-    }
-
     fn create_accumulator(&self) -> Result<Box<dyn Accumulator>> {
         Ok(Box::new(DistinctCountAccumulator {
             values: HashSet::default(),
-            state_data_type: self.state_data_type.clone(),
+            state_data_types: self.state_data_types.clone(),
         }))
+    }
+
+    fn state_fields(&self) -> Result<Vec<Field>> {
+        Ok(self
+            .state_data_types
+            .iter()
+            .map(|state_data_type| {
+                Field::new(
+                    format_state_name(&self.name, "count distinct"),
+                    DataType::List(Box::new(Field::new(
+                        "item",
+                        state_data_type.clone(),
+                        true,
+                    ))),
+                    false,
+                )
+            })
+            .collect::<Vec<_>>())
+    }
+
+    fn expressions(&self) -> Vec<Arc<dyn PhysicalExpr>> {
+        self.exprs.clone()
     }
 
     fn name(&self) -> &str {
@@ -99,7 +106,7 @@ impl AggregateExpr for DistinctCount {
 #[derive(Debug)]
 struct DistinctCountAccumulator {
     values: HashSet<DistinctScalarValues, RandomState>,
-    state_data_type: DataType,
+    state_data_types: Vec<DataType>,
 }
 
 impl DistinctCountAccumulator {
@@ -112,9 +119,12 @@ impl DistinctCountAccumulator {
                 .values
                 .iter()
                 .next()
-                .map(|vals| ScalarValue::size(vals) - std::mem::size_of_val(vals))
+                .map(|vals| {
+                    (ScalarValue::size_of_vec(&vals.0) - std::mem::size_of_val(&vals.0))
+                        * self.values.capacity()
+                })
                 .unwrap_or(0)
-            + std::mem::size_of::<DataType>()
+            + (std::mem::size_of::<DataType>() * self.state_data_types.capacity())
     }
 
     // calculates the size as accurate as possible, call to this method is expensive
@@ -124,59 +134,99 @@ impl DistinctCountAccumulator {
             + self
                 .values
                 .iter()
-                .map(|vals| ScalarValue::size(vals) - std::mem::size_of_val(vals))
+                .map(|vals| {
+                    ScalarValue::size_of_vec(&vals.0) - std::mem::size_of_val(&vals.0)
+                })
                 .sum::<usize>()
-            + std::mem::size_of::<DataType>()
+            + (std::mem::size_of::<DataType>() * self.state_data_types.capacity())
+            + self
+                .state_data_types
+                .iter()
+                .map(|dt| dt.size() - std::mem::size_of_val(dt))
+                .sum::<usize>()
+    }
+
+    fn update(&mut self, values: &[ScalarValue]) -> Result<()> {
+        // If a row has a NULL, it is not included in the final count.
+        if !values.iter().any(|v| v.is_null()) {
+            self.values.insert(DistinctScalarValues(values.to_vec()));
+        }
+        Ok(())
     }
 }
 
 impl Accumulator for DistinctCountAccumulator {
     fn state(&self) -> Result<Vec<ScalarValue>> {
-        let mut cols_out =
-            ScalarValue::new_list(Some(Vec::new()), self.state_data_type.clone());
-        self.values
+        let mut cols_out = self
+            .state_data_types
             .iter()
-            .enumerate()
-            .for_each(|(_, distinct_values)| {
-                if let ScalarValue::List(Some(ref mut v), _) = cols_out {
-                    v.push(distinct_values.clone());
-                }
-            });
-        Ok(vec![cols_out])
+            .map(|state_data_type| {
+                ScalarValue::new_list(Some(Vec::new()), state_data_type.clone())
+            })
+            .collect::<Vec<_>>();
+
+        let mut cols_vec = cols_out
+            .iter_mut()
+            .map(|c| match c {
+                ScalarValue::List(Some(ref mut v), _) => Ok(v),
+                t => Err(DataFusionError::Internal(format!(
+                    "cols_out should only consist of ScalarValue::List. {t:?} is found"
+                ))),
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        self.values.iter().for_each(|distinct_values| {
+            distinct_values.0.iter().enumerate().for_each(
+                |(col_index, distinct_value)| {
+                    cols_vec[col_index].push(distinct_value.clone());
+                },
+            )
+        });
+        Ok(cols_out.into_iter().collect())
     }
+
     fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
         if values.is_empty() {
             return Ok(());
         }
         let arr = &values[0];
         (0..arr.len()).try_for_each(|index| {
-            if !arr.is_null(index) {
-                let scalar = ScalarValue::try_from_array(arr, index)?;
-                self.values.insert(scalar);
-            }
-            Ok(())
+            let vals = values
+                .iter()
+                .map(|array| ScalarValue::try_from_array(array, index))
+                .collect::<Result<Vec<_>>>()?;
+            self.update(&vals)
         })
     }
+
     fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
         if states.is_empty() {
             return Ok(());
         }
         let arr = &states[0];
         (0..arr.len()).try_for_each(|index| {
-            let scalar = ScalarValue::try_from_array(arr, index)?;
+            let vals = states
+                .iter()
+                .map(|array| ScalarValue::try_from_array(array, index))
+                .collect::<Result<Vec<_>>>()?;
 
-            if let ScalarValue::List(Some(scalar), _) = scalar {
-                scalar.iter().for_each(|scalar| {
-                    if !ScalarValue::is_null(scalar) {
-                        self.values.insert(scalar.clone());
-                    }
-                });
-            } else {
-                return Err(DataFusionError::Internal(
-                    "Unexpected accumulator state".into(),
-                ));
-            }
-            Ok(())
+            let col_values = vals
+                .iter()
+                .map(|state| match state {
+                    ScalarValue::List(Some(values), _) => Ok(values),
+                    _ => Err(DataFusionError::Internal(format!(
+                        "Unexpected accumulator state {state:?}"
+                    ))),
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            (0..col_values[0].len()).try_for_each(|row_index| {
+                let row_values = col_values
+                    .iter()
+                    .map(|col| col[row_index].clone())
+                    .collect::<Vec<_>>();
+                self.update(&row_values)
+            })
         })
     }
 
@@ -185,18 +235,21 @@ impl Accumulator for DistinctCountAccumulator {
     }
 
     fn size(&self) -> usize {
-        match &self.state_data_type {
-            DataType::Boolean | DataType::Null => self.fixed_size(),
-            d if d.is_primitive() => self.fixed_size(),
-            _ => self.full_size(),
+        let is_fixed_length = self.state_data_types.iter().all(|t| match t {
+            DataType::Boolean | DataType::Null => true,
+            d if d.is_primitive() => true,
+            _ => false,
+        });
+        if is_fixed_length {
+            self.fixed_size()
+        } else {
+            self.full_size()
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::expressions::NoOp;
-
     use super::*;
     use arrow::array::{
         ArrayRef, BooleanArray, Float32Array, Float64Array, Int16Array, Int32Array,
@@ -264,8 +317,11 @@ mod tests {
 
     fn run_update_batch(arrays: &[ArrayRef]) -> Result<(Vec<ScalarValue>, ScalarValue)> {
         let agg = DistinctCount::new(
-            arrays[0].data_type().clone(),
-            Arc::new(NoOp::new()),
+            arrays
+                .iter()
+                .map(|a| a.data_type().clone())
+                .collect::<Vec<_>>(),
+            vec![],
             String::from("__col_name__"),
         );
 
@@ -279,11 +335,8 @@ mod tests {
         data_types: &[DataType],
         rows: &[Vec<ScalarValue>],
     ) -> Result<(Vec<ScalarValue>, ScalarValue)> {
-        let agg = DistinctCount::new(
-            data_types[0].clone(),
-            Arc::new(NoOp::new()),
-            String::from("__col_name__"),
-        );
+        let agg =
+            DistinctCount::new(data_types.to_vec(), vec![], String::from("__col_name__"));
 
         let mut accum = agg.create_accumulator()?;
 

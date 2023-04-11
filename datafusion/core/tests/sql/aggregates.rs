@@ -730,6 +730,119 @@ async fn count_distinct_integers_aggregated_multiple_partitions() -> Result<()> 
 }
 
 #[tokio::test]
+async fn count_distinct_multiple_exprs() -> Result<()> {
+    let results =
+        execute_with_partition("SELECT COUNT(distinct c1, c2) FROM test", 4).await?;
+    assert_eq!(results.len(), 1);
+
+    let expected = vec![
+        "+---------------------------------+",
+        "| COUNT(DISTINCT test.c1,test.c2) |",
+        "+---------------------------------+",
+        "| 40                              |",
+        "+---------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &results);
+
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("c1", DataType::Int32, true),
+        Field::new("c2", DataType::Int32, true),
+    ]));
+
+    let data = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![
+                Some(0),
+                None,
+                Some(1),
+                Some(2),
+                None,
+                Some(0),
+            ])),
+            Arc::new(Int32Array::from(vec![
+                Some(1),
+                Some(1),
+                Some(0),
+                None,
+                None,
+                Some(1),
+            ])),
+        ],
+    )?;
+
+    let ctx = SessionContext::new();
+    ctx.register_batch("test", data)?;
+    let sql = "SELECT count(distinct c1, c2) FROM test";
+    let actual = execute_to_batches(&ctx, sql).await;
+
+    let expected = vec![
+        "+---------------------------------+",
+        "| COUNT(DISTINCT test.c1,test.c2) |",
+        "+---------------------------------+",
+        "| 2                               |",
+        "+---------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn count_distinct_multiple_exprs_with_groups() -> Result<()> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("c1", DataType::Int32, true),
+        Field::new("c2", DataType::Utf8, true),
+        Field::new("c3", DataType::Utf8, true),
+    ]));
+
+    let data = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![
+                Some(0),
+                None,
+                Some(1),
+                Some(2),
+                None,
+                Some(0),
+            ])),
+            Arc::new(StringArray::from(vec![
+                Some("a"),
+                Some("b"),
+                Some("c"),
+                None,
+                None,
+                Some("a"),
+            ])),
+            Arc::new(StringArray::from(vec![
+                Some("a"),
+                Some("a"),
+                Some("a"),
+                Some("b"),
+                Some("b"),
+                Some("b"),
+            ])),
+        ],
+    )?;
+
+    let ctx = SessionContext::new();
+    ctx.register_batch("test", data)?;
+    let sql = "SELECT c3, count(distinct c1, c2) FROM test group by c3";
+    let actual = execute_to_batches(&ctx, sql).await;
+
+    let expected = vec![
+        "+----+---------------------------------+",
+        "| c3 | COUNT(DISTINCT test.c1,test.c2) |",
+        "+----+---------------------------------+",
+        "| a  | 2                               |",
+        "| b  | 1                               |",
+        "+----+---------------------------------+",
+    ];
+    assert_batches_sorted_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
 async fn aggregate_with_alias() -> Result<()> {
     let ctx = SessionContext::new();
     let state = ctx.state();
