@@ -289,7 +289,7 @@ impl Accumulator for SumAccumulator {
     }
 
     fn size(&self) -> usize {
-        std::mem::size_of_val(self) - std::mem::size_of_val(&self.sum) + self.sum.size()
+        std::mem::size_of_val(self)
     }
 }
 
