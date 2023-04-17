@@ -565,3 +565,119 @@ async fn test_power() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn if_static_value() -> Result<()> {
+    let ctx = SessionContext::new();
+    let sql = "SELECT IF(true, 1, 2)";
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+-------------------------------------+",
+        "| if(Boolean(true),Int64(1),Int64(2)) |",
+        "+-------------------------------------+",
+        "| 1                                   |",
+        "+-------------------------------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+
+    let sql = "SELECT IF(false, 1, 2)";
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+--------------------------------------+",
+        "| if(Boolean(false),Int64(1),Int64(2)) |",
+        "+--------------------------------------+",
+        "| 2                                    |",
+        "+--------------------------------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+
+    let sql = "SELECT IF(1 = 2, 1 + 5, 2 + 4)";
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+-----------------------------------------------------------------+",
+        "| if(Int64(1) = Int64(2),Int64(1) + Int64(5),Int64(2) + Int64(4)) |",
+        "+-----------------------------------------------------------------+",
+        "| 6                                                               |",
+        "+-----------------------------------------------------------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+
+    let sql = "SELECT IF(null, 1, 2)";
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+----------------------------+",
+        "| if(NULL,Int64(1),Int64(2)) |",
+        "+----------------------------+",
+        "| 2                          |",
+        "+----------------------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+    Ok(())
+}
+
+#[tokio::test]
+async fn if_normal() -> Result<()> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("c1", DataType::Int32, true),
+        Field::new("c2", DataType::Int32, true),
+    ]));
+
+    let data = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![Some(1), None, Some(3), None])),
+            Arc::new(Int32Array::from(vec![Some(2), Some(2), Some(1), None])),
+        ],
+    )?;
+
+    let ctx = SessionContext::new();
+    ctx.register_batch("test", data)?;
+    let sql = "SELECT IF(c1 > c2, c1, c2) FROM test";
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+---------------------------------------+",
+        "| if(test.c1 > test.c2,test.c1,test.c2) |",
+        "+---------------------------------------+",
+        "| 2                                     |",
+        "| 2                                     |",
+        "| 3                                     |",
+        "|                                       |",
+        "+---------------------------------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("c1", DataType::Int32, true),
+        Field::new("c2", DataType::Int64, true),
+    ]));
+
+    let data = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(Int32Array::from(vec![Some(1), None, Some(3), None])),
+            Arc::new(Int64Array::from(vec![
+                Some(2i64),
+                Some(5i64),
+                Some(1i64),
+                None,
+            ])),
+        ],
+    )?;
+
+    let ctx = SessionContext::new();
+    ctx.register_batch("test", data)?;
+    let sql = "SELECT IF(c1 > c2, c1, c2) FROM test";
+    let actual = execute_to_batches(&ctx, sql).await;
+    let expected = vec![
+        "+---------------------------------------+",
+        "| if(test.c1 > test.c2,test.c1,test.c2) |",
+        "+---------------------------------------+",
+        "| 2                                     |",
+        "| 5                                     |",
+        "| 3                                     |",
+        "|                                       |",
+        "+---------------------------------------+",
+    ];
+    assert_batches_eq!(expected, &actual);
+    Ok(())
+}

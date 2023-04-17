@@ -305,6 +305,7 @@ pub fn return_type(
             DataType::Float32 => Ok(DataType::Float32),
             _ => Ok(DataType::Float64),
         },
+        BuiltinScalarFunction::If => Ok(input_expr_types[1].clone()),
     }
 }
 
@@ -660,6 +661,10 @@ pub fn signature(fun: &BuiltinScalarFunction) -> Signature {
             fun.volatility(),
         ),
         BuiltinScalarFunction::ArrowTypeof => Signature::any(1, fun.volatility()),
+        // todo: need more specific signature for if function, the first arg is boolean type,
+        // and the next two args can be any type, but no need to be exact the same, it is ok that
+        // the two args has the same super type, like int32 and int64.
+        BuiltinScalarFunction::If => Signature::any(3, fun.volatility()),
         // math expressions expect 1 argument of type f64 or f32
         // priority is given to f64 because e.g. `sqrt(1i32)` is in IR (real numbers) and thus we
         // return the best approximation for it (in f64).

@@ -31,6 +31,7 @@
 //! argument is automatically is coerced to f64.
 
 use crate::execution_props::ExecutionProps;
+use crate::expressions::case;
 use crate::{
     array_expressions, conditional_expressions, datetime_expressions,
     expressions::{cast_column, nullif_func, DEFAULT_DATAFUSION_CAST_OPTIONS},
@@ -63,6 +64,22 @@ pub fn create_physical_expr(
         .collect::<Result<Vec<_>>>()?;
 
     let data_type = function::return_type(fun, &input_expr_types)?;
+
+    // if function will be converted to case expression
+    if let BuiltinScalarFunction::If = fun {
+        if input_phy_exprs.len() != 3 {
+            return Err(DataFusionError::Internal(format!(
+                "{:?} args were supplied but IF function takes exactly 3 args",
+                input_phy_exprs.len(),
+            )));
+        }
+        let (when_expr, then_expr, else_expr) = (
+            Arc::clone(&input_phy_exprs[0]),
+            Arc::clone(&input_phy_exprs[1]),
+            Arc::clone(&input_phy_exprs[2]),
+        );
+        return case(None, vec![(when_expr, then_expr)], Some(else_expr));
+    }
 
     let fun_expr: ScalarFunctionImplementation = match fun {
         // These functions need args and input schema to pick an implementation

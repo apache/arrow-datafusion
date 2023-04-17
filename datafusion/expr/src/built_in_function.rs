@@ -190,6 +190,8 @@ pub enum BuiltinScalarFunction {
     Struct,
     /// arrow_typeof
     ArrowTypeof,
+    /// if
+    If,
 }
 
 impl BuiltinScalarFunction {
@@ -286,6 +288,7 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Struct => Volatility::Immutable,
             BuiltinScalarFunction::FromUnixtime => Volatility::Immutable,
             BuiltinScalarFunction::ArrowTypeof => Volatility::Immutable,
+            BuiltinScalarFunction::If => Volatility::Immutable,
 
             // Stable builtin functions
             BuiltinScalarFunction::Now => Volatility::Stable,
@@ -400,6 +403,7 @@ impl FromStr for BuiltinScalarFunction {
             "struct" => BuiltinScalarFunction::Struct,
             "from_unixtime" => BuiltinScalarFunction::FromUnixtime,
             "arrow_typeof" => BuiltinScalarFunction::ArrowTypeof,
+            "if" => BuiltinScalarFunction::If,
             _ => {
                 return Err(DataFusionError::Plan(format!(
                     "There is no built-in function named {name}"

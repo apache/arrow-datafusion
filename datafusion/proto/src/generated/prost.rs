@@ -2152,6 +2152,7 @@ pub enum ScalarFunction {
     Cosh = 78,
     Tanh = 79,
     Pi = 80,
+    If = 81,
 }
 impl ScalarFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2241,6 +2242,7 @@ impl ScalarFunction {
             ScalarFunction::Cosh => "Cosh",
             ScalarFunction::Tanh => "Tanh",
             ScalarFunction::Pi => "Pi",
+            ScalarFunction::If => "If",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2327,6 +2329,7 @@ impl ScalarFunction {
             "Cosh" => Some(Self::Cosh),
             "Tanh" => Some(Self::Tanh),
             "Pi" => Some(Self::Pi),
+            "If" => Some(Self::If),
             _ => None,
         }
     }
