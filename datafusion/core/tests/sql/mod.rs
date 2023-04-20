@@ -1131,15 +1131,6 @@ async fn plan_and_collect(ctx: &SessionContext, sql: &str) -> Result<Vec<RecordB
 /// Execute query and return results as a Vec of RecordBatches
 async fn execute_to_batches(ctx: &SessionContext, sql: &str) -> Vec<RecordBatch> {
     let df = ctx.sql(sql).await.unwrap();
-
-    // We are not really interested in the direct output of optimized_logical_plan
-    // since the physical plan construction already optimizes the given logical plan
-    // and we want to avoid double-optimization as a consequence. So we just construct
-    // it here to make sure that it doesn't fail at this step and get the optimized
-    // schema (to assert later that the logical and optimized schemas are the same).
-    let optimized = df.clone().into_optimized_plan().unwrap();
-    assert_eq!(df.logical_plan().schema(), optimized.schema());
-
     df.collect().await.unwrap()
 }
 

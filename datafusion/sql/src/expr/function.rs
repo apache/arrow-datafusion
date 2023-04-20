@@ -17,7 +17,6 @@
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
 use datafusion_common::{DFSchema, DataFusionError, Result};
-use datafusion_expr::utils::COUNT_STAR_EXPANSION;
 use datafusion_expr::window_frame::regularize;
 use datafusion_expr::{
     expr, window_function, AggregateFunction, BuiltinScalarFunction, Expr, WindowFrame,
@@ -215,12 +214,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             // Special case rewrite COUNT(*) to COUNT(constant)
             AggregateFunction::Count => args
                 .into_iter()
-                .map(|a| match a {
-                    FunctionArg::Unnamed(FunctionArgExpr::Wildcard) => {
-                        Ok(Expr::Literal(COUNT_STAR_EXPANSION.clone()))
-                    }
-                    _ => self.sql_fn_arg_to_logical_expr(a, schema, planner_context),
-                })
+                .map(|a| self.sql_fn_arg_to_logical_expr(a, schema, planner_context))
                 .collect::<Result<Vec<Expr>>>()?,
             _ => self.function_args_to_expr(args, schema, planner_context)?,
         };

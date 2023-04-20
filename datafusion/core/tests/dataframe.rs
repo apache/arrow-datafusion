@@ -24,6 +24,8 @@ use arrow::{
     },
     record_batch::RecordBatch,
 };
+use arrow_array::TimestampNanosecondArray;
+use arrow_schema::TimeUnit;
 use datafusion::from_slice::FromSlice;
 use std::sync::Arc;
 
@@ -153,7 +155,27 @@ async fn test_count_wildcard_on_where_exist() -> Result<()> {
 
 #[tokio::test]
 async fn test_count_wildcard_on_window() -> Result<()> {
-    let ctx = create_join_context()?;
+    let ctx = SessionContext::new();
+    let t1 = Arc::new(Schema::new(vec![
+        Field::new("a", DataType::UInt32, false),
+        Field::new("ts", DataType::Timestamp(TimeUnit::Nanosecond, None), false),
+    ]));
+
+    // define data.
+    let batch1 = RecordBatch::try_new(
+        t1,
+        vec![
+            Arc::new(UInt32Array::from_slice([1, 10, 11, 100])),
+            Arc::new(TimestampNanosecondArray::from_slice([
+                1664264591000000000,
+                1664264592000000000,
+                1664264592000000000,
+                1664264593000000000,
+            ])),
+        ],
+    )?;
+
+    ctx.register_batch("t1", batch1)?;
 
     let sql_results = ctx
         .sql("select COUNT(*) OVER(ORDER BY a DESC RANGE BETWEEN 6 PRECEDING AND 2 FOLLOWING)  from t1")
@@ -184,6 +206,43 @@ async fn test_count_wildcard_on_window() -> Result<()> {
         pretty_format_batches(&df_results)?.to_string(),
         pretty_format_batches(&sql_results)?.to_string()
     );
+
+    #[allow(unused_doc_comments)]
+    ///special timestamp scenarios, DataFrame cannot achieve the same logical plan as SQL, it needs to be tested separately.   
+    ///```sql
+    /// COUNT(*) OVER (ORDER BY ts DESC RANGE BETWEEN INTERVAL '1' DAY PRECEDING AND INTERVAL '2 DAY' FOLLOWING)
+    /// ```
+    /// logic_plan 
+    /// ```text
+    /// COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 18446744073709551616 PRECEDING AND 36893488147419103232 FOLLOWING 
+    /// AS 
+    /// COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 1 DAY PRECEDING AND 2 DAY FOLLOWING
+    /// ```
+    let sql_results = ctx
+        .sql("select \
+            COUNT(*) OVER (ORDER BY ts DESC RANGE BETWEEN INTERVAL '1' DAY PRECEDING AND INTERVAL '2 DAY' FOLLOWING) as cnt2 \
+            from t1")
+        .await?
+        .explain(false, false)?
+        .collect()
+        .await?;
+
+    #[rustfmt::skip]
+        let expected = vec![
+        "+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+",
+        "| plan_type     | plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |",
+        "+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+",
+        "| logical_plan  | Projection: COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 1 DAY PRECEDING AND 2 DAY FOLLOWING AS cnt2                                                                                                                                                                                                                                                                                                                                                                                                         |",
+        "|               |   WindowAggr: windowExpr=[[COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 18446744073709551616 PRECEDING AND 36893488147419103232 FOLLOWING AS COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 1 DAY PRECEDING AND 2 DAY FOLLOWING]]                                                                                                                                                                                                                                                           |",
+        "|               |     TableScan: t1 projection=[a, ts]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |",
+        "| physical_plan | ProjectionExec: expr=[COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 1 DAY PRECEDING AND 2 DAY FOLLOWING@2 as cnt2]                                                                                                                                                                                                                                                                                                                                                                                            |",
+        "|               |   BoundedWindowAggExec: wdw=[COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 1 DAY PRECEDING AND 2 DAY FOLLOWING: Ok(Field { name: \"COUNT(UInt8(1)) ORDER BY [t1.ts DESC NULLS FIRST] RANGE BETWEEN 1 DAY PRECEDING AND 2 DAY FOLLOWING\", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }), frame: WindowFrame { units: Range, start_bound: Preceding(IntervalMonthDayNano(\"18446744073709551616\")), end_bound: Following(IntervalMonthDayNano(\"36893488147419103232\")) }] |",
+        "|               |     SortExec: expr=[ts@1 DESC]                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |",
+        "|               |       MemoryExec: partitions=1, partition_sizes=[1]                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |",
+        "|               |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |",
+        "+---------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+",
+    ];
+    assert_batches_eq!(expected, &sql_results);
 
     Ok(())
 }

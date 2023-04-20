@@ -41,6 +41,7 @@ arrow = { workspace = true }
 arrow-schema = { workspace = true }
 datafusion-common = { path = "../common", version = "22.0.0" }
 datafusion-expr = { path = "../expr", version = "22.0.0" }
+datafusion-optimizer = { path = "../optimizer", version = "22.0.0" }
 log = "^0.4"
 sqlparser = "0.33"
 

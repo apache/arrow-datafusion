@@ -20,7 +20,7 @@ use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
 use datafusion_common::{Column, DFField, DFSchema, DFSchemaRef, Result};
 use datafusion_expr::expr::AggregateFunction;
 use datafusion_expr::utils::COUNT_STAR_EXPANSION;
-use datafusion_expr::Expr::{Exists, InSubquery, ScalarSubquery};
+use datafusion_expr::Expr::{Alias, Exists, InSubquery, ScalarSubquery};
 use datafusion_expr::{
     aggregate_function, count, expr, lit, window_function, Aggregate, Expr, Filter,
     LogicalPlan, Projection, Sort, Subquery, Window,
@@ -231,6 +231,7 @@ impl TreeNodeRewriter for CountWildcardRewriter {
                     negated,
                 }
             }
+            Alias(expr, name) => Alias(expr, replace_count_star(name)),
             _ => old_expr,
         };
         Ok(new_expr)
@@ -241,29 +242,35 @@ fn rewrite_schema(schema: &DFSchema) -> DFSchemaRef {
         .fields()
         .iter()
         .map(|field| {
-            let mut name = field.field().name().clone();
-            if name.contains(COUNT_STAR) {
-                name = name.replace(
-                    COUNT_STAR,
-                    count(lit(COUNT_STAR_EXPANSION)).to_string().as_str(),
-                );
-            }
             DFField::new(
                 field.qualifier().cloned(),
-                &name,
+                &replace_count_star(field.field().name().clone()),
                 field.data_type().clone(),
                 field.is_nullable(),
             )
         })
         .collect::<Vec<DFField>>();
+
     DFSchemaRef::new(
         DFSchema::new_with_metadata(new_fields, schema.metadata().clone()).unwrap(),
     )
 }
 
+fn replace_count_star(name: String) -> String {
+    if name.contains(COUNT_STAR) {
+        name.replace(
+            COUNT_STAR,
+            count(lit(COUNT_STAR_EXPANSION)).to_string().as_str(),
+        )
+    } else {
+        name
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyzer::Analyzer;
     use crate::test::*;
     use datafusion_common::{Result, ScalarValue};
     use datafusion_expr::expr::Sort;
@@ -377,6 +384,7 @@ mod tests {
               \n    TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]";
         assert_plan_eq(&plan, expected)
     }
+
     #[test]
     fn test_count_wildcard_on_window() -> Result<()> {
         let table_scan = test_table_scan()?;

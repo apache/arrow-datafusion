@@ -35,6 +35,8 @@ use datafusion_sql::{
     planner::{ContextProvider, ParserOptions, SqlToRel},
 };
 
+use datafusion_optimizer::analyzer::Analyzer;
+use datafusion_optimizer::{OptimizerConfig, OptimizerContext};
 use rstest::rstest;
 
 #[cfg(test)]
@@ -865,7 +867,7 @@ fn select_aggregate_with_having_referencing_column_not_in_select() {
     assert_eq!(
         "Plan(\"HAVING clause references non-aggregate values: \
             Expression person.first_name could not be resolved from available columns: \
-            COUNT(UInt8(1))\")",
+            COUNT(*)\")",
         format!("{err:?}")
     );
 }
@@ -2530,7 +2532,14 @@ fn logical_plan_with_dialect_and_options(
     let planner = SqlToRel::new_with_options(&context, options);
     let result = DFParser::parse_sql_with_dialect(sql, dialect);
     let mut ast = result?;
-    planner.statement_to_plan(ast.pop_front().unwrap())
+    match planner.statement_to_plan(ast.pop_front().unwrap()) {
+        Ok(plan) => Analyzer::new().execute_and_check(
+            &plan,
+            OptimizerContext::new().options(),
+            |_, _| {},
+        ),
+        Err(err) => Err(err),
+    }
 }
 
 /// Create logical plan, write with formatter, compare to expected output
