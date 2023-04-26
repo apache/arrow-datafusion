@@ -18,6 +18,7 @@
 use arrow::array::{Array, ArrayRef};
 use arrow::datatypes::{Fields, SchemaBuilder, SchemaRef};
 use arrow::record_batch::RecordBatch;
+use datafusion::physical_plan::file_format::FileWriterSaveMode;
 use std::fs;
 use std::ops::{Div, Mul};
 use std::path::Path;
@@ -384,7 +385,13 @@ pub async fn convert_tbl(
                 let props = WriterProperties::builder()
                     .set_compression(compression)
                     .build();
-                ctx.write_parquet(csv, output_path, Some(props)).await?
+                ctx.write_parquet(
+                    csv,
+                    output_path,
+                    Some(props),
+                    FileWriterSaveMode::Overwrite,
+                )
+                .await?
             }
             other => {
                 return Err(DataFusionError::NotImplemented(format!(

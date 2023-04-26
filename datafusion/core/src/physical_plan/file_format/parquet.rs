@@ -26,6 +26,7 @@ use std::fmt;
 use std::fs;
 use std::ops::Range;
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::config::ConfigOptions;
 use crate::datasource::file_format::parquet::fetch_parquet_metadata;
@@ -71,6 +72,7 @@ use crate::physical_plan::file_format::parquet::page_filter::PagePruningPredicat
 pub use metrics::ParquetFileMetrics;
 
 use super::get_output_ordering;
+use super::FileWriterSaveMode;
 
 #[derive(Default)]
 struct RepartitionState {
@@ -711,26 +713,58 @@ impl ParquetFileReaderFactory for DefaultParquetFileReaderFactory {
     }
 }
 
-/// Executes a query and writes the results to a partitioned Parquet file.
-pub async fn plan_to_parquet(
-    task_ctx: Arc<TaskContext>,
-    plan: Arc<dyn ExecutionPlan>,
+/// create target folder using different save mode strategy, refer to [`FileWriterSaveMode`] for more details
+fn create_target_folder(
     path: impl AsRef<str>,
-    writer_properties: Option<WriterProperties>,
-) -> Result<()> {
+    save_mode: FileWriterSaveMode,
+) -> Result<Option<std::path::PathBuf>> {
     let path = path.as_ref();
-    // create directory to contain the Parquet files (one per partition)
     let fs_path = std::path::Path::new(path);
+
+    if fs_path.exists() {
+        match save_mode {
+            FileWriterSaveMode::Overwrite => {
+                std::fs::remove_dir_all(fs_path)?;
+            }
+            FileWriterSaveMode::Ignore => {
+                return Ok(None);
+            }
+            FileWriterSaveMode::Append => {
+                return Ok(Some(fs_path.to_path_buf()));
+            }
+            _ => {}
+        };
+    }
+
     if let Err(e) = fs::create_dir(fs_path) {
         return Err(DataFusionError::Execution(format!(
             "Could not create directory {path}: {e:?}"
         )));
     }
 
+    Ok(Some(fs_path.to_path_buf()))
+}
+
+/// Executes a query and writes the results to a partitioned Parquet file.
+pub async fn plan_to_parquet(
+    task_ctx: Arc<TaskContext>,
+    plan: Arc<dyn ExecutionPlan>,
+    path: impl AsRef<str>,
+    writer_properties: Option<WriterProperties>,
+    save_mode: FileWriterSaveMode,
+) -> Result<()> {
+    // create directory to contain the Parquet files (one per partition)
+    let fs_path = &create_target_folder(path, save_mode)?;
+    if fs_path.is_none() {
+        return Ok(());
+    }
+    let fs_path = fs_path.as_ref().unwrap().as_path();
+    // TODO: its likely better to task_ctx.task_id but now it comes None always
+    let write_id = Uuid::new_v4().to_string();
     let mut tasks = vec![];
     for i in 0..plan.output_partitioning().partition_count() {
         let plan = plan.clone();
-        let filename = format!("part-{i}.parquet");
+        let filename = format!("part-{write_id}-{i}.parquet");
         let path = fs_path.join(filename);
         let file = fs::File::create(path)?;
         let mut writer =
@@ -838,7 +872,7 @@ mod tests {
     use object_store::local::LocalFileSystem;
     use object_store::path::Path;
     use object_store::ObjectMeta;
-    use std::fs::File;
+    use std::fs::{DirEntry, File};
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -997,7 +1031,7 @@ mod tests {
         let tmp_dir = TempDir::new()?;
         let out_dir = tmp_dir.as_ref().to_str().unwrap().to_string() + "/out";
         let e = df
-            .write_parquet(&out_dir, None)
+            .write_parquet(&out_dir, None, FileWriterSaveMode::Overwrite)
             .await
             .expect_err("should fail because input file does not match inferred schema");
         assert_eq!("Arrow error: Parser error: Error while parsing value d for column 0 at line 4", format!("{e}"));
@@ -2225,6 +2259,32 @@ mod tests {
 
     #[tokio::test]
     async fn write_parquet_results() -> Result<()> {
+        async fn register_parquet(
+            ctx: &SessionContext,
+            files: &[DirEntry],
+            num: u8,
+        ) -> Result<()> {
+            let filename = files
+                .iter()
+                .find(|f| {
+                    f.file_name()
+                        .to_str()
+                        .unwrap()
+                        .ends_with(&format!("-{num}.parquet"))
+                })
+                .unwrap()
+                .path();
+
+            let filename = filename.to_str().unwrap();
+            ctx.register_parquet(
+                &format!("part{num}"),
+                filename,
+                ParquetReadOptions::default(),
+            )
+            .await?;
+
+            Ok(())
+        }
         // create partitioned input file and context
         let tmp_dir = TempDir::new()?;
         // let mut ctx = create_ctx(&tmp_dir, 4).await?;
@@ -2242,37 +2302,20 @@ mod tests {
         // execute a simple query and write the results to parquet
         let out_dir = tmp_dir.as_ref().to_str().unwrap().to_string() + "/out";
         let df = ctx.sql("SELECT c1, c2 FROM test").await?;
-        df.write_parquet(&out_dir, None).await?;
+        df.write_parquet(&out_dir, None, FileWriterSaveMode::Overwrite)
+            .await?;
         // write_parquet(&mut ctx, "SELECT c1, c2 FROM test", &out_dir, None).await?;
 
         // create a new context and verify that the results were saved to a partitioned csv file
         let ctx = SessionContext::new();
 
         // register each partition as well as the top level dir
-        ctx.register_parquet(
-            "part0",
-            &format!("{out_dir}/part-0.parquet"),
-            ParquetReadOptions::default(),
-        )
-        .await?;
-        ctx.register_parquet(
-            "part1",
-            &format!("{out_dir}/part-1.parquet"),
-            ParquetReadOptions::default(),
-        )
-        .await?;
-        ctx.register_parquet(
-            "part2",
-            &format!("{out_dir}/part-2.parquet"),
-            ParquetReadOptions::default(),
-        )
-        .await?;
-        ctx.register_parquet(
-            "part3",
-            &format!("{out_dir}/part-3.parquet"),
-            ParquetReadOptions::default(),
-        )
-        .await?;
+        let files = list_folder(&out_dir)?;
+        register_parquet(&ctx, &files, 0).await?;
+        register_parquet(&ctx, &files, 1).await?;
+        register_parquet(&ctx, &files, 2).await?;
+        register_parquet(&ctx, &files, 3).await?;
+
         ctx.register_parquet("allparts", &out_dir, ParquetReadOptions::default())
             .await?;
 
@@ -2288,8 +2331,117 @@ mod tests {
         assert_eq!(part0[0].schema(), allparts[0].schema());
 
         assert_eq!(allparts_count, 40);
+        let x = &format!("{out_dir}/part-2.parquet");
+        dbg!(&x);
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn write_parquet_savemode() -> Result<()> {
+        async fn write_parquet(
+            ctx: &SessionContext,
+            out_dir: &str,
+            save_mode: FileWriterSaveMode,
+        ) -> Result<()> {
+            ctx.sql("SELECT 1 a")
+                .await?
+                .repartition(datafusion_expr::Partitioning::RoundRobinBatch(1))?
+                .write_parquet(out_dir, None, save_mode)
+                .await
+        }
+
+        let ctx = SessionContext::new();
+        let tmp_dir = TempDir::new()?;
+        let out_dir =
+            tmp_dir.as_ref().to_str().unwrap().to_string() + "/write_parquet_savemode";
+
+        // Overwrite
+        write_parquet(&ctx, &out_dir, FileWriterSaveMode::Overwrite).await?;
+        let run0: Vec<DirEntry> = list_folder(&out_dir)?;
+        assert_eq!(
+            run0.iter()
+                .filter(|f| f.file_name().to_str().unwrap().ends_with(".parquet"))
+                .count(),
+            1
+        );
+        let file0 = run0.first().unwrap().file_name();
+        let file0 = file0.to_str().unwrap();
+
+        write_parquet(&ctx, &out_dir, FileWriterSaveMode::Overwrite).await?;
+        let run1: Vec<DirEntry> = list_folder(&out_dir)?;
+        assert_eq!(
+            run1.iter()
+                .filter(|f| f.file_name().to_str().unwrap().ends_with(".parquet"))
+                .count(),
+            1
+        );
+        let file1 = run1.first().unwrap().file_name();
+        let file1 = file1.to_str().unwrap();
+        // Overwrite saves 1 new file from second run, files from first run removed
+        assert!(file0 != file1);
+        std::fs::remove_dir_all(&out_dir)?;
+
+        // Append
+        write_parquet(&ctx, &out_dir, FileWriterSaveMode::Append).await?;
+        let run0: Vec<DirEntry> = list_folder(&out_dir)?;
+        assert_eq!(
+            run0.iter()
+                .filter(|f| f.file_name().to_str().unwrap().ends_with(".parquet"))
+                .count(),
+            1
+        );
+        write_parquet(&ctx, &out_dir, FileWriterSaveMode::Append).await?;
+        let run1: Vec<DirEntry> = list_folder(&out_dir)?;
+        // Append saves 1 new file from second run, files from first run preserved
+        assert_eq!(
+            run1.iter()
+                .filter(|f| f.file_name().to_str().unwrap().ends_with(".parquet"))
+                .count(),
+            2
+        );
+        std::fs::remove_dir_all(&out_dir)?;
+
+        // Ignore
+        write_parquet(&ctx, &out_dir, FileWriterSaveMode::Ignore).await?;
+        let run0: Vec<DirEntry> = list_folder(&out_dir)?;
+        assert_eq!(
+            run0.iter()
+                .filter(|f| f.file_name().to_str().unwrap().ends_with(".parquet"))
+                .count(),
+            1
+        );
+        let file0 = run0.first().unwrap().file_name();
+        let file0 = file0.to_str().unwrap();
+        write_parquet(&ctx, &out_dir, FileWriterSaveMode::Ignore).await?;
+        let run1: Vec<DirEntry> = list_folder(&out_dir)?;
+        assert_eq!(
+            run1.iter()
+                .filter(|f| f.file_name().to_str().unwrap().ends_with(".parquet"))
+                .count(),
+            1
+        );
+        let file1 = run1.first().unwrap().file_name();
+        let file1 = file1.to_str().unwrap();
+        // Ignore preserves 1 new file from first run, no files from second run written
+        assert_eq!(file0, file1);
+        std::fs::remove_dir_all(&out_dir)?;
+
+        // ErrorIfExists throws an error if folder already exists
+        write_parquet(&ctx, &out_dir, FileWriterSaveMode::Append).await?;
+        let res = write_parquet(&ctx, &out_dir, FileWriterSaveMode::ErrorIfExists).await;
+        assert!(res.is_err());
+        let err = res.unwrap_err().to_string();
+        assert!(&err.contains("Could not create directory"));
+
+        Ok(())
+    }
+
+    fn list_folder(dir: &String) -> Result<Vec<DirEntry>> {
+        let files = fs::read_dir(dir)?
+            .map(|f| f.unwrap())
+            .collect::<Vec<DirEntry>>();
+        Ok(files)
     }
 
     fn logical2physical(expr: &Expr, schema: &Schema) -> Arc<dyn PhysicalExpr> {

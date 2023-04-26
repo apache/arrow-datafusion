@@ -717,6 +717,23 @@ pub(crate) fn get_output_ordering(
         }).unwrap_or_else(|| None)
 }
 
+/// Defines strategies for the saving behavior in the case when the saved folder already exists
+#[derive(Debug, Clone, Copy)]
+pub enum FileWriterSaveMode {
+    /// Overwrite mode means that when saving a parquet file, if folder already exists, existing data is expected to be overwritten.
+    /// If folder does not exist, the folder will be created. This is default value.
+    Overwrite,
+    /// Append mode means that when saving a parquet file, if folder already exists, new data is expected to be appended on top of the existing.
+    /// If folder does not exist, the folder will be created
+    Append,
+    /// Ignore mode means that when saving a parquet file, if folder already exists, new data will be ignored.
+    /// If folder does not exist, the folder will be created
+    Ignore,
+    /// ErrorIfExists mode means that when saving a parquet file, if folder already exists, the error will be raised.
+    /// If folder does not exist, the folder will be created
+    ErrorIfExists,
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
