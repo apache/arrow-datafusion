@@ -95,12 +95,17 @@ impl BatchPartitioner {
     /// Create a new [`BatchPartitioner`] with the provided [`Partitioning`]
     ///
     /// The time spent repartitioning will be recorded to `timer`
-    pub fn try_new(partitioning: Partitioning, timer: metrics::Time) -> Result<Self> {
+    pub fn try_new(
+        partitioning: Partitioning,
+        partition: usize,
+        num_input_partitions: usize,
+        timer: metrics::Time,
+    ) -> Result<Self> {
         let state = match partitioning {
             Partitioning::RoundRobinBatch(num_partitions) => {
                 BatchPartitionerState::RoundRobin {
                     num_partitions,
-                    next_idx: 0,
+                    next_idx: (num_partitions / num_input_partitions) * partition,
                 }
             }
             Partitioning::Hash(exprs, num_partitions) => BatchPartitionerState::Hash {
@@ -492,8 +497,12 @@ impl RepartitionExec {
         r_metrics: RepartitionMetrics,
         context: Arc<TaskContext>,
     ) -> Result<()> {
-        let mut partitioner =
-            BatchPartitioner::try_new(partitioning, r_metrics.repart_time.clone())?;
+        let mut partitioner = BatchPartitioner::try_new(
+            partitioning,
+            i,
+            input.output_partitioning().partition_count(),
+            r_metrics.repart_time.clone(),
+        )?;
 
         // execute the child operator
         let timer = r_metrics.fetch_time.timer();

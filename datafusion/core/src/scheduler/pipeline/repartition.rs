@@ -43,7 +43,8 @@ impl RepartitionPipeline {
         assert_ne!(output_count, 0);
 
         // TODO: metrics support
-        let partitioner = BatchPartitioner::try_new(output, Default::default())?;
+        let partitioner =
+            BatchPartitioner::try_new(output, 0, output_count, Default::default())?;
 
         let state = Mutex::new(RepartitionState {
             partitioner,
