@@ -76,6 +76,9 @@
   - [x] nullif
   - [x] case
   - [x] coalesce
+- Comparison functions
+  - [x] greatest
+  - [x] least
 - Approximation functions
   - [x] approx_distinct
   - [x] approx_median

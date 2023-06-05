@@ -57,7 +57,7 @@ impl TypeSignature {
                     .collect::<Vec<&str>>()
                     .join(", ")]
             }
-            TypeSignature::VariadicEqual => vec!["T, .., T".to_string()],
+            TypeSignature::VariadicEqual(_) => vec!["T, .., T".to_string()],
             TypeSignature::VariadicAny => vec!["Any, .., Any".to_string()],
             TypeSignature::OneOf(sigs) => {
                 sigs.iter().flat_map(|s| s.to_string_repr()).collect()

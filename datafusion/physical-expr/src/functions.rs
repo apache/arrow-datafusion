@@ -32,7 +32,8 @@
 
 use crate::execution_props::ExecutionProps;
 use crate::{
-    array_expressions, conditional_expressions, datetime_expressions,
+    array_expressions, comparison_expressions, conditional_expressions,
+    datetime_expressions,
     expressions::{cast_column, nullif_func},
     math_expressions, string_expressions, struct_expressions, PhysicalExpr,
     ScalarFunctionExpr,
@@ -452,6 +453,8 @@ pub fn create_physical_fun(
         BuiltinScalarFunction::ConcatWithSeparator => {
             Arc::new(|args| make_scalar_function(string_expressions::concat_ws)(args))
         }
+        BuiltinScalarFunction::Greatest => Arc::new(comparison_expressions::greatest),
+        BuiltinScalarFunction::Least => Arc::new(comparison_expressions::least),
         BuiltinScalarFunction::DatePart => Arc::new(datetime_expressions::date_part),
         BuiltinScalarFunction::DateTrunc => Arc::new(datetime_expressions::date_trunc),
         BuiltinScalarFunction::DateBin => Arc::new(datetime_expressions::date_bin),

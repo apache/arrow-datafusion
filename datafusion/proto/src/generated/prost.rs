@@ -2208,6 +2208,8 @@ pub enum ScalarFunction {
     Factorial = 83,
     Lcm = 84,
     Gcd = 85,
+    Greatest = 86,
+    Least = 87,
 }
 impl ScalarFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2302,6 +2304,8 @@ impl ScalarFunction {
             ScalarFunction::Factorial => "Factorial",
             ScalarFunction::Lcm => "Lcm",
             ScalarFunction::Gcd => "Gcd",
+            ScalarFunction::Greatest => "Greatest",
+            ScalarFunction::Least => "Least",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2393,6 +2397,8 @@ impl ScalarFunction {
             "Factorial" => Some(Self::Factorial),
             "Lcm" => Some(Self::Lcm),
             "Gcd" => Some(Self::Gcd),
+            "Greatest" => Some(Self::Greatest),
+            "Least" => Some(Self::Least),
             _ => None,
         }
     }

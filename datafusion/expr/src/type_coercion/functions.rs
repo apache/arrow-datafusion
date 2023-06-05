@@ -21,6 +21,7 @@ use arrow::{
     datatypes::{DataType, TimeUnit},
 };
 use datafusion_common::{DataFusionError, Result};
+use std::collections::BTreeSet;
 
 /// Performs type coercion for function arguments.
 ///
@@ -71,12 +72,31 @@ fn get_valid_types(
             .iter()
             .map(|valid_type| (0..*number).map(|_| valid_type.clone()).collect())
             .collect(),
-        TypeSignature::VariadicEqual => {
-            // one entry with the same len as current_types, whose type is `current_types[0]`.
-            vec![current_types
+        TypeSignature::VariadicEqual(allowed_types) => {
+            // special case when no args
+            if current_types.is_empty() {
+                return Ok(vec![current_types.to_vec()]);
+            }
+            // if there are any types that are not allowed, return error
+            if current_types.iter().any(|t| !allowed_types.contains(t)) {
+                return Err(DataFusionError::Plan(format!(
+                    "The function expected all arguments to be of type {:?} but received {:?}",
+                    allowed_types, current_types
+                )));
+            }
+            let types_set = current_types
                 .iter()
-                .map(|_| current_types[0].clone())
-                .collect()]
+                .cloned()
+                .collect::<BTreeSet<DataType>>();
+            // for each type in the type set, return a vector of the same length as current_types
+            types_set
+                .iter()
+                .map(|t| {
+                    (0..current_types.len())
+                        .map(|_| t.clone())
+                        .collect::<Vec<DataType>>()
+                })
+                .collect::<Vec<_>>()
         }
         TypeSignature::VariadicAny => {
             vec![current_types.to_vec()]
@@ -209,7 +229,7 @@ mod tests {
                 vec![DataType::UInt8, DataType::UInt16],
                 Some(vec![DataType::UInt8, DataType::UInt16]),
             ),
-            // 2 entries, can coerse values
+            // 2 entries, can coerce values
             (
                 vec![DataType::UInt16, DataType::UInt16],
                 vec![DataType::UInt8, DataType::UInt16],
@@ -234,6 +254,58 @@ mod tests {
         for case in cases {
             assert_eq!(maybe_data_types(&case.0, &case.1), case.2)
         }
+    }
+
+    #[test]
+    fn test_get_valid_types_variadic_equal() -> Result<()> {
+        let signature = TypeSignature::VariadicEqual(vec![DataType::Int32]);
+
+        let valid_types = get_valid_types(
+            &signature,
+            &[DataType::Int32, DataType::Int32, DataType::Int32],
+        )?;
+        assert_eq!(valid_types.len(), 1);
+        assert_eq!(
+            valid_types[0],
+            vec![DataType::Int32, DataType::Int32, DataType::Int32]
+        );
+
+        // invalid case, with int and boolean
+        let is_error = get_valid_types(
+            &signature,
+            &[DataType::Int32, DataType::Boolean, DataType::Int32],
+        )
+        .is_err();
+        assert!(is_error);
+
+        // empty case okay
+        let valid_types = get_valid_types(&signature, &[])?;
+        assert_eq!(valid_types.len(), 1);
+        assert_eq!(valid_types[0], vec![]);
+
+        // when allowed types are empty, error
+        let signature = TypeSignature::VariadicEqual(vec![]);
+        let is_error = get_valid_types(&signature, &[DataType::Int32]).is_err();
+        assert!(is_error);
+
+        // cast case, with i32 and i64
+        let signature =
+            TypeSignature::VariadicEqual(vec![DataType::Int64, DataType::Int32]);
+        let valid_types = get_valid_types(
+            &signature,
+            &[DataType::Int32, DataType::Int64, DataType::Int32],
+        )?;
+        assert_eq!(valid_types.len(), 2);
+        assert_eq!(
+            valid_types[1],
+            vec![DataType::Int64, DataType::Int64, DataType::Int64]
+        );
+        assert_eq!(
+            valid_types[0],
+            vec![DataType::Int32, DataType::Int32, DataType::Int32]
+        );
+
+        Ok(())
     }
 
     #[test]

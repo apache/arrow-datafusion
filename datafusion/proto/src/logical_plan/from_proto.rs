@@ -40,7 +40,8 @@ use datafusion_expr::{
     cbrt, ceil, character_length, chr, coalesce, concat_expr, concat_ws_expr, cos, cosh,
     date_bin, date_part, date_trunc, degrees, digest, exp,
     expr::{self, InList, Sort, WindowFunction},
-    factorial, floor, from_unixtime, gcd, lcm, left, ln, log, log10, log2,
+    factorial, floor, from_unixtime, gcd, greatest, lcm, least, left, ln, log, log10,
+    log2,
     logical_plan::{PlanType, StringifiedPlan},
     lower, lpad, ltrim, md5, now, nullif, octet_length, pi, power, radians, random,
     regexp_match, regexp_replace, repeat, replace, reverse, right, round, rpad, rtrim,
@@ -494,6 +495,8 @@ impl From<&protobuf::ScalarFunction> for BuiltinScalarFunction {
             ScalarFunction::FromUnixtime => Self::FromUnixtime,
             ScalarFunction::Atan2 => Self::Atan2,
             ScalarFunction::ArrowTypeof => Self::ArrowTypeof,
+            ScalarFunction::Greatest => Self::Greatest,
+            ScalarFunction::Least => Self::Least,
         }
     }
 }
@@ -1269,6 +1272,20 @@ pub fn parse_expr(
                 )),
                 ScalarFunction::ConcatWithSeparator => Ok(concat_ws_expr(
                     args.to_owned()
+                        .iter()
+                        .map(|expr| parse_expr(expr, registry))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )),
+                ScalarFunction::Greatest => Ok(greatest(
+                    &args
+                        .to_owned()
+                        .iter()
+                        .map(|expr| parse_expr(expr, registry))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )),
+                ScalarFunction::Least => Ok(least(
+                    &args
+                        .to_owned()
                         .iter()
                         .map(|expr| parse_expr(expr, registry))
                         .collect::<Result<Vec<_>, _>>()?,

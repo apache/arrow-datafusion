@@ -237,6 +237,22 @@ pub fn concat_ws(sep: Expr, values: Vec<Expr>) -> Expr {
     ))
 }
 
+/// Returns the greatest value of all arguments.
+pub fn greatest(args: &[Expr]) -> Expr {
+    Expr::ScalarFunction(ScalarFunction::new(
+        BuiltinScalarFunction::Greatest,
+        args.to_vec(),
+    ))
+}
+
+/// Returns the least value of all arguments.
+pub fn least(args: &[Expr]) -> Expr {
+    Expr::ScalarFunction(ScalarFunction::new(
+        BuiltinScalarFunction::Least,
+        args.to_vec(),
+    ))
+}
+
 /// Returns an approximate value of π
 pub fn pi() -> Expr {
     Expr::ScalarFunction(ScalarFunction::new(BuiltinScalarFunction::Pi, vec![]))
@@ -620,9 +636,15 @@ nary_scalar_expr!(Coalesce, coalesce, "returns `coalesce(args...)`, which evalua
 nary_scalar_expr!(
     ConcatWithSeparator,
     concat_ws_expr,
-    "concatenates several strings, placing a seperator between each one"
+    "concatenates several strings, placing a separator between each one"
 );
 nary_scalar_expr!(Concat, concat_expr, "concatenates several strings");
+nary_scalar_expr!(
+    Greatest,
+    greatest_expr,
+    "gets the largest value of the list"
+);
+nary_scalar_expr!(Least, least_expr, "gets the smallest value of the list");
 
 // date functions
 scalar_expr!(DatePart, date_part, part date, "extracts a subfield from the date");

@@ -131,11 +131,14 @@ mod tests {
                 Signature::variadic(vec![DataType::Float32], Volatility::Immutable),
                 vec![DataType::Float32, DataType::Float32],
             )?,
-            // u32 -> f32
+            // u32 -> u64
             case(
-                vec![DataType::Float32, DataType::UInt32],
-                Signature::variadic_equal(Volatility::Immutable),
-                vec![DataType::Float32, DataType::Float32],
+                vec![DataType::UInt64, DataType::UInt32],
+                Signature::variadic_equal(
+                    vec![DataType::UInt64, DataType::UInt32],
+                    Volatility::Immutable,
+                ),
+                vec![DataType::UInt64, DataType::UInt64],
             )?,
             // common type is u64
             case(
@@ -171,7 +174,7 @@ mod tests {
             // u32 and bool are not uniform
             case(
                 vec![DataType::UInt32, DataType::Boolean],
-                Signature::variadic_equal(Volatility::Immutable),
+                Signature::variadic_equal(vec![DataType::UInt32], Volatility::Immutable),
                 vec![],
             )?,
             // bool is not castable to u32

@@ -201,6 +201,41 @@ async fn binary_bitwise_shift() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_comparison_func_expressions() -> Result<()> {
+    test_expression!("greatest(1,2,3)", "3");
+    test_expression!("least(1,2,3)", "1");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_comparison_func_array_scalar_expression() -> Result<()> {
+    let ctx = SessionContext::new();
+    let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int64, false)]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(Int64Array::from(vec![1, 2, 3]))],
+    )?;
+    let table = MemTable::try_new(schema, vec![vec![batch]])?;
+    ctx.register_table("t1", Arc::new(table))?;
+    let sql = "SELECT greatest(a, 2), least(a, 2) from t1";
+    let actual = execute_to_batches(&ctx, sql).await;
+    assert_batches_eq!(
+        &[
+            "+-------------------------+----------------------+",
+            "| greatest(t1.a,Int64(2)) | least(t1.a,Int64(2)) |",
+            "+-------------------------+----------------------+",
+            "| 2                       | 1                    |",
+            "| 2                       | 2                    |",
+            "| 3                       | 2                    |",
+            "+-------------------------+----------------------+",
+        ],
+        &actual
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_interval_expressions() -> Result<()> {
     // day nano intervals
     test_expression!(

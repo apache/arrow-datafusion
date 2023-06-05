@@ -42,10 +42,10 @@ pub enum TypeSignature {
     /// arbitrary number of arguments of an common type out of a list of valid types
     // A function such as `concat` is `Variadic(vec![DataType::Utf8, DataType::LargeUtf8])`
     Variadic(Vec<DataType>),
-    /// arbitrary number of arguments of an arbitrary but equal type
+    /// arbitrary number of arguments of an equal type
     // A function such as `array` is `VariadicEqual`
     // The first argument decides the type used for coercion
-    VariadicEqual,
+    VariadicEqual(Vec<DataType>),
     /// arbitrary number of arguments with arbitrary types
     VariadicAny,
     /// fixed number of arguments of an arbitrary but equal type out of a list of valid types
@@ -85,10 +85,11 @@ impl Signature {
             volatility,
         }
     }
-    /// variadic_equal - Creates a variadic signature that represents an arbitrary number of arguments of the same type.
-    pub fn variadic_equal(volatility: Volatility) -> Self {
+    /// variadic_equal - Creates a variadic signature that represents an arbitrary number of arguments of the same type in
+    /// the allowed_types.
+    pub fn variadic_equal(allowed_types: Vec<DataType>, volatility: Volatility) -> Self {
         Self {
-            type_signature: TypeSignature::VariadicEqual,
+            type_signature: TypeSignature::VariadicEqual(allowed_types),
             volatility,
         }
     }

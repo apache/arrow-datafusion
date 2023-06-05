@@ -30,6 +30,7 @@ pub mod aggregate_function;
 pub mod array_expressions;
 mod built_in_function;
 mod columnar_value;
+pub mod comparison_expressions;
 pub mod conditional_expressions;
 pub mod expr;
 pub mod expr_fn;

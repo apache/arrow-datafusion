@@ -22,8 +22,8 @@ use crate::nullif::SUPPORTED_NULLIF_TYPES;
 use crate::type_coercion::functions::data_types;
 use crate::ColumnarValue;
 use crate::{
-    array_expressions, conditional_expressions, struct_expressions, Accumulator,
-    BuiltinScalarFunction, Signature, TypeSignature,
+    array_expressions, comparison_expressions, conditional_expressions,
+    struct_expressions, Accumulator, BuiltinScalarFunction, Signature, TypeSignature,
 };
 use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, TimeUnit};
 use datafusion_common::{DataFusionError, Result};
@@ -165,6 +165,11 @@ pub fn return_type(
         BuiltinScalarFunction::MD5 => utf8_to_str_type(&input_expr_types[0], "md5"),
         BuiltinScalarFunction::NullIf => {
             // NULLIF has two args and they might get coerced, get a preview of this
+            let coerced_types = data_types(input_expr_types, &signature(fun));
+            coerced_types.map(|typs| typs[0].clone())
+        }
+        BuiltinScalarFunction::Greatest | BuiltinScalarFunction::Least => {
+            // GREATEST and LEAST have multiple args and they might get coerced, get a preview of this
             let coerced_types = data_types(input_expr_types, &signature(fun));
             coerced_types.map(|typs| typs[0].clone())
         }
@@ -375,6 +380,12 @@ pub fn signature(fun: &BuiltinScalarFunction) -> Signature {
         ),
         BuiltinScalarFunction::Chr | BuiltinScalarFunction::ToHex => {
             Signature::uniform(1, vec![DataType::Int64], fun.volatility())
+        }
+        BuiltinScalarFunction::Greatest | BuiltinScalarFunction::Least => {
+            Signature::variadic_equal(
+                comparison_expressions::SUPPORTED_COMPARISON_TYPES.to_vec(),
+                fun.volatility(),
+            )
         }
         BuiltinScalarFunction::Lpad | BuiltinScalarFunction::Rpad => Signature::one_of(
             vec![

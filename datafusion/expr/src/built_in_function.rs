@@ -205,6 +205,10 @@ pub enum BuiltinScalarFunction {
     Struct,
     /// arrow_typeof
     ArrowTypeof,
+    /// greatest
+    Greatest,
+    /// least
+    Least,
 }
 
 lazy_static! {
@@ -328,6 +332,8 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Struct => Volatility::Immutable,
             BuiltinScalarFunction::FromUnixtime => Volatility::Immutable,
             BuiltinScalarFunction::ArrowTypeof => Volatility::Immutable,
+            BuiltinScalarFunction::Greatest => Volatility::Immutable,
+            BuiltinScalarFunction::Least => Volatility::Immutable,
 
             // Stable builtin functions
             BuiltinScalarFunction::Now => Volatility::Stable,
@@ -413,6 +419,10 @@ fn aliases(func: &BuiltinScalarFunction) -> &'static [&'static str] {
         BuiltinScalarFunction::Trim => &["trim"],
         BuiltinScalarFunction::Upper => &["upper"],
         BuiltinScalarFunction::Uuid => &["uuid"],
+
+        // comparison functions
+        BuiltinScalarFunction::Greatest => &["greatest"],
+        BuiltinScalarFunction::Least => &["least"],
 
         // regex functions
         BuiltinScalarFunction::RegexpMatch => &["regexp_match"],
