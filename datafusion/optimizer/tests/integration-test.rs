@@ -332,6 +332,21 @@ fn test_same_name_but_not_ambiguous() {
     assert_eq!(expected, format!("{plan:?}"));
 }
 
+#[test]
+#[ignore]
+fn test_cte() {
+    let sql = "select * from (WITH source AS (select 1 as e) SELECT * FROM source) t1,   (WITH source AS (select 1 as e) SELECT * FROM source) t2;";
+    let plan = test_sql(sql).unwrap();
+
+    let expected = "Projection: t1.e, t2.e\
+      \n  CrossJoin:\
+      \n    Projection: Int64(1) AS t1.e\
+      \n      EmptyRelation\
+      \n    Projection: Int64(1) AS t2.e\
+      \n      EmptyRelation";
+    assert_eq!(expected, format!("{plan:?}"));
+}
+
 fn test_sql(sql: &str) -> Result<LogicalPlan> {
     // parse the SQL
     let dialect = GenericDialect {}; // or AnsiDialect, or your own dialect ...

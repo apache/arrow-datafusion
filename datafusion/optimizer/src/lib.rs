@@ -27,6 +27,7 @@ pub mod eliminate_join;
 pub mod eliminate_limit;
 pub mod eliminate_outer_join;
 pub mod eliminate_project;
+pub mod eliminate_subquery_aliases;
 pub mod extract_equijoin_predicate;
 pub mod filter_null_join_keys;
 pub mod merge_projection;
