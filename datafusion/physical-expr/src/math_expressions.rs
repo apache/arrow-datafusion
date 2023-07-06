@@ -20,6 +20,7 @@
 use arrow::array::ArrayRef;
 use arrow::array::{Float32Array, Float64Array, Int64Array};
 use arrow::datatypes::DataType;
+use datafusion_common::cast::{as_float32_array, as_float64_array, as_int64_array};
 use datafusion_common::ScalarValue;
 use datafusion_common::ScalarValue::Float32;
 use datafusion_common::{DataFusionError, Result};
@@ -305,7 +306,7 @@ pub fn round(args: &[ArrayRef]) -> Result<ArrayRef> {
     match args[0].data_type() {
         DataType::Float64 => match decimal_places {
             ColumnarValue::Scalar(ScalarValue::Int64(Some(decimal_places))) => {
-                let decimal_places = decimal_places.try_into().unwrap();
+                let decimal_places = round_downcast_decimal_places(decimal_places)?;
 
                 Ok(Arc::new(make_function_scalar_inputs!(
                     &args[0],
@@ -319,21 +320,23 @@ pub fn round(args: &[ArrayRef]) -> Result<ArrayRef> {
                     }
                 )) as ArrayRef)
             }
-            ColumnarValue::Array(decimal_places) => Ok(Arc::new(make_function_inputs2!(
-                &args[0],
-                decimal_places,
-                "value",
-                "decimal_places",
-                Float64Array,
-                Int64Array,
-                {
-                    |value: f64, decimal_places: i64| {
-                        (value * 10.0_f64.powi(decimal_places.try_into().unwrap()))
-                            .round()
-                            / 10.0_f64.powi(decimal_places.try_into().unwrap())
-                    }
-                }
-            )) as ArrayRef),
+            ColumnarValue::Array(decimal_places) => {
+                let values = as_float64_array(&args[0])?;
+                let decimal_places = as_int64_array(&decimal_places)?;
+                let arr = values
+                    .iter()
+                    .zip(decimal_places.iter())
+                    .map(|(val, dp)| match (val, dp) {
+                        (Some(val), Some(dp)) => Ok(Some(
+                            (val * 10.0_f64.powi(round_downcast_decimal_places(dp)?))
+                                .round()
+                                / 10.0_f64.powi(round_downcast_decimal_places(dp)?),
+                        )),
+                        _ => Ok(None),
+                    })
+                    .collect::<Result<Float64Array>>()?;
+                Ok(Arc::new(arr) as ArrayRef)
+            }
             _ => Err(DataFusionError::Internal(
                 "round function requires a scalar or array for decimal_places"
                     .to_string(),
@@ -342,7 +345,7 @@ pub fn round(args: &[ArrayRef]) -> Result<ArrayRef> {
 
         DataType::Float32 => match decimal_places {
             ColumnarValue::Scalar(ScalarValue::Int64(Some(decimal_places))) => {
-                let decimal_places = decimal_places.try_into().unwrap();
+                let decimal_places = round_downcast_decimal_places(decimal_places)?;
 
                 Ok(Arc::new(make_function_scalar_inputs!(
                     &args[0],
@@ -356,21 +359,23 @@ pub fn round(args: &[ArrayRef]) -> Result<ArrayRef> {
                     }
                 )) as ArrayRef)
             }
-            ColumnarValue::Array(decimal_places) => Ok(Arc::new(make_function_inputs2!(
-                &args[0],
-                decimal_places,
-                "value",
-                "decimal_places",
-                Float32Array,
-                Int64Array,
-                {
-                    |value: f32, decimal_places: i64| {
-                        (value * 10.0_f32.powi(decimal_places.try_into().unwrap()))
-                            .round()
-                            / 10.0_f32.powi(decimal_places.try_into().unwrap())
-                    }
-                }
-            )) as ArrayRef),
+            ColumnarValue::Array(decimal_places) => {
+                let values = as_float32_array(&args[0])?;
+                let decimal_places = as_int64_array(&decimal_places)?;
+                let arr = values
+                    .iter()
+                    .zip(decimal_places.iter())
+                    .map(|(val, dp)| match (val, dp) {
+                        (Some(val), Some(dp)) => Ok(Some(
+                            (val * 10.0_f32.powi(round_downcast_decimal_places(dp)?))
+                                .round()
+                                / 10.0_f32.powi(round_downcast_decimal_places(dp)?),
+                        )),
+                        _ => Ok(None),
+                    })
+                    .collect::<Result<Float32Array>>()?;
+                Ok(Arc::new(arr) as ArrayRef)
+            }
             _ => Err(DataFusionError::Internal(
                 "round function requires a scalar or array for decimal_places"
                     .to_string(),
@@ -381,6 +386,15 @@ pub fn round(args: &[ArrayRef]) -> Result<ArrayRef> {
             "Unsupported data type {other:?} for function round"
         ))),
     }
+}
+
+#[inline]
+fn round_downcast_decimal_places(decimal_places: i64) -> Result<i32> {
+    decimal_places.try_into().map_err(|_| {
+        DataFusionError::Execution(
+            "round function requires decimal_places as 32 bit integers".to_string(),
+        )
+    })
 }
 
 /// Power SQL function
@@ -738,5 +752,67 @@ mod tests {
         assert_eq!(ints.value(1), 6);
         assert_eq!(ints.value(2), 75);
         assert_eq!(ints.value(3), 16);
+    }
+
+    #[test]
+    fn test_round_f64_decimal_places() {
+        let args: Vec<ArrayRef> = vec![
+            Arc::new(Float64Array::from(vec![125.2345, 12.345, 1.234, 0.1234])), // input
+            Arc::new(Int64Array::from(vec![1, 2, 3, 4])),
+        ];
+
+        let result = round(&args).expect("failed to initialize function round");
+        let floats =
+            as_float64_array(&result).expect("failed to initialize function round");
+
+        let expected = Float64Array::from(vec![125.2, 12.35, 1.234, 0.1234]);
+
+        assert_eq!(floats, &expected);
+    }
+
+    #[test]
+    fn test_round_f64_decimal_places_overflow() {
+        let args: Vec<ArrayRef> = vec![
+            Arc::new(Float64Array::from(vec![125.2345])), // input
+            Arc::new(Int64Array::from(vec![2147483648])),
+        ];
+
+        let e = round(&args).expect_err("expect throwing overflow");
+        assert_eq!(
+            e.to_string(),
+            "Execution error: round function requires decimal_places as 32 bit integers"
+                .to_string()
+        );
+    }
+
+    #[test]
+    fn test_round_f32_decimal_places() {
+        let args: Vec<ArrayRef> = vec![
+            Arc::new(Float32Array::from(vec![125.2345, 12.345, 1.234, 0.1234])), // input
+            Arc::new(Int64Array::from(vec![1, 2, 3, 4])),
+        ];
+
+        let result = round(&args).expect("failed to initialize function round");
+        let floats =
+            as_float32_array(&result).expect("failed to initialize function round");
+
+        let expected = Float32Array::from(vec![125.2, 12.35, 1.234, 0.1234]);
+
+        assert_eq!(floats, &expected);
+    }
+
+    #[test]
+    fn test_round_f32_decimal_places_overflow() {
+        let args: Vec<ArrayRef> = vec![
+            Arc::new(Float32Array::from(vec![125.2345])), // input
+            Arc::new(Int64Array::from(vec![2147483648])),
+        ];
+
+        let e = round(&args).expect_err("expect throwing overflow");
+        assert_eq!(
+            e.to_string(),
+            "Execution error: round function requires decimal_places as 32 bit integers"
+                .to_string()
+        );
     }
 }
