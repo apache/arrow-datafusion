@@ -505,6 +505,7 @@ impl From<&protobuf::ScalarFunction> for BuiltinScalarFunction {
             ScalarFunction::Now => Self::Now,
             ScalarFunction::CurrentDate => Self::CurrentDate,
             ScalarFunction::CurrentTime => Self::CurrentTime,
+            ScalarFunction::CurrentTimestamp => Self::CurrentTimestamp,
             ScalarFunction::Uuid => Self::Uuid,
             ScalarFunction::Translate => Self::Translate,
             ScalarFunction::RegexpMatch => Self::RegexpMatch,

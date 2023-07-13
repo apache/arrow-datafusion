@@ -179,6 +179,16 @@ pub fn make_now(
     }
 }
 
+/// Create an implementation of `current_timestamp()` that always returns the
+/// specified timestamp.
+///
+/// The implementation is same with `now()`
+pub fn make_current_timestamp(
+    now_ts: DateTime<Utc>,
+) -> impl Fn(&[ColumnarValue]) -> Result<ColumnarValue> {
+    make_now(now_ts)
+}
+
 /// Create an implementation of `current_date()` that always returns the
 /// specified current date.
 ///

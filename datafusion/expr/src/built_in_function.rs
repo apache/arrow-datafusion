@@ -233,6 +233,8 @@ pub enum BuiltinScalarFunction {
     CurrentDate,
     /// current_time
     CurrentTime,
+    /// current_timestamp
+    CurrentTimestamp,
     /// translate
     Translate,
     /// trim
@@ -284,6 +286,7 @@ impl BuiltinScalarFunction {
                 | BuiltinScalarFunction::CurrentTime
                 | BuiltinScalarFunction::Uuid
                 | BuiltinScalarFunction::MakeArray
+                | BuiltinScalarFunction::CurrentTimestamp
         )
     }
     /// Returns the [Volatility] of the builtin function.
@@ -393,6 +396,7 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Now => Volatility::Stable,
             BuiltinScalarFunction::CurrentDate => Volatility::Stable,
             BuiltinScalarFunction::CurrentTime => Volatility::Stable,
+            BuiltinScalarFunction::CurrentTimestamp => Volatility::Stable,
 
             // Volatile builtin functions
             BuiltinScalarFunction::Random => Volatility::Volatile,
@@ -689,6 +693,9 @@ impl BuiltinScalarFunction {
             }
             BuiltinScalarFunction::CurrentDate => Ok(Date32),
             BuiltinScalarFunction::CurrentTime => Ok(Time64(Nanosecond)),
+            BuiltinScalarFunction::CurrentTimestamp => {
+                Ok(Timestamp(Nanosecond, Some("+00:00".into())))
+            }
             BuiltinScalarFunction::Translate => {
                 utf8_to_str_type(&input_expr_types[0], "translate")
             }
@@ -1122,7 +1129,8 @@ impl BuiltinScalarFunction {
             }
             BuiltinScalarFunction::Now
             | BuiltinScalarFunction::CurrentDate
-            | BuiltinScalarFunction::CurrentTime => {
+            | BuiltinScalarFunction::CurrentTime
+            | BuiltinScalarFunction::CurrentTimestamp => {
                 Signature::uniform(0, vec![], self.volatility())
             }
         }
@@ -1210,6 +1218,7 @@ fn aliases(func: &BuiltinScalarFunction) -> &'static [&'static str] {
         BuiltinScalarFunction::Now => &["now"],
         BuiltinScalarFunction::CurrentDate => &["current_date"],
         BuiltinScalarFunction::CurrentTime => &["current_time"],
+        BuiltinScalarFunction::CurrentTimestamp => &["current_timestamp"],
         BuiltinScalarFunction::DateBin => &["date_bin"],
         BuiltinScalarFunction::DateTrunc => &["date_trunc", "datetrunc"],
         BuiltinScalarFunction::DatePart => &["date_part", "datepart"],

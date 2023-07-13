@@ -534,6 +534,12 @@ pub fn create_physical_fun(
                 execution_props.query_execution_start_time,
             ))
         }
+        BuiltinScalarFunction::CurrentTimestamp => {
+            // bind value for current_timestamp at plan time
+            Arc::new(datetime_expressions::make_current_timestamp(
+                execution_props.query_execution_start_time,
+            ))
+        }
         BuiltinScalarFunction::InitCap => Arc::new(|args| match args[0].data_type() {
             DataType::Utf8 => {
                 make_scalar_function(string_expressions::initcap::<i32>)(args)
@@ -2842,6 +2848,9 @@ mod tests {
 
         let funs = [
             BuiltinScalarFunction::Now,
+            BuiltinScalarFunction::CurrentDate,
+            BuiltinScalarFunction::CurrentTime,
+            BuiltinScalarFunction::CurrentTimestamp,
             BuiltinScalarFunction::Pi,
             BuiltinScalarFunction::Random,
             BuiltinScalarFunction::Uuid,

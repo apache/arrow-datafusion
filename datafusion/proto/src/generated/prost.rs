@@ -2265,6 +2265,7 @@ pub enum ScalarFunction {
     ArrayContains = 100,
     Encode = 101,
     Decode = 102,
+    CurrentTimestamp = 103,
 }
 impl ScalarFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2376,6 +2377,7 @@ impl ScalarFunction {
             ScalarFunction::ArrayContains => "ArrayContains",
             ScalarFunction::Encode => "Encode",
             ScalarFunction::Decode => "Decode",
+            ScalarFunction::CurrentTimestamp => "CurrentTimestamp",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2484,6 +2486,7 @@ impl ScalarFunction {
             "ArrayContains" => Some(Self::ArrayContains),
             "Encode" => Some(Self::Encode),
             "Decode" => Some(Self::Decode),
+            "CurrentTimestamp" => Some(Self::CurrentTimestamp),
             _ => None,
         }
     }
