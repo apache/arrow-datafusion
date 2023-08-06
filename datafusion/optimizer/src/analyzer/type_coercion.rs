@@ -381,13 +381,13 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
             }) => {
                 let window_frame =
                     coerce_window_frame(window_frame, &self.schema, &order_by)?;
-                let expr = Expr::WindowFunction(WindowFunction::new(
+                let expr = Expr::WindowFunction(WindowFunction {
                     fun,
                     args,
                     partition_by,
                     order_by,
                     window_frame,
-                ));
+                });
                 Ok(expr)
             }
             expr => Ok(expr),

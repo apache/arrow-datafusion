@@ -22,9 +22,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    Expr, PartitionEvaluatorFactory, ReturnTypeFunction, Signature, WindowFrame,
-};
+use crate::{expr, Expr, PartitionEvaluatorFactory, ReturnTypeFunction, Signature};
 
 /// Logical representation of a user-defined window function (UDWF)
 /// A UDWF is different from a UDF in that it is stateful across batches.
@@ -93,26 +91,15 @@ impl WindowUDF {
         }
     }
 
-    /// creates a [`Expr`] that calls the window function given
-    /// the `partition_by`, `order_by`, and `window_frame` definition
+    /// creates a [`expr::WindowFunction`] builder for calling the
+    /// window function given.
+    ///
+    /// Use the methods on the builder to set the `partition_by`,
+    /// `order_by`, and `window_frame` definitions
     ///
     /// This utility allows using the UDWF without requiring access to
     /// the registry, such as with the DataFrame API.
-    pub fn call(
-        &self,
-        args: Vec<Expr>,
-        partition_by: Vec<Expr>,
-        order_by: Vec<Expr>,
-        window_frame: WindowFrame,
-    ) -> Expr {
-        let fun = crate::WindowFunction::WindowUDF(Arc::new(self.clone()));
-
-        Expr::WindowFunction(crate::expr::WindowFunction {
-            fun,
-            args,
-            partition_by,
-            order_by,
-            window_frame,
-        })
+    pub fn call(&self, args: Vec<Expr>) -> expr::WindowFunction {
+        expr::WindowFunction::new(Arc::new(self.clone()), args)
     }
 }

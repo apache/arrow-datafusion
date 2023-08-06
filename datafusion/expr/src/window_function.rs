@@ -59,6 +59,30 @@ pub fn find_df_window_func(name: &str) -> Option<WindowFunction> {
     }
 }
 
+impl From<AggregateFunction> for WindowFunction {
+    fn from(value: AggregateFunction) -> Self {
+        Self::AggregateFunction(value)
+    }
+}
+
+impl From<BuiltInWindowFunction> for WindowFunction {
+    fn from(value: BuiltInWindowFunction) -> Self {
+        Self::BuiltInWindowFunction(value)
+    }
+}
+
+impl From<Arc<AggregateUDF>> for WindowFunction {
+    fn from(value: Arc<AggregateUDF>) -> Self {
+        Self::AggregateUDF(value)
+    }
+}
+
+impl From<Arc<WindowUDF>> for WindowFunction {
+    fn from(value: Arc<WindowUDF>) -> Self {
+        Self::WindowUDF(value)
+    }
+}
+
 impl fmt::Display for BuiltInWindowFunction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name())

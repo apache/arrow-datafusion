@@ -183,21 +183,22 @@ where
                 partition_by,
                 order_by,
                 window_frame,
-            }) => Ok(Expr::WindowFunction(WindowFunction::new(
-                fun.clone(),
-                args.iter()
-                    .map(|e| clone_with_replacement(e, replacement_fn))
-                    .collect::<Result<Vec<_>>>()?,
-                partition_by
+            }) => Ok(Expr::WindowFunction(WindowFunction {
+                fun: fun.clone(),
+                args: args
                     .iter()
                     .map(|e| clone_with_replacement(e, replacement_fn))
                     .collect::<Result<Vec<_>>>()?,
-                order_by
+                partition_by: partition_by
                     .iter()
                     .map(|e| clone_with_replacement(e, replacement_fn))
                     .collect::<Result<Vec<_>>>()?,
-                window_frame.clone(),
-            ))),
+                order_by: order_by
+                    .iter()
+                    .map(|e| clone_with_replacement(e, replacement_fn))
+                    .collect::<Result<Vec<_>>>()?,
+                window_frame: window_frame.clone(),
+            })),
             Expr::AggregateUDF(AggregateUDF {
                 fun,
                 args,

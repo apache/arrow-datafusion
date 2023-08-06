@@ -18,17 +18,17 @@
 //! Functions for creating logical expressions
 
 use crate::expr::{
-    AggregateFunction, BinaryExpr, Cast, Exists, GroupingSet, InList, InSubquery,
+    self, AggregateFunction, BinaryExpr, Cast, Exists, GroupingSet, InList, InSubquery,
     ScalarFunction, TryCast,
 };
 use crate::function::PartitionEvaluatorFactory;
-use crate::WindowUDF;
 use crate::{
     aggregate_function, built_in_function, conditional_expressions::CaseBuilder,
     logical_plan::Subquery, AccumulatorFactoryFunction, AggregateUDF,
     BuiltinScalarFunction, Expr, LogicalPlan, Operator, ReturnTypeFunction,
     ScalarFunctionImplementation, ScalarUDF, Signature, StateTypeFunction, Volatility,
 };
+use crate::{BuiltInWindowFunction, WindowUDF};
 use arrow::datatypes::DataType;
 use datafusion_common::{Column, Result};
 use std::sync::Arc;
@@ -167,6 +167,83 @@ pub fn count(expr: Expr) -> Expr {
         None,
         None,
     ))
+}
+
+/// Create an expression to represent the `row_number` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn row_number() -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::RowNumber, vec![])
+}
+
+/// Create an expression to represent the `rank` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn rank() -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::Rank, vec![])
+}
+
+/// Create an expression to represent the `dense_rank` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn dense_rank() -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::DenseRank, vec![])
+}
+
+/// Create an expression to represent the `percent_rank` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn percent_rank() -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::PercentRank, vec![])
+}
+
+/// Create an expression to represent the `cume_dist` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn cume_dist(arg: Expr) -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::CumeDist, vec![arg])
+}
+
+/// Create an expression to represent the `ntile` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn ntile(arg: Expr) -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::Ntile, vec![arg])
+}
+
+/// Create an expression to represent the `lag` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn lag(arg: Expr) -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::Lag, vec![arg])
+}
+
+/// Create an expression to represent the `lead` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn lead(arg: Expr) -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::Lead, vec![arg])
+}
+
+/// Create an expression to represent the `first_value` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn first_value(arg: Expr) -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::FirstValue, vec![arg])
+}
+
+/// Create an expression to represent the `last_value` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn last_value(arg: Expr) -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::LastValue, vec![arg])
+}
+
+/// Create an expression to represent the `nth_value` window function
+///
+/// Note: call [`expr::WindowFunction::build]` to create an [`Expr`]
+pub fn nth_value(arg: Expr) -> expr::WindowFunction {
+    expr::WindowFunction::new(BuiltInWindowFunction::NthValue, vec![arg])
 }
 
 /// Return a new expression with bitwise AND
@@ -817,6 +894,11 @@ pub fn case(expr: Expr) -> CaseBuilder {
 pub fn when(when: Expr, then: Expr) -> CaseBuilder {
     CaseBuilder::new(None, vec![when], vec![then], None)
 }
+
+// /// Create a window expr from
+// pub fn window_expr(window_function: impl Into<crate::expr::WindowFunction>) -> Expr {
+// e    Expr::WindowFunction(expr.into())
+// }
 
 /// Creates a new UDF with a specific signature and specific return type.
 /// This is a helper function to create a new UDF.

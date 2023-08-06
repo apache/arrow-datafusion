@@ -275,13 +275,13 @@ impl TreeNode for Expr {
                 partition_by,
                 order_by,
                 window_frame,
-            }) => Expr::WindowFunction(WindowFunction::new(
+            }) => Expr::WindowFunction(WindowFunction {
                 fun,
-                transform_vec(args, &mut transform)?,
-                transform_vec(partition_by, &mut transform)?,
-                transform_vec(order_by, &mut transform)?,
+                args: transform_vec(args, &mut transform)?,
+                partition_by: transform_vec(partition_by, &mut transform)?,
+                order_by: transform_vec(order_by, &mut transform)?,
                 window_frame,
-            )),
+            }),
             Expr::AggregateFunction(AggregateFunction {
                 args,
                 fun,

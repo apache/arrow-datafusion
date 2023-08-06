@@ -246,6 +246,23 @@ impl DataFrame {
     }
 
     /// Apply one or more window functions ([`Expr::WindowFunction`]) to extend the schema
+    ///
+    /// ```
+    /// # use datafusion::prelude::*;
+    /// # use datafusion::error::Result;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<()> {
+    /// let ctx = SessionContext::new();
+    /// let df = ctx.read_csv("tests/data/example.csv", CsvReadOptions::new()).await?;
+    ///
+    /// // The following is the equivalent of "SELECT FIRST_VALUE(b) OVER(PARTITION BY a)"
+    /// let first_value = first_value(col("b"))
+    ///    .with_partition_by(vec![col("a")])
+    ///    .build();
+    /// let _ = df.window(vec![first_value]);
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn window(self, window_exprs: Vec<Expr>) -> Result<DataFrame> {
         let plan = LogicalPlanBuilder::from(self.plan)
             .window(window_exprs)?
