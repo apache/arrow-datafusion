@@ -4147,6 +4147,25 @@ fn test_multi_grouping_sets() {
     quick_test(sql, expected);
 }
 
+#[test]
+fn test_create_table_with_postgres_type_alias() {
+    let sql = "create table foo_table(int8_col int8, int4_col int4, int2_col int2,\
+     float4_col float4, float8_col float8, bool_col bool);";
+    let expected = "CreateMemoryTable: Bare { table: \"foo_table\" }\n  EmptyRelation";
+    quick_test(sql, expected);
+}
+
+#[test]
+fn test_select_table_with_postgres_type_alias() {
+    let sql = "select age::int8 as int8_col, age::int4 as int4_col, age::int2 as int2_col,\
+    TRY_CAST(age AS FLOAT)::float4 as float4_col, TRY_CAST(age AS FLOAT)::float8 as float8_col, (age = 18) as bool \
+    from person;";
+    let expected = "Projection: CAST(person.age AS Int64) AS int8_col, CAST(person.age AS Int32) AS int4_col, \
+    CAST(person.age AS Int16) AS int2_col, CAST(TRY_CAST(person.age AS Float32) AS Float32) AS float4_col, \
+    CAST(TRY_CAST(person.age AS Float32) AS Float64) AS float8_col, person.age = Int64(18) AS bool\n  TableScan: person";
+    quick_test(sql, expected);
+}
+
 fn assert_field_not_found(err: DataFusionError, name: &str) {
     match err {
         DataFusionError::SchemaError { .. } => {

@@ -38,7 +38,9 @@ arrow-buffer = { version = "43.0.0", default-features = false }
 arrow-flight = { version = "43.0.0", features = ["flight-sql-experimental"] }
 arrow-schema = { version = "43.0.0", default-features = false }
 parquet = { version = "43.0.0", features = ["arrow", "async", "object_store"] }
-sqlparser = { version = "0.36.1", features = ["visitor"] }
+# todo: use released version of sqlparser-rs once it is released
+sqlparser = { git = "https://github.com/sqlparser-rs/sqlparser-rs", branch = "main", features = ["visitor"] }
+
 
 [profile.release]
 codegen-units = 1
