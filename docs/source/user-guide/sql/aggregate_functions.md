@@ -254,6 +254,8 @@ last_value(expression [ORDER BY expression])
 - [regr_sxx](#regr_sxx)
 - [regr_syy](#regr_syy)
 - [regr_sxy](#regr_sxy)
+- [quantile_cont](#quantile_cont)
+- [quantile_disc](#quantile_disc)
 
 ### `corr`
 
@@ -528,6 +530,32 @@ regr_sxy(expression_y, expression_x)
   Can be a constant, column, or function, and any combination of arithmetic operators.
 - **expression_x**: Independent variable.
   Can be a constant, column, or function, and any combination of arithmetic operators.
+
+### `quantile_cont`
+
+Returns the interpolated quantile value for a dataset based on the provided percentile. Linear interpolation will be performed if the target percentile falls between two data points.
+
+```
+quantile_cont(expression_data, percentile)
+```
+
+#### Arguments
+
+- **expression_data**: Can be a constant, column, or function, and any combination of arithmetic operators.
+- **percentile**: Percentile to compute. Must be a float value between 0 and 1 (inclusive).
+
+### `quantile_disc`
+
+Provides the exact quantile value of a dataset based on the input percentile. Instead of interpolating between data points, it directly returns the data point that is closer to the exact percentile. (If the target percentile is equally close to two data points, return the value of the data point with smaller percentile)
+
+```
+quantile_disc(expression_data, percentile)
+```
+
+#### Arguments
+
+- **expression_data**: Can be a constant, column, or function, and any combination of arithmetic operators.
+- **percentile**: Percentile to compute. Must be a float value between 0 and 1 (inclusive).
 
 ## Approximate
 

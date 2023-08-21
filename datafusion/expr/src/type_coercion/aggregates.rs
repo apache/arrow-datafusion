@@ -213,6 +213,21 @@ pub fn coerce_types(
             }
             Ok(input_types.to_vec())
         }
+        AggregateFunction::QuantileCont | AggregateFunction::QuantileDisc => {
+            let valid_arg0_types = [NUMERICS.to_vec(), vec![DataType::Null]].concat();
+            let valid_arg1_types = NUMERICS;
+            let input_types_valid = // number of input already checked before
+                valid_arg0_types.contains(&input_types[0]) && valid_arg1_types.contains(&input_types[1]);
+            if !input_types_valid {
+                return plan_err!(
+                    "The function {:?} does not support inputs of type {:?}, {:?}.",
+                    agg_fun,
+                    input_types[0],
+                    input_types[1]
+                );
+            }
+            Ok(input_types.to_vec())
+        }
         AggregateFunction::ApproxPercentileCont => {
             if !is_approx_percentile_cont_supported_arg_type(&input_types[0]) {
                 return plan_err!(

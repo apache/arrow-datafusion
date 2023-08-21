@@ -642,6 +642,8 @@ enum AggregateFunction {
   REGR_SXX = 32;
   REGR_SYY = 33;
   REGR_SXY = 34;
+  QUANTILE_CONT = 35;
+  QUANTILE_DISC = 36;
 }
 
 message AggregateExprNode {

@@ -474,6 +474,8 @@ impl serde::Serialize for AggregateFunction {
             Self::RegrSxx => "REGR_SXX",
             Self::RegrSyy => "REGR_SYY",
             Self::RegrSxy => "REGR_SXY",
+            Self::QuantileCont => "QUANTILE_CONT",
+            Self::QuantileDisc => "QUANTILE_DISC",
         };
         serializer.serialize_str(variant)
     }
@@ -520,6 +522,8 @@ impl<'de> serde::Deserialize<'de> for AggregateFunction {
             "REGR_SXX",
             "REGR_SYY",
             "REGR_SXY",
+            "QUANTILE_CONT",
+            "QUANTILE_DISC",
         ];
 
         struct GeneratedVisitor;
@@ -597,6 +601,8 @@ impl<'de> serde::Deserialize<'de> for AggregateFunction {
                     "REGR_SXX" => Ok(AggregateFunction::RegrSxx),
                     "REGR_SYY" => Ok(AggregateFunction::RegrSyy),
                     "REGR_SXY" => Ok(AggregateFunction::RegrSxy),
+                    "QUANTILE_CONT" => Ok(AggregateFunction::QuantileCont),
+                    "QUANTILE_DISC" => Ok(AggregateFunction::QuantileDisc),
                     _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
                 }
             }

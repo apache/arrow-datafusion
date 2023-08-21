@@ -17,14 +17,14 @@
 
 //! Utilities used in aggregates
 
-use crate::{AggregateExpr, PhysicalSortExpr};
+use crate::expressions::Literal;
+use crate::{AggregateExpr, PhysicalExpr, PhysicalSortExpr};
 use arrow::array::ArrayRef;
 use arrow::datatypes::{MAX_DECIMAL_FOR_EACH_PRECISION, MIN_DECIMAL_FOR_EACH_PRECISION};
 use arrow_array::cast::AsArray;
 use arrow_array::types::Decimal128Type;
 use arrow_schema::{DataType, Field};
-use datafusion_common::internal_err;
-use datafusion_common::{DataFusionError, Result, ScalarValue};
+use datafusion_common::{internal_err, plan_err, DataFusionError, Result, ScalarValue};
 use datafusion_expr::Accumulator;
 use std::any::Any;
 use std::sync::Arc;
@@ -207,4 +207,37 @@ pub(crate) fn ordering_fields(
             )
         })
         .collect()
+}
+
+/// parse and validate percentile scores like 0.5 in `quantile_cont(data, 0.5);`
+pub fn validate_input_percentile_expr(expr: &Arc<dyn PhysicalExpr>) -> Result<f64> {
+    // Extract the desired percentile literal
+    let lit = expr
+        .as_any()
+        .downcast_ref::<Literal>()
+        .ok_or_else(|| {
+            DataFusionError::Internal(
+                "desired percentile argument must be float literal".to_string(),
+            )
+        })?
+        .value();
+    let percentile = match lit {
+        ScalarValue::Float32(Some(q)) => *q as f64,
+        ScalarValue::Float64(Some(q)) => *q,
+        ScalarValue::Int64(Some(q)) => *q as f64, // to support 0 or 1
+        got => {
+            return Err(DataFusionError::NotImplemented(format!(
+                "Percentile value must be Float32 or Float64 literal (got data type {})",
+                got.get_datatype()
+            )))
+        }
+    };
+
+    // Ensure the percentile is between 0 and 1.
+    if !(0.0..=1.0).contains(&percentile) {
+        return plan_err!(
+            "Percentile value must be between 0.0 and 1.0 inclusive, {percentile} is invalid"
+        );
+    }
+    Ok(percentile)
 }

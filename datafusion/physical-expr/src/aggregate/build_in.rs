@@ -26,6 +26,7 @@
 //! * Signature: see `Signature`
 //! * Return type: a function `(arg_types) -> return_type`. E.g. for min, ([f32]) -> f32, ([f64]) -> f64.
 
+use crate::aggregate::percentile::PercentileInterpolationType;
 use crate::aggregate::regr::RegrType;
 use crate::{expressions, AggregateExpr, PhysicalExpr, PhysicalSortExpr};
 use arrow::datatypes::Schema;
@@ -324,6 +325,26 @@ pub fn create_aggregate_expr(
             | AggregateFunction::RegrSXY,
             true,
         ) => {
+            return Err(DataFusionError::NotImplemented(format!(
+                "{}(DISTINCT) aggregations are not available",
+                fun
+            )));
+        }
+        (AggregateFunction::QuantileCont, false) => Arc::new(expressions::Quantile::new(
+            name,
+            PercentileInterpolationType::Continuous,
+            input_phy_exprs[0].clone(),
+            input_phy_exprs[1].clone(),
+            rt_type,
+        )?),
+        (AggregateFunction::QuantileDisc, false) => Arc::new(expressions::Quantile::new(
+            name,
+            PercentileInterpolationType::Discrete,
+            input_phy_exprs[0].clone(),
+            input_phy_exprs[1].clone(),
+            rt_type,
+        )?),
+        (AggregateFunction::QuantileDisc | AggregateFunction::QuantileCont, true) => {
             return Err(DataFusionError::NotImplemented(format!(
                 "{}(DISTINCT) aggregations are not available",
                 fun

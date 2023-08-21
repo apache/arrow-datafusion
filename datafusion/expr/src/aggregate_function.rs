@@ -82,6 +82,10 @@ pub enum AggregateFunction {
     RegrSYY,
     /// Sum of products of pairs of numbers
     RegrSXY,
+    /// Continuous percentile
+    QuantileCont,
+    /// Discrete percentile
+    QuantileDisc,
     /// Approximate continuous percentile function
     ApproxPercentileCont,
     /// Approximate continuous percentile function with weight
@@ -132,6 +136,8 @@ impl AggregateFunction {
             RegrSXX => "REGR_SXX",
             RegrSYY => "REGR_SYY",
             RegrSXY => "REGR_SXY",
+            QuantileCont => "QUANTILE_CONT",
+            QuantileDisc => "QUANTILE_DISC",
             ApproxPercentileCont => "APPROX_PERCENTILE_CONT",
             ApproxPercentileContWithWeight => "APPROX_PERCENTILE_CONT_WITH_WEIGHT",
             ApproxMedian => "APPROX_MEDIAN",
@@ -191,6 +197,8 @@ impl FromStr for AggregateFunction {
             "regr_sxx" => AggregateFunction::RegrSXX,
             "regr_syy" => AggregateFunction::RegrSYY,
             "regr_sxy" => AggregateFunction::RegrSXY,
+            "quantile_cont" => AggregateFunction::QuantileCont,
+            "quantile_disc" => AggregateFunction::QuantileDisc,
             // approximate
             "approx_distinct" => AggregateFunction::ApproxDistinct,
             "approx_median" => AggregateFunction::ApproxMedian,
@@ -293,9 +301,10 @@ impl AggregateFunction {
             AggregateFunction::ApproxPercentileContWithWeight => {
                 Ok(coerced_data_types[0].clone())
             }
-            AggregateFunction::ApproxMedian | AggregateFunction::Median => {
-                Ok(coerced_data_types[0].clone())
-            }
+            AggregateFunction::ApproxMedian
+            | AggregateFunction::Median
+            | AggregateFunction::QuantileCont
+            | AggregateFunction::QuantileDisc => Ok(coerced_data_types[0].clone()),
             AggregateFunction::Grouping => Ok(DataType::Int32),
             AggregateFunction::FirstValue | AggregateFunction::LastValue => {
                 Ok(coerced_data_types[0].clone())
@@ -379,6 +388,16 @@ impl AggregateFunction {
             | AggregateFunction::RegrSYY
             | AggregateFunction::RegrSXY => {
                 Signature::uniform(2, NUMERICS.to_vec(), Volatility::Immutable)
+            }
+            AggregateFunction::QuantileCont | AggregateFunction::QuantileDisc => {
+                // signature: quantile_*(NUMERICS, float64)
+                Signature::one_of(
+                    NUMERICS
+                        .iter()
+                        .map(|t| TypeSignature::Exact(vec![t.clone(), DataType::Float64]))
+                        .collect(),
+                    Volatility::Immutable,
+                )
             }
             AggregateFunction::ApproxPercentileCont => {
                 // Accept any numeric value paired with a float64 percentile

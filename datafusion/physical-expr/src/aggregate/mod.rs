@@ -42,7 +42,7 @@ pub(crate) mod count_distinct;
 pub(crate) mod covariance;
 pub(crate) mod first_last;
 pub(crate) mod grouping;
-pub(crate) mod median;
+pub(crate) mod percentile;
 #[macro_use]
 pub(crate) mod min_max;
 pub mod build_in;

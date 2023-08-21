@@ -393,6 +393,8 @@ impl From<&AggregateFunction> for protobuf::AggregateFunction {
             AggregateFunction::RegrSXX => Self::RegrSxx,
             AggregateFunction::RegrSYY => Self::RegrSyy,
             AggregateFunction::RegrSXY => Self::RegrSxy,
+            AggregateFunction::QuantileCont => Self::QuantileCont,
+            AggregateFunction::QuantileDisc => Self::QuantileDisc,
             AggregateFunction::ApproxPercentileCont => Self::ApproxPercentileCont,
             AggregateFunction::ApproxPercentileContWithWeight => {
                 Self::ApproxPercentileContWithWeight
@@ -704,6 +706,12 @@ impl TryFrom<&Expr> for protobuf::LogicalExprNode {
                     }
                     AggregateFunction::Grouping => protobuf::AggregateFunction::Grouping,
                     AggregateFunction::Median => protobuf::AggregateFunction::Median,
+                    AggregateFunction::QuantileCont => {
+                        protobuf::AggregateFunction::QuantileCont
+                    }
+                    AggregateFunction::QuantileDisc => {
+                        protobuf::AggregateFunction::QuantileDisc
+                    }
                     AggregateFunction::FirstValue => {
                         protobuf::AggregateFunction::FirstValueAgg
                     }

@@ -17,7 +17,7 @@
 
 use crate::aggregate::tdigest::TryIntoF64;
 use crate::aggregate::tdigest::{TDigest, DEFAULT_MAX_SIZE};
-use crate::aggregate::utils::down_cast_any_ref;
+use crate::aggregate::utils::{down_cast_any_ref, validate_input_percentile_expr};
 use crate::expressions::{format_state_name, Literal};
 use crate::{AggregateExpr, PhysicalExpr};
 use arrow::{
@@ -28,7 +28,6 @@ use arrow::{
     datatypes::{DataType, Field},
 };
 use datafusion_common::internal_err;
-use datafusion_common::plan_err;
 use datafusion_common::DataFusionError;
 use datafusion_common::Result;
 use datafusion_common::{downcast_value, ScalarValue};
@@ -130,35 +129,6 @@ impl PartialEq for ApproxPercentileCont {
                 .zip(other.expr.iter())
                 .all(|(this, other)| this.eq(other))
     }
-}
-
-fn validate_input_percentile_expr(expr: &Arc<dyn PhysicalExpr>) -> Result<f64> {
-    // Extract the desired percentile literal
-    let lit = expr
-        .as_any()
-        .downcast_ref::<Literal>()
-        .ok_or_else(|| {
-            DataFusionError::Internal(
-                "desired percentile argument must be float literal".to_string(),
-            )
-        })?
-        .value();
-    let percentile = match lit {
-        ScalarValue::Float32(Some(q)) => *q as f64,
-        ScalarValue::Float64(Some(q)) => *q,
-        got => return Err(DataFusionError::NotImplemented(format!(
-            "Percentile value for 'APPROX_PERCENTILE_CONT' must be Float32 or Float64 literal (got data type {})",
-            got.get_datatype()
-        )))
-    };
-
-    // Ensure the percentile is between 0 and 1.
-    if !(0.0..=1.0).contains(&percentile) {
-        return plan_err!(
-            "Percentile value must be between 0.0 and 1.0 inclusive, {percentile} is invalid"
-        );
-    }
-    Ok(percentile)
 }
 
 fn validate_input_max_size_expr(expr: &Arc<dyn PhysicalExpr>) -> Result<usize> {

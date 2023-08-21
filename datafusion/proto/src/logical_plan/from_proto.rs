@@ -563,6 +563,8 @@ impl From<protobuf::AggregateFunction> for AggregateFunction {
             protobuf::AggregateFunction::RegrSxx => Self::RegrSXX,
             protobuf::AggregateFunction::RegrSyy => Self::RegrSYY,
             protobuf::AggregateFunction::RegrSxy => Self::RegrSXY,
+            protobuf::AggregateFunction::QuantileCont => Self::QuantileCont,
+            protobuf::AggregateFunction::QuantileDisc => Self::QuantileDisc,
             protobuf::AggregateFunction::ApproxPercentileCont => {
                 Self::ApproxPercentileCont
             }
