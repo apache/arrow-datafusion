@@ -26,7 +26,6 @@ use datafusion_expr::{lit, Expr, Operator};
 use log::debug;
 use sqlparser::ast::{BinaryOperator, Expr as SQLExpr, Interval, Value};
 use sqlparser::parser::ParserError::ParserError;
-use std::collections::HashSet;
 
 impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     pub(crate) fn parse_value(
@@ -123,45 +122,6 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             param,
             param_type.cloned(),
         )))
-    }
-
-    pub(super) fn sql_array_literal(
-        &self,
-        elements: Vec<SQLExpr>,
-        schema: &DFSchema,
-    ) -> Result<Expr> {
-        let mut values = Vec::with_capacity(elements.len());
-
-        for element in elements {
-            let value = self.sql_expr_to_logical_expr(
-                element,
-                schema,
-                &mut PlannerContext::new(),
-            )?;
-            match value {
-                Expr::Literal(scalar) => {
-                    values.push(scalar);
-                }
-                _ => {
-                    return not_impl_err!(
-                        "Arrays with elements other than literal are not supported: {value}"
-                    );
-                }
-            }
-        }
-
-        let data_types: HashSet<DataType> =
-            values.iter().map(|e| e.get_datatype()).collect();
-
-        if data_types.is_empty() {
-            Ok(lit(ScalarValue::new_list(None, DataType::Utf8)))
-        } else if data_types.len() > 1 {
-            not_impl_err!("Arrays with different types are not supported: {data_types:?}")
-        } else {
-            let data_type = values[0].get_datatype();
-
-            Ok(lit(ScalarValue::new_list(Some(values), data_type)))
-        }
     }
 
     /// Convert a SQL interval expression to a DataFusion logical plan

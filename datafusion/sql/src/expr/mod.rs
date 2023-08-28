@@ -40,8 +40,12 @@ use datafusion_expr::{
     col, expr, lit, AggregateFunction, Between, BinaryExpr, BuiltinScalarFunction, Cast,
     Expr, ExprSchemable, GetFieldAccess, GetIndexedField, Like, Operator, TryCast,
 };
-use sqlparser::ast::{ArrayAgg, Expr as SQLExpr, JsonOperator, TrimWhereField, Value};
+use sqlparser::ast::{
+    ArrayAgg, Expr as SQLExpr, FunctionArg, FunctionArgExpr, JsonOperator,
+    TrimWhereField, Value,
+};
 use sqlparser::parser::ParserError::ParserError;
+use std::str::FromStr;
 
 impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     pub(crate) fn sql_expr_to_logical_expr(
@@ -176,7 +180,26 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 )))
             }
 
-            SQLExpr::Array(arr) => self.sql_array_literal(arr.elem, schema),
+            SQLExpr::Array(arr) => {
+                if arr.elem.is_empty() {
+                    Ok(lit(ScalarValue::new_list(None, DataType::Utf8)))
+                } else {
+                    let args = arr
+                        .elem
+                        .iter()
+                        .map(|expr| {
+                            FunctionArg::Unnamed(FunctionArgExpr::Expr(expr.clone()))
+                        })
+                        .collect::<Vec<FunctionArg>>();
+
+                    let args =
+                        self.function_args_to_expr(args, schema, planner_context)?;
+                    Ok(Expr::ScalarFunction(ScalarFunction::new(
+                        BuiltinScalarFunction::from_str("make_array")?,
+                        args,
+                    )))
+                }
+            }
             SQLExpr::Interval(interval) => {
                 self.sql_interval_to_expr(false, interval, schema, planner_context)
             }

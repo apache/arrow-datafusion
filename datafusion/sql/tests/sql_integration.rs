@@ -24,8 +24,7 @@ use sqlparser::dialect::{Dialect, GenericDialect, HiveDialect, MySqlDialect};
 
 use datafusion_common::plan_err;
 use datafusion_common::{
-    assert_contains, config::ConfigOptions, DataFusionError, Result, ScalarValue,
-    TableReference,
+    config::ConfigOptions, DataFusionError, Result, ScalarValue, TableReference,
 };
 use datafusion_expr::{
     logical_plan::{LogicalPlan, Prepare},
@@ -1365,18 +1364,6 @@ fn select_interval_out_of_range() {
 }
 
 #[test]
-fn select_array_no_common_type() {
-    let sql = "SELECT [1, true, null]";
-    let err = logical_plan(sql).expect_err("query should have failed");
-
-    // HashSet doesn't guarantee order
-    assert_contains!(
-        err.to_string(),
-        r#"Arrays with different types are not supported: "#
-    );
-}
-
-#[test]
 fn recursive_ctes() {
     let sql = "
         WITH RECURSIVE numbers AS (
@@ -1388,16 +1375,6 @@ fn recursive_ctes() {
     let err = logical_plan(sql).expect_err("query should have failed");
     assert_eq!(
         r#"NotImplemented("Recursive CTEs are not supported")"#,
-        format!("{err:?}")
-    );
-}
-
-#[test]
-fn select_array_non_literal_type() {
-    let sql = "SELECT [now()]";
-    let err = logical_plan(sql).expect_err("query should have failed");
-    assert_eq!(
-        r#"NotImplemented("Arrays with elements other than literal are not supported: now()")"#,
         format!("{err:?}")
     );
 }
@@ -4227,6 +4204,15 @@ fn test_multi_grouping_sets() {
         (person.id, person.age, person.state), \
         (person.id, person.age, person.state, person.birth_date))]], aggr=[[]]\
     \n    TableScan: person";
+    quick_test(sql, expected);
+}
+
+#[test]
+fn test_array_with_binary_expr() {
+    let sql = "select [1>0,2>1]";
+
+    let expected = "Projection: make_array(Int64(1) > Int64(0), Int64(2) > Int64(1))\
+                \n  EmptyRelation";
     quick_test(sql, expected);
 }
 
