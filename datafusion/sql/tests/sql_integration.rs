@@ -24,8 +24,7 @@ use sqlparser::dialect::{Dialect, GenericDialect, HiveDialect, MySqlDialect};
 
 use datafusion_common::plan_err;
 use datafusion_common::{
-    assert_contains, config::ConfigOptions, DataFusionError, Result, ScalarValue,
-    TableReference,
+    config::ConfigOptions, DataFusionError, Result, ScalarValue, TableReference,
 };
 use datafusion_expr::{
     logical_plan::{LogicalPlan, Prepare},
@@ -1361,18 +1360,6 @@ fn select_interval_out_of_range() {
     assert_eq!(
         "ArrowError(InvalidArgumentError(\"Unable to represent 100000000000000000 days in a signed 32-bit integer\"))",
         format!("{err:?}")
-    );
-}
-
-#[test]
-fn select_array_no_common_type() {
-    let sql = "SELECT [1, true, null]";
-    let err = logical_plan(sql).expect_err("query should have failed");
-
-    // HashSet doesn't guarantee order
-    assert_contains!(
-        err.to_string(),
-        r#"Arrays with different types are not supported: "#
     );
 }
 

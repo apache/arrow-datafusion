@@ -19,14 +19,29 @@ use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
 use arrow::compute::kernels::cast_utils::parse_interval_month_day_nano;
 use arrow_schema::DataType;
 use datafusion_common::{
-    not_impl_err, plan_err, DFSchema, DataFusionError, Result, ScalarValue,
+    internal_err, not_impl_err, plan_err, DFSchema, DataFusionError, Result, ScalarValue,
 };
 use datafusion_expr::expr::{BinaryExpr, Placeholder};
+use datafusion_expr::type_coercion::binary::comparison_coercion;
 use datafusion_expr::{lit, Expr, Operator};
 use log::debug;
 use sqlparser::ast::{BinaryOperator, Expr as SQLExpr, Interval, Value};
 use sqlparser::parser::ParserError::ParserError;
 use std::collections::HashSet;
+
+// Coerce scalar value type
+// i.e. ScalarValue::I64(1) -> ScalarValue::F64(1.0)
+macro_rules! coerce_scalar_value {
+    ($data_type:ty, $coerced_type:ty, $e:expr) => {{
+        let val: $data_type = $e.clone().try_into().unwrap();
+        let casted_sv = ScalarValue::try_from(val as $coerced_type);
+        if let Ok(casted_sv) = casted_sv {
+            Ok(casted_sv)
+        } else {
+            internal_err!("Failed to cast value")
+        }
+    }};
+}
 
 impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     pub(crate) fn parse_value(
@@ -150,17 +165,62 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             }
         }
 
-        let data_types: HashSet<DataType> =
+        let data_types = values.iter().map(|e| e.get_datatype()).collect::<Vec<_>>();
+        let seen_types: HashSet<DataType> =
             values.iter().map(|e| e.get_datatype()).collect();
 
-        if data_types.is_empty() {
-            Ok(lit(ScalarValue::new_list(None, DataType::Utf8)))
-        } else if data_types.len() > 1 {
-            not_impl_err!("Arrays with different types are not supported: {data_types:?}")
-        } else {
-            let data_type = values[0].get_datatype();
+        match seen_types.len() {
+            0 => Ok(lit(ScalarValue::new_list(None, DataType::Utf8))),
+            1 => {
+                let data_type = values[0].get_datatype();
+                Ok(lit(ScalarValue::new_list(Some(values), data_type)))
+            }
+            _ => {
+                let coerced_type = data_types
+                    .iter()
+                    .skip(1)
+                    .fold(data_types[0].clone(), |acc, d| {
+                        comparison_coercion(&acc, d).unwrap_or(acc)
+                    });
+                let values = values
+                        .iter()
+                        .map(|e| {
 
-            Ok(lit(ScalarValue::new_list(Some(values), data_type)))
+                            let data_type = e.get_datatype();
+                            if data_type == coerced_type {
+                                return Ok(e.clone());
+                            }
+
+                            match &e.get_datatype() {
+                                DataType::Null => {
+                                    // i.e. Int64 ScalarValue(Int64(None))
+                                    ScalarValue::try_from(&coerced_type)
+                                }
+                                data_type => {
+                                    // Convert to coerced type
+                                    // comparison_coercion: Float64 > Int64 > UInt64
+                                    match (data_type, &coerced_type) {
+                                        (&DataType::Int64, &DataType::Float64) => {
+                                            coerce_scalar_value!(i64, f64, e)
+                                        }
+                                        (&DataType::UInt64, &DataType::Float64) => {
+                                            coerce_scalar_value!(u64, f64, e)
+                                        }
+                                        (&DataType::UInt64, &DataType::Int64) => {
+                                            coerce_scalar_value!(u64, i64, e)
+                                        }
+                                        _ => {
+                                            not_impl_err!("Unsupported array literal type coercion from {:?} to {:?}", data_type, coerced_type)
+                                        }
+                                    }
+
+                                }
+                            }
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+
+                Ok(lit(ScalarValue::new_list(Some(values), coerced_type)))
+            }
         }
     }
 

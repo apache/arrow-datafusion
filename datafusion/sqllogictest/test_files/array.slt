@@ -304,10 +304,7 @@ select column1, column2, column3, column4 from nested_arrays_with_repeating_elem
 [[19, 20, 21], [19, 20, 21], [19, 20, 21], [22, 23, 24], [19, 20, 21], [25, 26, 27], [19, 20, 21], [22, 23, 24], [19, 20, 21], [19, 20, 21]] [19, 20, 21] [28, 29, 30] 5
 [[28, 29, 30], [31, 32, 33], [34, 35, 36], [28, 29, 30], [31, 32, 33], [34, 35, 36], [28, 29, 30], [31, 32, 33], [34, 35, 36], [28, 29, 30]] [28, 29, 30] [37, 38, 39] 10
 
-
 ### Array index
-
-
 ## array[i]
 
 # single index with scalars #1 (positive index)
@@ -478,6 +475,14 @@ select column1[0:5], column2[0:3], column3[0:9] from arrays;
 
 ### Array function tests
 
+## select array
+query ?
+select [1, null];
+----
+[1, ]
+
+query error DataFusion error: This feature is not implemented: Unsupported array literal type coercion from Boolean to Int64
+select [1, true, null];
 
 ## make_array (aliases: `make_list`)
 
@@ -827,7 +832,7 @@ select array_slice(make_array(1, 2, 3, 4, 5), 0, -4), array_slice(make_array('h'
 ----
 [1] [h, e]
 
-# array_slice scalar function #13 (with negative number and NULL)
+# array_slice scalar function #13 (with positive number and NULL)
 query error 
 select array_slice(make_array(1, 2, 3, 4, 5), 2, NULL), array_slice(make_array('h', 'e', 'l', 'l', 'o'), 3, NULL);
 
@@ -941,13 +946,33 @@ select make_array(['a','b'], null);
 
 ## array_append (aliases: `list_append`, `array_push_back`, `list_push_back`)
 
-# TODO: array_append with NULLs
 # array_append scalar function #1
-# query ?
-# select array_append(make_array(), 4);
-# ----
-# [4]
+query ?
+select array_append(make_array(null), 4);
+----
+[, 4]
 
+query ?
+select array_append(make_array(1, 2, null), 4);
+----
+[1, 2, , 4]
+
+query ?
+select array_append(make_array(), 4);
+----
+[4]
+
+query ?
+select array_append([[1,2,3]], [4, null, 6]);
+----
+[[1, 2, 3], [4, , 6]]
+
+query ?
+select array_append([[1,2,3]], [null]);
+----
+[[1, 2, 3], []]
+
+# TODO: array_append with pure nulls
 # array_append scalar function #2
 # query ??
 # select array_append(make_array(), make_array()), array_append(make_array(), make_array(4));
@@ -983,6 +1008,26 @@ query ???
 select list_push_back(make_array(1, 2, 3), 4), list_push_back(make_array(1.0, 2.0, 3.0), 4.0), list_push_back(make_array('h', 'e', 'l', 'l'), 'o');
 ----
 [1, 2, 3, 4] [1.0, 2.0, 3.0, 4.0] [h, e, l, l, o]
+
+query ?
+select array_append([1, 2, 3], null);
+----
+[1, 2, 3, ]
+
+query ?
+select array_append([1, 2, null, 4], 5);
+----
+[1, 2, , 4, 5]
+
+query ?
+select array_append([1, 2.1, 3], 4.0);
+----
+[1.0, 2.1, 3.0, 4.0]
+
+query ?
+select array_append([1, 2.1, 3], null);
+----
+[1.0, 2.1, 3.0, ]
 
 # array_append with columns #1
 query ?
@@ -1025,13 +1070,33 @@ select array_append(column1, make_array(1, 11, 111)), array_append(make_array(ma
 
 ## array_prepend (aliases: `list_prepend`, `array_push_front`, `list_push_front`)
 
-# TODO: array_prepend with NULLs
 # array_prepend scalar function #1
-# query ?
-# select array_prepend(4, make_array());
-# ----
-# [4]
+query ?
+select array_prepend(4, make_array());
+----
+[4]
 
+query ?
+select array_prepend(4, make_array(null));
+----
+[4, ]
+
+query ?
+select array_prepend(null, make_array(1, 2, 3));
+----
+[, 1, 2, 3]
+
+query ?
+select array_prepend([1, null, 3], make_array([4, 5, 6]));
+----
+[[1, , 3], [4, 5, 6]]
+
+query ?
+select array_prepend(make_array(null), make_array([4, 5, 6]));
+----
+[[], [4, 5, 6]]
+
+# TODO: array_prepend with pure nulls
 # array_prepend scalar function #2
 # query ??
 # select array_prepend(make_array(), make_array()), array_prepend(make_array(4), make_array());
@@ -1067,6 +1132,21 @@ query ???
 select list_push_front(1, make_array(2, 3, 4)), list_push_front(1.0, make_array(2.0, 3.0, 4.0)), list_push_front('h', make_array('e', 'l', 'l', 'o'));
 ----
 [1, 2, 3, 4] [1.0, 2.0, 3.0, 4.0] [h, e, l, l, o]
+
+query ?
+select array_prepend(null, make_array(1, 2, 3));
+----
+[, 1, 2, 3]
+
+query ?
+select array_prepend(null, make_array(1, 2.2, 3));
+----
+[, 1.0, 2.2, 3.0]
+
+query ?
+select array_prepend(1.2, make_array(1, 2, 3));
+----
+[1.2, 1.0, 2.0, 3.0]
 
 # array_prepend with columns #1
 query ?
@@ -1176,8 +1256,16 @@ select array_repeat([1], column3), array_repeat(column1, 3) from arrays_values_w
 ## array_concat (aliases: `array_cat`, `list_concat`, `list_cat`)
 
 # array_concat error
-query error DataFusion error: Error during planning: The array_concat function can only accept list as the args\.
+query error DataFusion error: SQL error: ParserError\("Expected an SQL statement, found: caused"\)
+caused by
+Error during planning: The array_concat function can only accept list as the args
 select array_concat(1, 2);
+
+query error DataFusion error: type_coercion\ncaused by\nError during planning: The array_concat function can only accept list as the args
+select array_concat(make_array(make_array(1, 2), make_array(3, 4)), null);
+
+query error DataFusion error: type_coercion\ncaused by\nError during planning: The array_concat function can only accept list as the args
+select array_concat(make_array(make_array(1, 2), make_array(3, 4)), 5);
 
 # array_concat scalar function #1
 query ??
@@ -1219,19 +1307,19 @@ select array_concat(make_array(), make_array(2, 3));
 query ?
 select array_concat(make_array(make_array(1, 2), make_array(3, 4)), make_array(make_array()));
 ----
-[[1, 2], [3, 4]]
+[[1, 2], [3, 4], []]
 
 # array_concat scalar function #8 (with empty arrays)
 query ?
 select array_concat(make_array(make_array(1, 2), make_array(3, 4)), make_array(make_array()), make_array(make_array(), make_array()), make_array(make_array(5, 6), make_array(7, 8)));
 ----
-[[1, 2], [3, 4], [5, 6], [7, 8]]
+[[1, 2], [3, 4], [], [], [], [5, 6], [7, 8]]
 
 # array_concat scalar function #9 (with empty arrays)
 query ?
 select array_concat(make_array(make_array()), make_array(make_array(1, 2), make_array(3, 4)));
 ----
-[[1, 2], [3, 4]]
+[[], [1, 2], [3, 4]]
 
 # array_cat scalar function #10 (function alias `array_concat`)
 query ??
@@ -1286,6 +1374,26 @@ query ?
 select array_concat(make_array([30, 40]), make_array(10, 20), make_array([[50, 60]]),  make_array([[[70, 80]]]), make_array([[80, 40]]));
 ----
 [[[[30, 40]]], [[[10, 20]]], [[[50, 60]]], [[[70, 80]]], [[[80, 40]]]]
+
+# array_concat with different dimensions and size #7 (2DL2 + 1DL1)
+query ?
+select array_concat(make_array([1,2], [3,4]), make_array(5));
+----
+[[1, 2], [3, 4], [5]]
+
+# array_concat with different dimensions and size of null #8 (2D2L + 1D1L)
+# Duckdb Result: [[1, 2], [3, 4], null]
+# The behavior is not the same to Duckdb, but since we try to convert null to compatible type for each array function, 1d empty array is perfered to null.
+query ?
+select array_concat(make_array(make_array(1, 2), make_array(3, 4)), make_array(null));
+----
+[[1, 2], [3, 4], []]
+
+# array_concat with different dimensions of null #9 (2D + 1D)
+query ?
+select array_concat(make_array(make_array(1, 2), make_array(3, 4)), make_array(null, null));
+----
+[[1, 2], [3, 4], [, ]]
 
 # array_concat column-wise #1
 query ?

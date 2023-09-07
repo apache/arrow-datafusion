@@ -327,7 +327,9 @@ fn array_array(args: &[ArrayRef], data_type: DataType) -> Result<ArrayRef> {
                 } else if arg.as_any().downcast_ref::<NullArray>().is_some() {
                     arrays.push(ListOrNull::Null);
                 } else {
-                    return internal_err!("Unsupported argument type for array");
+                    return internal_err!(
+                        "(array_array) Unsupported argument type for array"
+                    );
                 }
             }
 
@@ -674,7 +676,7 @@ pub fn array_append(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     check_datatypes("array_append", &[arr.values(), element])?;
     let res = match arr.value_type() {
-        DataType::List(_) => concat_internal(args)?,
+        DataType::List(_) => array_concat(args)?,
         DataType::Null => {
             return Ok(array(&[ColumnarValue::Array(args[1].clone())])?.into_array(1))
         }
@@ -750,7 +752,7 @@ pub fn array_prepend(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     check_datatypes("array_prepend", &[element, arr.values()])?;
     let res = match arr.value_type() {
-        DataType::List(_) => concat_internal(args)?,
+        DataType::List(_) => array_concat(args)?,
         DataType::Null => {
             return Ok(array(&[ColumnarValue::Array(args[0].clone())])?.into_array(1))
         }
@@ -810,7 +812,9 @@ fn align_array_dimensions(args: Vec<ArrayRef>) -> Result<Vec<ArrayRef>> {
     aligned_args
 }
 
-fn concat_internal(args: &[ArrayRef]) -> Result<ArrayRef> {
+/// Array_concat/Array_cat SQL function
+pub fn array_concat(args: &[ArrayRef]) -> Result<ArrayRef> {
+    // Dimension check and null conversion is done in `type coercion` step.
     let args = align_array_dimensions(args.to_vec())?;
 
     let list_arrays =
@@ -861,22 +865,6 @@ fn concat_internal(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     let list = arrow::array::make_array(list);
     Ok(Arc::new(list))
-}
-
-/// Array_concat/Array_cat SQL function
-pub fn array_concat(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut new_args = vec![];
-    for arg in args {
-        let (ndim, lower_data_type) =
-            compute_array_ndims_with_datatype(Some(arg.clone()))?;
-        if ndim.is_none() || ndim == Some(1) {
-            return not_impl_err!("Array is not type '{lower_data_type:?}'.");
-        } else if !lower_data_type.equals_datatype(&DataType::Null) {
-            new_args.push(arg.clone());
-        }
-    }
-
-    concat_internal(new_args.as_slice())
 }
 
 macro_rules! general_repeat {

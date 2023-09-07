@@ -522,24 +522,18 @@ impl BuiltinScalarFunction {
                 Ok(data_type)
             }
             BuiltinScalarFunction::ArrayAppend => Ok(input_expr_types[0].clone()),
+            // Array concat allows multiple dimensions of arrays, i.e. array_concat(1D, 3D, 2D), find the largest one between them.
             BuiltinScalarFunction::ArrayConcat => {
                 let mut expr_type = Null;
                 let mut max_dims = 0;
                 for input_expr_type in input_expr_types {
-                    match input_expr_type {
-                        List(field) => {
-                            if !field.data_type().equals_datatype(&Null) {
-                                let dims = self.return_dimension(input_expr_type.clone());
-                                if max_dims < dims {
-                                    max_dims = dims;
-                                    expr_type = input_expr_type.clone();
-                                }
+                    if let List(field) = input_expr_type {
+                        if !field.data_type().equals_datatype(&Null) {
+                            let dims = self.return_dimension(input_expr_type.clone());
+                            if max_dims < dims {
+                                max_dims = dims;
+                                expr_type = input_expr_type.clone();
                             }
-                        }
-                        _ => {
-                            return plan_err!(
-                                "The {self} function can only accept list as the args."
-                            )
                         }
                     }
                 }
