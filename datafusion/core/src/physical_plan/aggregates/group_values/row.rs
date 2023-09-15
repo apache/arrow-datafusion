@@ -55,7 +55,10 @@ pub struct GroupValuesRows {
     /// [`Row`]: arrow::row::Row
     group_values: Rows,
 
-    // buffer to be reused to store hashes
+    /// Buffer to be reused to store group by values in arrow [`Row`] format.
+    group_values_buffer: Option<Rows>,
+
+    /// Buffer to be reused to store hashes
     hashes_buffer: Vec<u64>,
 
     /// Random state for creating hashes
@@ -80,6 +83,7 @@ impl GroupValuesRows {
             map,
             map_size: 0,
             group_values,
+            group_values_buffer: None,
             hashes_buffer: Default::default(),
             random_state: Default::default(),
         })
@@ -88,9 +92,11 @@ impl GroupValuesRows {
 
 impl GroupValues for GroupValuesRows {
     fn intern(&mut self, cols: &[ArrayRef], groups: &mut Vec<usize>) -> Result<()> {
-        // Convert the group keys into the row format
-        // Avoid reallocation when https://github.com/apache/arrow-rs/issues/4479 is available
-        let group_rows = self.row_converter.convert_columns(cols)?;
+        let group_rows = self
+            .group_values_buffer
+            .get_or_insert_with(|| self.row_converter.empty_rows(cols.len(), 0));
+        group_rows.clear();
+        self.row_converter.append(group_rows, cols)?;
         let n_rows = group_rows.num_rows();
 
         // tracks to which group each of the input rows belongs
@@ -137,6 +143,7 @@ impl GroupValues for GroupValuesRows {
     fn size(&self) -> usize {
         self.row_converter.size()
             + self.group_values.size()
+            + self.group_values_buffer.as_ref().map_or(0, |b| b.size())
             + self.map_size
             + self.hashes_buffer.allocated_size()
     }
