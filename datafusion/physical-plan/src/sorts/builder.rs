@@ -15,136 +15,192 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::compute::interleave;
-use arrow::datatypes::SchemaRef;
-use arrow::record_batch::RecordBatch;
 use datafusion_common::Result;
-use datafusion_execution::memory_pool::MemoryReservation;
+use std::collections::VecDeque;
+use std::mem::take;
 
-#[derive(Debug, Copy, Clone, Default)]
-struct BatchCursor {
-    /// The index into BatchBuilder::batches
-    batch_idx: usize,
-    /// The row index within the given batch
-    row_idx: usize,
-}
+use super::batch_cursor::{BatchCursor, SlicedBatchCursorIdentifier};
+use super::cursor::Cursor;
 
-/// Provides an API to incrementally build a [`RecordBatch`] from partitioned [`RecordBatch`]
+pub type SortOrder = (SlicedBatchCursorIdentifier, usize); // batch_id, row_idx (without offset)
+pub type YieldedSortOrder<C> = (Vec<BatchCursor<C>>, Vec<SortOrder>);
+
+/// Provides an API to incrementally build a [`SortOrder`] from partitioned [`RecordBatch`](arrow::record_batch::RecordBatch)es
 #[derive(Debug)]
-pub struct BatchBuilder {
-    /// The schema of the RecordBatches yielded by this stream
-    schema: SchemaRef,
+pub struct SortOrderBuilder<C: Cursor> {
+    /// Maintain a list of cursors for each finished (sorted) batch
+    /// The number of total batches can be larger than the number of total streams
+    batch_cursors: VecDeque<BatchCursor<C>>,
 
-    /// Maintain a list of [`RecordBatch`] and their corresponding stream
-    batches: Vec<(usize, RecordBatch)>,
-
-    /// Accounts for memory used by buffered batches
-    reservation: MemoryReservation,
-
-    /// The current [`BatchCursor`] for each stream
-    cursors: Vec<BatchCursor>,
+    /// The current [`BatchCursor`] for each stream_idx
+    cursors: Vec<Option<BatchCursor<C>>>,
 
     /// The accumulated stream indexes from which to pull rows
-    /// Consists of a tuple of `(batch_idx, row_idx)`
-    indices: Vec<(usize, usize)>,
+    indices: Vec<SortOrder>,
+
+    stream_count: usize,
 }
 
-impl BatchBuilder {
-    /// Create a new [`BatchBuilder`] with the provided `stream_count` and `batch_size`
-    pub fn new(
-        schema: SchemaRef,
-        stream_count: usize,
-        batch_size: usize,
-        reservation: MemoryReservation,
-    ) -> Self {
+impl<C: Cursor> SortOrderBuilder<C> {
+    /// Create a new [`SortOrderBuilder`] with the provided `stream_count` and `batch_size`
+    pub fn new(stream_count: usize, batch_size: usize) -> Self {
         Self {
-            schema,
-            batches: Vec::with_capacity(stream_count * 2),
-            cursors: vec![BatchCursor::default(); stream_count],
+            batch_cursors: VecDeque::with_capacity(stream_count * 2),
+            cursors: (0..stream_count).map(|_| None).collect(),
             indices: Vec::with_capacity(batch_size),
-            reservation,
+            stream_count,
         }
     }
 
     /// Append a new batch in `stream_idx`
-    pub fn push_batch(&mut self, stream_idx: usize, batch: RecordBatch) -> Result<()> {
-        self.reservation.try_grow(batch.get_array_memory_size())?;
-        let batch_idx = self.batches.len();
-        self.batches.push((stream_idx, batch));
-        self.cursors[stream_idx] = BatchCursor {
-            batch_idx,
-            row_idx: 0,
-        };
+    pub fn push_batch(
+        &mut self,
+        stream_idx: usize,
+        batch_cursor: BatchCursor<C>,
+    ) -> Result<()> {
+        self.cursors[stream_idx] = Some(batch_cursor);
         Ok(())
     }
 
     /// Append the next row from `stream_idx`
     pub fn push_row(&mut self, stream_idx: usize) {
-        let cursor = &mut self.cursors[stream_idx];
-        let row_idx = cursor.row_idx;
-        cursor.row_idx += 1;
-        self.indices.push((cursor.batch_idx, row_idx));
+        if let Some(batch_cursor) = &mut self.cursors[stream_idx] {
+            // This is tightly coupled to the loser tree implementation.
+            // The winner (top of the tree) is from the stream_idx
+            // and gets pushed after the cursor already advanced (to fill a leaf node).
+            // Therefore, we need to subtract 1 from the current_idx.
+            let row_idx = batch_cursor.cursor.current_idx() - 1;
+            self.indices.push((batch_cursor.identifier(), row_idx));
+
+            if batch_cursor.cursor.is_finished() {
+                self.cursor_finished(stream_idx);
+            }
+        } else {
+            unreachable!("row pushed for non-existant cursor");
+        };
     }
 
-    /// Returns the number of in-progress rows in this [`BatchBuilder`]
+    /// Returns the number of in-progress rows in this [`SortOrderBuilder`]
     pub fn len(&self) -> usize {
         self.indices.len()
     }
 
-    /// Returns `true` if this [`BatchBuilder`] contains no in-progress rows
+    /// Returns `true` if this [`SortOrderBuilder`] contains no in-progress rows
     pub fn is_empty(&self) -> bool {
         self.indices.is_empty()
     }
 
-    /// Returns the schema of this [`BatchBuilder`]
-    pub fn schema(&self) -> &SchemaRef {
-        &self.schema
+    /// For a finished cursor, remove from BatchCursor (per stream_idx), and track in batch_cursors (per batch_idx)
+    fn cursor_finished(&mut self, stream_idx: usize) {
+        if let Some(cursor) = self.cursors[stream_idx].take() {
+            self.batch_cursors.push_back(cursor);
+        }
     }
 
-    /// Drains the in_progress row indexes, and builds a new RecordBatch from them
+    /// Advance the cursor for `stream_idx`
+    /// Returns `true` if the cursor was advanced
+    pub fn advance(&mut self, stream_idx: usize) -> bool {
+        match &mut self.cursors[stream_idx] {
+            Some(batch_cursor) => {
+                let cursor = &mut batch_cursor.cursor;
+                if cursor.is_finished() {
+                    return false;
+                }
+                cursor.advance();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Returns true if there is an in-progress cursor for a given stream
+    pub fn cursor_in_progress(&mut self, stream_idx: usize) -> bool {
+        self.cursors[stream_idx]
+            .as_mut()
+            .map_or(false, |batch_cursor| !batch_cursor.cursor.is_finished())
+    }
+
+    /// Returns `true` if the cursor at index `a` is greater than at index `b`
+    #[inline]
+    pub fn is_gt(&mut self, stream_idx_a: usize, stream_idx_b: usize) -> bool {
+        match (
+            self.cursor_in_progress(stream_idx_a),
+            self.cursor_in_progress(stream_idx_b),
+        ) {
+            (false, _) => true,
+            (_, false) => false,
+            _ => match (&self.cursors[stream_idx_a], &self.cursors[stream_idx_b]) {
+                (Some(a), Some(b)) => a
+                    .cursor
+                    .cmp(&b.cursor)
+                    .then_with(|| stream_idx_a.cmp(&stream_idx_b))
+                    .is_gt(),
+                _ => unreachable!(),
+            },
+        }
+    }
+
+    /// Takes the batches which already are sorted, and returns them with the corresponding cursors and sort order.
     ///
-    /// Will then drop any batches for which all rows have been yielded to the output
+    /// This will drain the internal state of the builder, and return `None` if there are no pending.
     ///
-    /// Returns `None` if no pending rows
-    pub fn build_record_batch(&mut self) -> Result<Option<RecordBatch>> {
+    /// This slices cursors for each record batch, as follows:
+    /// 1. input was N record_batchs of up to max M size
+    /// 2. yielded ordered rows can only equal up to M size
+    /// 3. of the N record_batches, each will be:
+    ///         a. fully yielded (all rows)
+    ///         b. partially yielded (some rows) => slice the batch_cursor
+    ///         c. not yielded (no rows) => retain cursor
+    /// 4. output will be:
+    ///        - SortOrder
+    ///        - corresponding cursors, each up to total yielded rows [cursor_batch_0, cursor_batch_1, ..]
+    pub fn yield_sort_order(&mut self) -> Result<Option<YieldedSortOrder<C>>> {
         if self.is_empty() {
             return Ok(None);
         }
 
-        let columns = (0..self.schema.fields.len())
-            .map(|column_idx| {
-                let arrays: Vec<_> = self
-                    .batches
-                    .iter()
-                    .map(|(_, batch)| batch.column(column_idx).as_ref())
-                    .collect();
-                Ok(interleave(&arrays, &self.indices)?)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let sort_order = take(&mut self.indices);
+        let mut cursors_to_yield: Vec<BatchCursor<C>> =
+            Vec::with_capacity(self.stream_count * 2);
 
-        self.indices.clear();
+        // drain already complete cursors
+        for mut batch_cursor in take(&mut self.batch_cursors) {
+            batch_cursor.cursor.reset();
+            cursors_to_yield.push(batch_cursor);
+        }
 
-        // New cursors are only created once the previous cursor for the stream
-        // is finished. This means all remaining rows from all but the last batch
-        // for each stream have been yielded to the newly created record batch
-        //
-        // We can therefore drop all but the last batch for each stream
-        let mut batch_idx = 0;
-        let mut retained = 0;
-        self.batches.retain(|(stream_idx, batch)| {
-            let stream_cursor = &mut self.cursors[*stream_idx];
-            let retain = stream_cursor.batch_idx == batch_idx;
-            batch_idx += 1;
+        // split any in_progress cursor
+        for stream_idx in 0..self.cursors.len() {
+            let mut batch_cursor = match self.cursors[stream_idx].take() {
+                Some(c) => c,
+                None => continue,
+            };
 
-            if retain {
-                stream_cursor.batch_idx = retained;
-                retained += 1;
+            if batch_cursor.cursor.is_finished() {
+                batch_cursor.cursor.reset();
+                cursors_to_yield.push(batch_cursor);
+            } else if batch_cursor.cursor.in_progress() {
+                let row_idx = batch_cursor.cursor.current_idx();
+                let num_rows = batch_cursor.cursor.num_rows();
+
+                let batch_cursor_to_yield = batch_cursor.slice(0, row_idx)?;
+                let batch_cursor_to_retain =
+                    batch_cursor.slice(row_idx, num_rows - row_idx)?;
+                assert_eq!(
+                    batch_cursor_to_yield.cursor.num_rows()
+                        + batch_cursor_to_retain.cursor.num_rows(),
+                    num_rows
+                );
+                drop(batch_cursor.cursor); // drop the original cursor
+
+                self.cursors[stream_idx] = Some(batch_cursor_to_retain);
+                cursors_to_yield.push(batch_cursor_to_yield);
             } else {
-                self.reservation.shrink(batch.get_array_memory_size());
+                // retained all (nothing yielded)
+                self.cursors[stream_idx] = Some(batch_cursor);
             }
-            retain
-        });
+        }
 
-        Ok(Some(RecordBatch::try_new(self.schema.clone(), columns)?))
+        Ok(Some((cursors_to_yield, sort_order)))
     }
 }

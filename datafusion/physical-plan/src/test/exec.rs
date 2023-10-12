@@ -32,7 +32,8 @@ use arrow::{
 use futures::Stream;
 
 use crate::{
-    common, stream::RecordBatchReceiverStream, stream::RecordBatchStreamAdapter,
+    common,
+    stream::{ReceiverStream, RecordBatchStreamAdapter},
     DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, RecordBatchStream,
     SendableRecordBatchStream, Statistics,
 };
@@ -211,7 +212,7 @@ impl ExecutionPlan for MockExec {
             .collect();
 
         if self.use_task {
-            let mut builder = RecordBatchReceiverStream::builder(self.schema(), 2);
+            let mut builder = ReceiverStream::builder(self.schema(), 2);
             // send data in order but in a separate task (to ensure
             // the batches are not available without the stream
             // yielding).
@@ -346,7 +347,7 @@ impl ExecutionPlan for BarrierExec {
     ) -> Result<SendableRecordBatchStream> {
         assert!(partition < self.data.len());
 
-        let mut builder = RecordBatchReceiverStream::builder(self.schema(), 2);
+        let mut builder = ReceiverStream::builder(self.schema(), 2);
 
         // task simply sends data in order after barrier is reached
         let data = self.data[partition].clone();

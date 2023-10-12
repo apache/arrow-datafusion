@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use super::expressions::PhysicalSortExpr;
 use super::metrics::{BaselineMetrics, ExecutionPlanMetricsSet, MetricsSet};
-use super::stream::{ObservedStream, RecordBatchReceiverStream};
+use super::stream::{ObservedStream, ReceiverStream, RecordBatchReceiverStreamAdaptor};
 use super::{DisplayAs, SendableRecordBatchStream, Statistics};
 
 use crate::{DisplayFormatType, EquivalenceProperties, ExecutionPlan, Partitioning};
@@ -145,12 +145,14 @@ impl ExecutionPlan for CoalescePartitionsExec {
                 // least one result in an attempt to maximize
                 // parallelism.
                 let mut builder =
-                    RecordBatchReceiverStream::builder(self.schema(), input_partitions);
+                    ReceiverStream::builder(self.schema(), input_partitions);
+                let input =
+                    Arc::new(RecordBatchReceiverStreamAdaptor::new(self.input.clone()));
 
                 // spawn independent tasks whose resulting streams (of batches)
                 // are sent to the channel for consumption.
                 for part_i in 0..input_partitions {
-                    builder.run_input(self.input.clone(), part_i, context.clone());
+                    builder.run_input(input.clone(), part_i, context.clone());
                 }
 
                 let stream = builder.build();

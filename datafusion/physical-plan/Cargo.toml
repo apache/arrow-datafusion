@@ -58,6 +58,7 @@ tokio = { version = "1.28", features = ["sync", "fs", "parking_lot"] }
 uuid = { version = "^1.2", features = ["v4"] }
 
 [dev-dependencies]
+paste = "1.0.14"
 rstest = "0.18.0"
 termtree = "0.4.1"
 tokio = { version = "1.28", features = ["macros", "rt", "rt-multi-thread", "sync", "fs", "parking_lot"] }

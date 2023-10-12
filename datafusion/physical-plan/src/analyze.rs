@@ -29,7 +29,9 @@ use datafusion_common::{internal_err, DataFusionError, Result};
 use futures::StreamExt;
 
 use super::expressions::PhysicalSortExpr;
-use super::stream::{RecordBatchReceiverStream, RecordBatchStreamAdapter};
+use super::stream::{
+    ReceiverStream, RecordBatchReceiverStreamAdaptor, RecordBatchStreamAdapter,
+};
 use super::{DisplayAs, Distribution, SendableRecordBatchStream};
 use datafusion_execution::TaskContext;
 
@@ -155,11 +157,11 @@ impl ExecutionPlan for AnalyzeExec {
         // parallel (on a separate tokio task) using a JoinSet to
         // cancel outstanding futures on drop
         let num_input_partitions = self.input.output_partitioning().partition_count();
-        let mut builder =
-            RecordBatchReceiverStream::builder(self.schema(), num_input_partitions);
+        let mut builder = ReceiverStream::builder(self.schema(), num_input_partitions);
+        let input = Arc::new(RecordBatchReceiverStreamAdaptor::new(self.input.clone()));
 
         for input_partition in 0..num_input_partitions {
-            builder.run_input(self.input.clone(), input_partition, context.clone());
+            builder.run_input(input.clone(), input_partition, context.clone());
         }
 
         // Create future that computes thefinal output

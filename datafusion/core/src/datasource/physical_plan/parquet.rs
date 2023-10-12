@@ -380,7 +380,7 @@ impl ExecutionPlan for ParquetExec {
         let stream =
             FileStream::new(&self.base_config, partition_index, opener, &self.metrics)?;
 
-        Ok(Box::pin(stream))
+        Ok(Box::pin(stream) as SendableRecordBatchStream)
     }
 
     fn metrics(&self) -> Option<MetricsSet> {

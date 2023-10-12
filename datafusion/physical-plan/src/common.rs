@@ -18,7 +18,7 @@
 //! Defines common code used in execution plans
 
 use super::SendableRecordBatchStream;
-use crate::stream::RecordBatchReceiverStream;
+use crate::stream::ReceiverStream;
 use crate::{ColumnStatistics, ExecutionPlan, Statistics};
 use arrow::datatypes::Schema;
 use arrow::ipc::writer::{FileWriter, IpcWriteOptions};
@@ -102,7 +102,7 @@ pub(crate) fn spawn_buffered(
         Ok(handle)
             if handle.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread =>
         {
-            let mut builder = RecordBatchReceiverStream::builder(input.schema(), buffer);
+            let mut builder = ReceiverStream::builder(input.schema(), buffer);
 
             let sender = builder.tx();
 

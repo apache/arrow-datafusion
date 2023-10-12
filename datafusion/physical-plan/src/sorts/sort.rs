@@ -24,8 +24,8 @@ use crate::expressions::PhysicalSortExpr;
 use crate::metrics::{
     BaselineMetrics, Count, ExecutionPlanMetricsSet, MetricBuilder, MetricsSet,
 };
-use crate::sorts::merge::streaming_merge;
-use crate::stream::{RecordBatchReceiverStream, RecordBatchStreamAdapter};
+use crate::sorts::streaming_merge::streaming_merge;
+use crate::stream::{ReceiverStream, RecordBatchStreamAdapter};
 use crate::topk::TopK;
 use crate::{
     DisplayAs, DisplayFormatType, Distribution, EmptyRecordBatchStream, ExecutionPlan,
@@ -613,7 +613,7 @@ pub(crate) fn read_spill_as_stream(
     path: RefCountedTempFile,
     schema: SchemaRef,
 ) -> Result<SendableRecordBatchStream> {
-    let mut builder = RecordBatchReceiverStream::builder(schema, 2);
+    let mut builder = ReceiverStream::builder(schema, 2);
     let sender = builder.tx();
 
     builder.spawn_blocking(move || {

@@ -21,15 +21,17 @@ use arrow::datatypes::ArrowNativeTypeOp;
 use arrow::row::{Row, Rows};
 use arrow_array::types::ByteArrayType;
 use arrow_array::{Array, ArrowPrimitiveType, GenericByteArray, PrimitiveArray};
+use datafusion_common::{DataFusionError, Result};
 use datafusion_execution::memory_pool::MemoryReservation;
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc};
 
 /// A [`Cursor`] for [`Rows`]
 pub struct RowCursor {
     cur_row: usize,
-    num_rows: usize,
+    row_offset: usize,
+    row_limit: usize, // exclusive [offset..limit]
 
-    rows: Rows,
+    rows: Arc<Rows>,
 
     /// Tracks for the memory used by in the `Rows` of this
     /// cursor. Freed on drop
@@ -41,7 +43,7 @@ impl std::fmt::Debug for RowCursor {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.debug_struct("SortKeyCursor")
             .field("cur_row", &self.cur_row)
-            .field("num_rows", &self.num_rows)
+            .field("num_rows", &self.num_rows())
             .finish()
     }
 }
@@ -60,8 +62,9 @@ impl RowCursor {
         );
         Self {
             cur_row: 0,
-            num_rows: rows.num_rows(),
-            rows,
+            row_offset: 0,
+            row_limit: rows.num_rows(),
+            rows: Arc::new(rows),
             reservation,
         }
     }
@@ -93,25 +96,75 @@ impl Ord for RowCursor {
 }
 
 /// A cursor into a sorted batch of rows
-pub trait Cursor: Ord {
+pub trait Cursor: Ord + Send + Sync {
     /// Returns true if there are no more rows in this cursor
     fn is_finished(&self) -> bool;
 
+    /// Returns true this cursor is midway completed
+    fn in_progress(&self) -> bool;
+
     /// Advance the cursor, returning the previous row index
     fn advance(&mut self) -> usize;
+
+    /// Current row index
+    fn current_idx(&self) -> usize;
+
+    /// Go to start row
+    fn reset(&mut self);
+
+    /// Slice the cursor at a given row index, returning a new cursor
+    ///
+    /// Returns an error if the slice is out of bounds, or memory is insufficient
+    fn slice(&self, offset: usize, length: usize) -> Result<Self>
+    where
+        Self: Sized;
+
+    /// Returns the number of rows in this cursor
+    fn num_rows(&self) -> usize;
 }
 
 impl Cursor for RowCursor {
     #[inline]
     fn is_finished(&self) -> bool {
-        self.num_rows == self.cur_row
+        self.cur_row >= self.row_limit
+    }
+
+    #[inline]
+    fn in_progress(&self) -> bool {
+        !self.is_finished() && self.cur_row > self.row_offset
     }
 
     #[inline]
     fn advance(&mut self) -> usize {
         let t = self.cur_row;
         self.cur_row += 1;
-        t
+        t - self.row_offset
+    }
+
+    #[inline]
+    fn current_idx(&self) -> usize {
+        self.cur_row - self.row_offset
+    }
+
+    #[inline]
+    fn reset(&mut self) {
+        self.cur_row = self.row_offset;
+    }
+
+    #[inline]
+    fn slice(&self, offset: usize, length: usize) -> Result<Self> {
+        Ok(Self {
+            cur_row: self.row_offset + offset,
+            row_offset: self.row_offset + offset,
+            row_limit: self.row_offset + offset + length,
+            rows: self.rows.clone(),
+            reservation: self.reservation.new_empty(), // Arc cloning of Rows is cheap
+        })
+    }
+
+    #[inline]
+    fn num_rows(&self) -> usize {
+        self.row_limit - self.row_offset
     }
 }
 
@@ -131,6 +184,10 @@ pub trait FieldValues {
     fn compare(a: &Self::Value, b: &Self::Value) -> Ordering;
 
     fn value(&self, idx: usize) -> &Self::Value;
+
+    fn slice(&self, offset: usize, length: usize) -> Result<Self>
+    where
+        Self: Sized;
 }
 
 impl<T: ArrowPrimitiveType> FieldArray for PrimitiveArray<T> {
@@ -159,6 +216,14 @@ impl<T: ArrowNativeTypeOp> FieldValues for PrimitiveValues<T> {
     #[inline]
     fn value(&self, idx: usize) -> &Self::Value {
         &self.0[idx]
+    }
+
+    #[inline]
+    fn slice(&self, offset: usize, length: usize) -> Result<Self> {
+        if offset + length > self.len() {
+            return Err(DataFusionError::Internal("slice out of bounds".into()));
+        }
+        Ok(Self(self.0.slice(offset, length)))
     }
 }
 
@@ -190,6 +255,14 @@ impl<T: ByteArrayType> FieldValues for GenericByteArray<T> {
     #[inline]
     fn value(&self, idx: usize) -> &Self::Value {
         self.value(idx)
+    }
+
+    #[inline]
+    fn slice(&self, offset: usize, length: usize) -> Result<Self> {
+        if offset + length > Array::len(self) {
+            return Err(DataFusionError::Internal("slice out of bounds".into()));
+        }
+        Ok(self.slice(offset, length))
     }
 }
 
@@ -265,15 +338,47 @@ impl<T: FieldValues> Ord for FieldCursor<T> {
     }
 }
 
-impl<T: FieldValues> Cursor for FieldCursor<T> {
+impl<T: FieldValues + Send + Sync> Cursor for FieldCursor<T> {
     fn is_finished(&self) -> bool {
         self.offset == self.values.len()
+    }
+
+    fn in_progress(&self) -> bool {
+        !self.is_finished() && self.offset > 0
     }
 
     fn advance(&mut self) -> usize {
         let t = self.offset;
         self.offset += 1;
         t
+    }
+
+    fn current_idx(&self) -> usize {
+        self.offset
+    }
+
+    fn reset(&mut self) {
+        self.offset = 0;
+    }
+
+    fn slice(&self, offset: usize, length: usize) -> Result<Self> {
+        let FieldCursor {
+            values,
+            offset: _,
+            null_threshold,
+            options,
+        } = self;
+
+        Ok(Self {
+            values: values.slice(offset, length)?,
+            offset: 0,
+            null_threshold: *null_threshold,
+            options: *options,
+        })
+    }
+
+    fn num_rows(&self) -> usize {
+        self.values.len()
     }
 }
 

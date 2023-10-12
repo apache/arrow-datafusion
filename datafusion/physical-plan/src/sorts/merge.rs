@@ -19,87 +19,19 @@
 //! This is an order-preserving merge.
 
 use crate::metrics::BaselineMetrics;
-use crate::sorts::builder::BatchBuilder;
+use crate::sorts::builder::SortOrderBuilder;
 use crate::sorts::cursor::Cursor;
-use crate::sorts::stream::{FieldCursorStream, PartitionedStream, RowCursorStream};
-use crate::{PhysicalSortExpr, RecordBatchStream, SendableRecordBatchStream};
-use arrow::datatypes::{DataType, SchemaRef};
-use arrow::record_batch::RecordBatch;
-use arrow_array::*;
+use crate::sorts::stream::CursorStream;
 use datafusion_common::Result;
-use datafusion_execution::memory_pool::MemoryReservation;
 use futures::Stream;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
-macro_rules! primitive_merge_helper {
-    ($t:ty, $($v:ident),+) => {
-        merge_helper!(PrimitiveArray<$t>, $($v),+)
-    };
-}
-
-macro_rules! merge_helper {
-    ($t:ty, $sort:ident, $streams:ident, $schema:ident, $tracking_metrics:ident, $batch_size:ident, $fetch:ident, $reservation:ident) => {{
-        let streams = FieldCursorStream::<$t>::new($sort, $streams);
-        return Ok(Box::pin(SortPreservingMergeStream::new(
-            Box::new(streams),
-            $schema,
-            $tracking_metrics,
-            $batch_size,
-            $fetch,
-            $reservation,
-        )));
-    }};
-}
-
-/// Perform a streaming merge of [`SendableRecordBatchStream`] based on provided sort expressions
-/// while preserving order.
-pub fn streaming_merge(
-    streams: Vec<SendableRecordBatchStream>,
-    schema: SchemaRef,
-    expressions: &[PhysicalSortExpr],
-    metrics: BaselineMetrics,
-    batch_size: usize,
-    fetch: Option<usize>,
-    reservation: MemoryReservation,
-) -> Result<SendableRecordBatchStream> {
-    // Special case single column comparisons with optimized cursor implementations
-    if expressions.len() == 1 {
-        let sort = expressions[0].clone();
-        let data_type = sort.expr.data_type(schema.as_ref())?;
-        downcast_primitive! {
-            data_type => (primitive_merge_helper, sort, streams, schema, metrics, batch_size, fetch, reservation),
-            DataType::Utf8 => merge_helper!(StringArray, sort, streams, schema, metrics, batch_size, fetch, reservation)
-            DataType::LargeUtf8 => merge_helper!(LargeStringArray, sort, streams, schema, metrics, batch_size, fetch, reservation)
-            DataType::Binary => merge_helper!(BinaryArray, sort, streams, schema, metrics, batch_size, fetch, reservation)
-            DataType::LargeBinary => merge_helper!(LargeBinaryArray, sort, streams, schema, metrics, batch_size, fetch, reservation)
-            _ => {}
-        }
-    }
-
-    let streams = RowCursorStream::try_new(
-        schema.as_ref(),
-        expressions,
-        streams,
-        reservation.new_empty(),
-    )?;
-
-    Ok(Box::pin(SortPreservingMergeStream::new(
-        Box::new(streams),
-        schema,
-        metrics,
-        batch_size,
-        fetch,
-        reservation,
-    )))
-}
-
-/// A fallible [`PartitionedStream`] of [`Cursor`] and [`RecordBatch`]
-type CursorStream<C> = Box<dyn PartitionedStream<Output = Result<(C, RecordBatch)>>>;
+use super::builder::YieldedSortOrder;
 
 #[derive(Debug)]
-struct SortPreservingMergeStream<C> {
-    in_progress: BatchBuilder,
+pub(crate) struct SortPreservingMergeStream<C: Cursor> {
+    in_progress: SortOrderBuilder<C>,
 
     /// The sorted input streams to merge together
     streams: CursorStream<C>,
@@ -151,9 +83,6 @@ struct SortPreservingMergeStream<C> {
     /// target batch size
     batch_size: usize,
 
-    /// Vector that holds cursors for each non-exhausted input partition
-    cursors: Vec<Option<C>>,
-
     /// Optional number of rows to fetch
     fetch: Option<usize>,
 
@@ -162,22 +91,19 @@ struct SortPreservingMergeStream<C> {
 }
 
 impl<C: Cursor> SortPreservingMergeStream<C> {
-    fn new(
+    pub(crate) fn new(
         streams: CursorStream<C>,
-        schema: SchemaRef,
         metrics: BaselineMetrics,
         batch_size: usize,
         fetch: Option<usize>,
-        reservation: MemoryReservation,
     ) -> Self {
         let stream_count = streams.partitions();
 
         Self {
-            in_progress: BatchBuilder::new(schema, stream_count, batch_size, reservation),
+            in_progress: SortOrderBuilder::new(stream_count, batch_size),
             streams,
             metrics,
             aborted: false,
-            cursors: (0..stream_count).map(|_| None).collect(),
             loser_tree: vec![],
             loser_tree_adjusted: false,
             batch_size,
@@ -194,7 +120,7 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
         cx: &mut Context<'_>,
         idx: usize,
     ) -> Poll<Result<()>> {
-        if self.cursors[idx].is_some() {
+        if self.in_progress.cursor_in_progress(idx) {
             // Cursor is not finished - don't need a new RecordBatch yet
             return Poll::Ready(Ok(()));
         }
@@ -202,9 +128,8 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
         match futures::ready!(self.streams.poll_next(cx, idx)) {
             None => Poll::Ready(Ok(())),
             Some(Err(e)) => Poll::Ready(Err(e)),
-            Some(Ok((cursor, batch))) => {
-                self.cursors[idx] = Some(cursor);
-                Poll::Ready(self.in_progress.push_batch(idx, batch))
+            Some(Ok(batch_cursor)) => {
+                Poll::Ready(self.in_progress.push_batch(idx, batch_cursor))
             }
         }
     }
@@ -212,7 +137,7 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
     fn poll_next_inner(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<RecordBatch>>> {
+    ) -> Poll<Option<Result<YieldedSortOrder<C>>>> {
         if self.aborted {
             return Poll::Ready(None);
         }
@@ -242,11 +167,12 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
                     self.aborted = true;
                     return Poll::Ready(Some(Err(e)));
                 }
+
                 self.update_loser_tree();
             }
 
             let stream_idx = self.loser_tree[0];
-            if self.advance(stream_idx) {
+            if self.in_progress.advance(stream_idx) {
                 self.loser_tree_adjusted = false;
                 self.in_progress.push_row(stream_idx);
 
@@ -259,8 +185,7 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
             }
 
             self.produced += self.in_progress.len();
-
-            return Poll::Ready(self.in_progress.build_record_batch().transpose());
+            return Poll::Ready(self.in_progress.yield_sort_order().transpose());
         }
     }
 
@@ -268,30 +193,6 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
         self.fetch
             .map(|fetch| self.produced + self.in_progress.len() >= fetch)
             .unwrap_or(false)
-    }
-
-    fn advance(&mut self, stream_idx: usize) -> bool {
-        let slot = &mut self.cursors[stream_idx];
-        match slot.as_mut() {
-            Some(c) => {
-                c.advance();
-                if c.is_finished() {
-                    *slot = None;
-                }
-                true
-            }
-            None => false,
-        }
-    }
-
-    /// Returns `true` if the cursor at index `a` is greater than at index `b`
-    #[inline]
-    fn is_gt(&self, a: usize, b: usize) -> bool {
-        match (&self.cursors[a], &self.cursors[b]) {
-            (None, _) => true,
-            (_, None) => false,
-            (Some(ac), Some(bc)) => ac.cmp(bc).then_with(|| a.cmp(&b)).is_gt(),
-        }
     }
 
     /// Find the leaf node index in the loser tree for the given cursor index
@@ -324,7 +225,7 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
     ///
     #[inline]
     fn lt_leaf_node_index(&self, cursor_index: usize) -> usize {
-        (self.cursors.len() + cursor_index) / 2
+        (self.num_leaf_nodes() + cursor_index) / 2
     }
 
     /// Find the parent node index for the given node index
@@ -333,17 +234,22 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
         node_idx / 2
     }
 
+    #[inline]
+    fn num_leaf_nodes(&self) -> usize {
+        self.streams.partitions()
+    }
+
     /// Attempts to initialize the loser tree with one value from each
     /// non exhausted input, if possible
     fn init_loser_tree(&mut self) {
         // Init loser tree
-        self.loser_tree = vec![usize::MAX; self.cursors.len()];
-        for i in 0..self.cursors.len() {
+        self.loser_tree = vec![usize::MAX; self.num_leaf_nodes()];
+        for i in 0..self.num_leaf_nodes() {
             let mut winner = i;
             let mut cmp_node = self.lt_leaf_node_index(i);
             while cmp_node != 0 && self.loser_tree[cmp_node] != usize::MAX {
                 let challenger = self.loser_tree[cmp_node];
-                if self.is_gt(winner, challenger) {
+                if self.in_progress.is_gt(winner, challenger) {
                     self.loser_tree[cmp_node] = winner;
                     winner = challenger;
                 }
@@ -362,7 +268,7 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
         let mut cmp_node = self.lt_leaf_node_index(winner);
         while cmp_node != 0 {
             let challenger = self.loser_tree[cmp_node];
-            if self.is_gt(winner, challenger) {
+            if self.in_progress.is_gt(winner, challenger) {
                 self.loser_tree[cmp_node] = winner;
                 winner = challenger;
             }
@@ -374,19 +280,12 @@ impl<C: Cursor> SortPreservingMergeStream<C> {
 }
 
 impl<C: Cursor + Unpin> Stream for SortPreservingMergeStream<C> {
-    type Item = Result<RecordBatch>;
+    type Item = Result<YieldedSortOrder<C>>;
 
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        let poll = self.poll_next_inner(cx);
-        self.metrics.record_poll(poll)
-    }
-}
-
-impl<C: Cursor + Unpin> RecordBatchStream for SortPreservingMergeStream<C> {
-    fn schema(&self) -> SchemaRef {
-        self.in_progress.schema().clone()
+        self.poll_next_inner(cx)
     }
 }
