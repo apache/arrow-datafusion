@@ -283,7 +283,7 @@ fn build_batch(
                 .unwrap();
             build_batch_fixedsize_list(batch, schema, column.index(), list_array, options)
         }
-        _ => exec_err!("Invalid unnest column {column}"),
+        data_type => exec_err!("Invalid unnest column {column}, got {data_type}"),
     }
 }
 

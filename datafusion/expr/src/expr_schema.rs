@@ -19,7 +19,7 @@ use super::{Between, Expr, Like};
 use crate::expr::{
     AggregateFunction, AggregateUDF, Alias, BinaryExpr, Cast, GetFieldAccess,
     GetIndexedField, InList, InSubquery, Placeholder, ScalarFunction, ScalarUDF, Sort,
-    TryCast, WindowFunction,
+    TryCast, Unnest, WindowFunction,
 };
 use crate::field_util::GetFieldAccessSchema;
 use crate::type_coercion::binary::get_result_type;
@@ -28,9 +28,9 @@ use arrow::compute::can_cast_types;
 use arrow::datatypes::{DataType, Field};
 use datafusion_common::{
     internal_err, plan_err, Column, DFField, DFSchema, DataFusionError, ExprSchema,
-    Result,
+    Result, not_impl_err,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// trait to allow expr to typable with respect to a schema
@@ -88,6 +88,28 @@ impl ExprSchemable for Expr {
                     .collect::<Result<Vec<_>>>()?;
                 Ok((fun.return_type)(&data_types)?.as_ref().clone())
             }
+            Expr::Unnest(Unnest { array_exprs, .. }) => {
+                let data_types = array_exprs
+                    .iter()
+                    .map(|e| e.get_type(schema))
+                    .collect::<Result<Vec<_>>>()?;
+
+                if data_types.is_empty() {
+                    return internal_err!("Empty expression is not allowed")
+                }
+
+                // Use a HashSet to efficiently check for unique data types
+                let unique_data_types: HashSet<_> = data_types.iter().collect();
+
+                // If there is more than one unique data type, return an error
+                if unique_data_types.len() > 1 {
+                    return not_impl_err!("Unnest does not support inconsistent data types: {data_types:?}");
+                }
+
+                // Extract the common data type since there is only one unique data type
+                let return_type = data_types[0].to_owned();
+                Ok(return_type)
+            }
             Expr::ScalarFunction(ScalarFunction { fun, args }) => {
                 let data_types = args
                     .iter()
@@ -129,7 +151,9 @@ impl ExprSchemable for Expr {
             | Expr::IsUnknown(_)
             | Expr::IsNotTrue(_)
             | Expr::IsNotFalse(_)
-            | Expr::IsNotUnknown(_) => Ok(DataType::Boolean),
+            | Expr::IsNotUnknown(_)
+            | Expr::Like { .. }
+            | Expr::SimilarTo { .. } => Ok(DataType::Boolean),
             Expr::ScalarSubquery(subquery) => {
                 Ok(subquery.subquery.schema().field(0).data_type().clone())
             }
@@ -138,7 +162,6 @@ impl ExprSchemable for Expr {
                 ref right,
                 ref op,
             }) => get_result_type(&left.get_type(schema)?, op, &right.get_type(schema)?),
-            Expr::Like { .. } | Expr::SimilarTo { .. } => Ok(DataType::Boolean),
             Expr::Placeholder(Placeholder { data_type, .. }) => {
                 data_type.clone().ok_or_else(|| {
                     DataFusionError::Plan(
@@ -146,20 +169,17 @@ impl ExprSchemable for Expr {
                     )
                 })
             }
-            Expr::Wildcard => {
-                // Wildcard do not really have a type and do not appear in projections
-                Ok(DataType::Null)
-            }
-            Expr::QualifiedWildcard { .. } => internal_err!(
-                "QualifiedWildcard expressions are not valid in a logical query plan"
-            ),
-            Expr::GroupingSet(_) => {
-                // grouping sets do not really have a type and do not appear in projections
-                Ok(DataType::Null)
-            }
             Expr::GetIndexedField(GetIndexedField { expr, field }) => {
                 field_for_index(expr, field, schema).map(|x| x.data_type().clone())
             }
+            Expr::Wildcard | Expr::GroupingSet(_) => {
+                // They do not really have a type and do not appear in projections
+                Ok(DataType::Null)
+            }
+            Expr::QualifiedWildcard { .. } => Err(DataFusionError::Internal(
+                "QualifiedWildcard expressions are not valid in a logical query plan"
+                    .to_owned(),
+            )),
         }
     }
 
@@ -231,6 +251,7 @@ impl ExprSchemable for Expr {
             Expr::Cast(Cast { expr, .. }) => expr.nullable(input_schema),
             Expr::ScalarVariable(_, _)
             | Expr::TryCast { .. }
+            | Expr::Unnest(..)
             | Expr::ScalarFunction(..)
             | Expr::ScalarUDF(..)
             | Expr::WindowFunction { .. }

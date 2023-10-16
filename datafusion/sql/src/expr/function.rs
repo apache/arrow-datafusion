@@ -16,8 +16,10 @@
 // under the License.
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
-use datafusion_common::{not_impl_err, plan_err, DFSchema, DataFusionError, Result};
-use datafusion_expr::expr::{ScalarFunction, ScalarUDF};
+use datafusion_common::{
+    not_impl_err, plan_err, DFSchema, DataFusionError, Result, UnnestOptions,
+};
+use datafusion_expr::expr::{ScalarFunction, ScalarUDF, Unnest};
 use datafusion_expr::function::suggest_valid_function;
 use datafusion_expr::window_frame::regularize;
 use datafusion_expr::{
@@ -45,6 +47,15 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         } else {
             crate::utils::normalize_ident(function.name.0[0].clone())
         };
+
+        // Unnest Expression
+        // TOOD: Configure UnnestOptions, set default for now
+        let options: UnnestOptions = Default::default();
+        if name == "unnest" {
+            let array_exprs =
+                self.function_args_to_expr(function.args, schema, planner_context)?;
+            return Ok(Expr::Unnest(Unnest::new(array_exprs, options)));
+        }
 
         // user-defined function (UDF) should have precedence in case it has the same name as a scalar built-in function
         if let Some(fm) = self.schema_provider.get_function_meta(&name) {

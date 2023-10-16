@@ -753,6 +753,11 @@ impl TryFrom<&Expr> for protobuf::LogicalExprNode {
                         .to_string(),
                 ))
             }
+            Expr::Unnest(..) => {
+                return Err(Error::NotImplemented(
+                    "try_from() for Unnest is not implemented".to_string(),
+                ))
+            }
             Expr::ScalarFunction(ScalarFunction { fun, args }) => {
                 let fun: protobuf::ScalarFunction = fun.try_into()?;
                 let args: Vec<Self> = args

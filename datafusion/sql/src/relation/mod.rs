@@ -16,11 +16,11 @@
 // under the License.
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
-use datafusion_common::{not_impl_err, DataFusionError, Result};
+use datafusion_common::{not_impl_err, DataFusionError, Result, UnnestOptions};
 use datafusion_expr::{LogicalPlan, LogicalPlanBuilder};
 use sqlparser::ast::TableFactor;
-
 mod join;
+mod unnest;
 
 impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     /// Create a `LogicalPlan` that scans the named relation
@@ -62,6 +62,36 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 self.plan_table_with_joins(*table_with_joins, planner_context)?,
                 alias,
             ),
+
+            // TODO: Support UnnestOptions
+            TableFactor::UNNEST {
+                alias,
+                array_exprs,
+                with_offset: _,
+                with_offset_alias: _,
+            } => {
+                // TODO: Support UnnestOptions
+                let array_options: Vec<UnnestOptions> =
+                    vec![UnnestOptions::default(); array_exprs.len()];
+
+                // If column aliases are not supplied, then for a function returning a base data type,
+                // the column name is also the same as the function name.
+                if let Some(mut alias) = alias {
+                    if alias.columns.is_empty() {
+                        alias.columns = vec![alias.name.clone()];
+                    }
+                    (
+                        self.plan_unnest(array_exprs, planner_context, array_options)?,
+                        Some(alias),
+                    )
+                } else {
+                    (
+                        self.plan_unnest(array_exprs, planner_context, array_options)?,
+                        None,
+                    )
+                }
+            }
+
             // @todo Support TableFactory::TableFunction?
             _ => {
                 return not_impl_err!(
@@ -69,6 +99,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 );
             }
         };
+
         if let Some(alias) = alias {
             self.apply_table_alias(plan, alias)
         } else {

@@ -17,6 +17,7 @@
 
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::vec;
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
 use crate::utils::{
@@ -24,12 +25,11 @@ use crate::utils::{
     resolve_columns, resolve_positions_to_exprs,
 };
 
-use datafusion_common::Column;
 use datafusion_common::{
-    get_target_functional_dependencies, not_impl_err, plan_err, DFSchemaRef,
+    get_target_functional_dependencies, not_impl_err, plan_err, Column, DFSchemaRef,
     DataFusionError, Result,
 };
-use datafusion_expr::expr::Alias;
+use datafusion_expr::expr::{Alias, Unnest};
 use datafusion_expr::expr_rewriter::{
     normalize_col, normalize_col_with_schemas_and_ambiguity_check,
 };
@@ -92,6 +92,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
 
         // having and group by clause may reference aliases defined in select projection
         let projected_plan = self.project(plan.clone(), select_exprs.clone())?;
+
         let mut combined_schema = (**projected_plan.schema()).clone();
         combined_schema.merge(plan.schema());
 
@@ -226,7 +227,10 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         };
 
         // final projection
-        let plan = project(plan, select_exprs_post_aggr)?;
+        let plan = project(plan, select_exprs_post_aggr.clone())?;
+
+        // Process unnest expressions, convert to LogicalPlan::Unnest
+        let plan = process_unnest_expr(plan, &select_exprs_post_aggr)?;
 
         // process distinct clause
         let distinct = select
@@ -699,4 +703,36 @@ fn get_updated_group_by_exprs(
     }
 
     Ok(new_group_by_exprs)
+}
+
+// Convert Expr::Unnest to LogicalPlan::Unnest
+fn process_unnest_expr(input: LogicalPlan, select_exprs: &[Expr]) -> Result<LogicalPlan> {
+    let mut array_options = vec![];
+    let mut array_exprs_to_unnest = vec![];
+    for expr in select_exprs.iter() {
+        if let Expr::Unnest(Unnest {
+            array_exprs,
+            options,
+        }) = expr
+        {
+            array_exprs_to_unnest.push(array_exprs[0].clone());
+            array_options.push(options.clone());
+        } else if let Expr::Alias(Alias { expr, .. }) = expr {
+            if let Expr::Unnest(Unnest {
+                array_exprs,
+                options,
+            }) = expr.as_ref()
+            {
+                array_exprs_to_unnest.push(array_exprs[0].clone());
+                array_options.push(options.clone());
+            }
+        }
+    }
+    if array_exprs_to_unnest.is_empty() {
+        Ok(input)
+    } else {
+        LogicalPlanBuilder::from(input)
+            .unnest_arrays(array_exprs_to_unnest, array_options)?
+            .build()
+    }
 }

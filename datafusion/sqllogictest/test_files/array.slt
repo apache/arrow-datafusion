@@ -209,6 +209,14 @@ AS VALUES
   (make_array([28, 29, 30], [31, 32, 33], [34, 35, 36], [28, 29, 30], [31, 32, 33], [34, 35, 36], [28, 29, 30], [31, 32, 33], [34, 35, 36], [28, 29, 30]), [28, 29, 30], [37, 38, 39], 10)
 ;
 
+statement ok
+CREATE TABLE arrays_unnest
+AS VALUES
+  (make_array(1, 2), 'A', make_array(1,2), 3),
+  (NULL, 'B', make_array(4), 5),
+  (make_array(3), 'C', make_array(6,7,8), 9)
+;
+
 # arrays table
 query ???
 select column1, column2, column3 from arrays;
@@ -2415,15 +2423,160 @@ select make_array(f0) from fixed_size_list_array
 [[1, 2]]
 [[3, 4]]
 
-query ?
-select array_concat(column1, [7]) from arrays_values_v2;
+## Unnest
+
+# Set target partitions to 1 for deterministic results
+# Row sort is not used since the order is crucial.
+statement ok
+set datafusion.execution.target_partitions = 1;
+
+query II
+select unnest(make_array(1,2,3)),
+       unnest(make_array(4,5))
+;
 ----
-[, 2, 3, 7]
-[7]
-[9, , 10, 7]
-[, 1, 7]
-[11, 12, 7]
-[7]
+1 4
+2 5
+3 NULL
+
+query III
+select unnest(make_array(1,2,3)),
+       unnest(make_array(4,5)),
+       unnest(make_array(6,7,8,9))
+;
+----
+1 4 6
+2 5 7
+3 NULL 8
+NULL NULL 9
+
+query III
+select unnest(make_array(1,2,3,4,5)),
+       unnest(make_array(6,7)),
+       unnest(make_array(8,9,10,11,22,33))
+;
+----
+1 6 8
+2 7 9
+3 NULL 10
+4 NULL 11
+5 NULL 22
+NULL NULL 33
+
+# Select From
+
+query IIIII
+select * from unnest(
+  make_array(1), 
+  make_array(2,3), 
+  make_array(4,5,6),
+  make_array(7,8),
+  make_array(9)
+);
+----
+1 2 4 7 9
+NULL 3 5 8 NULL
+NULL NULL 6 NULL NULL
+
+query I
+select * from unnest(make_array(1,2,3)) as data
+----
+1
+2
+3
+
+query II
+select * from unnest(make_array(1,2,3),make_array(7,6,5,4)) as data(a,b) order by b
+----
+NULL 4
+3 5
+2 6
+1 7
+
+query ?T?I
+select * from arrays_unnest;
+----
+[1, 2] A [1, 2] 3
+NULL B [4] 5
+[3] C [6, 7, 8] 9
+
+# TODO: Unnest columns fails
+query error DataFusion error: SQL error: TokenizerError\("Unterminated string literal at Line: 2, Column 95"\)
+caused by
+Internal error: UNNEST only supports list type\. This was likely caused by a bug in DataFusion's code and we would welcome that you file an bug report in our issue tracker
+select unnest(column1), column2 from arrays_unnest;
+
+query error DataFusion error: SQL error: TokenizerError\("Unterminated string literal at Line: 2, Column 95"\)
+caused by
+Internal error: UNNEST only supports list type\. This was likely caused by a bug in DataFusion's code and we would welcome that you file an bug report in our issue tracker
+select unnest(column3), column4 from arrays_unnest;
+
+query I
+select unnest(make_array(1,2,3));
+----
+1
+2
+3
+
+query I
+select * from unnest(make_array(1,2,3));
+----
+1
+2
+3
+
+query I
+SELECT sum(a) FROM unnest(make_array(1, 2, 3)) as a;
+----
+6
+
+query I
+SELECT sum(a) AS total FROM unnest(make_array(1, 2, 3)) as a;
+----
+6
+
+# TODO: alias fails
+query error DataFusion error: Schema error: No field named a\. Valid fields are "make_array\(Int64\(1\),Int64\(2\),Int64\(3\)\)"\.
+SELECT a FROM (select unnest(make_array(1, 2, 3)) as a);
+
+query II
+SELECT data.a, data.b FROM unnest(make_array(1, 2, 3), make_array(4, 5, 6, 7)) as data(a, b);
+----
+1 4
+2 5
+3 6
+NULL 7
+
+query II
+SELECT sum(data.a), sum(data.b) FROM unnest(make_array(1, 2, 3), make_array(4, 5, 6, 7)) as data(a, b);
+----
+6 22
+
+# Test unnest with multi-dimensional arrays
+query I
+select unnest(make_array(make_array(10,20,30),make_array(1,NULL,10),make_array(4,5,6)))
+----
+10
+20
+30
+1
+NULL
+10
+4
+5
+6
+
+# TODO: sum for unnest as subquery not working yet
+# query error DataFusion error: Error during planning: No function matches the given name and argument types 'SUM\(List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\)\)'\. You might need to add explicit type casts\.\n  Candidate functions:\n	SUM\(Int8/Int16/Int32/Int64/UInt8/UInt16/UInt32/UInt64/Float32/Float64\)
+# SELECT sum(a) FROM (select unnest(make_array(1, 2, 3)) as a);
+
+# TODO: select from part of the columns is not allowed.
+# query error DataFusion error: External error: Arrow error: Invalid argument error: must either specify a row count or at least one column
+# SELECT data.a FROM unnest(make_array(1, 2, 3), make_array(4, 5, 6, 7)) as data(a, b);
+
+# TODO: select from part of the columns is not allowed.
+# query error DataFusion error: External error: External error: Arrow error: Invalid argument error: must either specify a row count or at least one column
+# SELECT sum(data.b) FROM unnest(make_array(1, 2, 3), make_array(4, 5, 6, 9)) as data(a, b);
 
 # flatten
 query ???
@@ -2579,9 +2732,6 @@ statement ok
 drop table array_has_table_3D;
 
 statement ok
-drop table arrays_values_without_nulls;
-
-statement ok
 drop table arrays_with_repeating_elements;
 
 statement ok
@@ -2589,3 +2739,9 @@ drop table nested_arrays_with_repeating_elements;
 
 statement ok
 drop table flatten_table;
+
+statement ok
+drop table arrays_values_without_nulls;
+
+statement ok
+drop table arrays_unnest;

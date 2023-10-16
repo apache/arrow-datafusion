@@ -91,6 +91,10 @@ pub fn expr_applicable_for_cols(col_names: &[String], expr: &Expr) -> bool {
             | Expr::GroupingSet(_)
             | Expr::Case { .. } => VisitRecursion::Continue,
 
+            Expr::Unnest { .. } => {
+                is_applicable = false;
+                VisitRecursion::Stop
+            }
             Expr::ScalarFunction(scalar_function) => {
                 match scalar_function.fun.volatility() {
                     Volatility::Immutable => VisitRecursion::Continue,

@@ -18,7 +18,7 @@
 //! This module provides a builder for creating LogicalPlans
 
 use crate::dml::{CopyOptions, CopyTo};
-use crate::expr::Alias;
+use crate::expr::{Alias, ScalarFunction};
 use crate::expr_rewriter::{
     coerce_plan_expr_for_schema, normalize_col,
     normalize_col_with_schemas_and_ambiguity_check, normalize_cols,
@@ -27,8 +27,10 @@ use crate::expr_rewriter::{
 use crate::type_coercion::binary::comparison_coercion;
 use crate::utils::{columnize_expr, compare_sort_expr};
 use crate::{
-    and, binary_expr, DmlStatement, Operator, TableProviderFilterPushDown, WriteOp,
+    and, binary_expr, expr, BuiltInWindowFunction, DmlStatement, Operator,
+    TableProviderFilterPushDown, WindowFrame, WriteOp,
 };
+use crate::{col, ident, WindowFunction};
 use crate::{
     logical_plan::{
         Aggregate, Analyze, CrossJoin, Distinct, EmptyRelation, Explain, Filter, Join,
@@ -1113,6 +1115,124 @@ impl LogicalPlanBuilder {
             options,
         )?))
     }
+
+    /// Join the unnested plans.
+    ///
+    /// We apply `RowNumber` to each unnested plan (column) and full join based on the row number.
+    /// Each plan is ensured to have the same number of rows.
+    ///
+    /// For example:
+    ///
+    /// Given the first plan with name col1 (1, 2, 3) and the second plan with name col2 (4, 5, null),
+    /// After unnesting, we have two plans with row numbers:
+    ///     Plan 1: (1, 1), (2, 2), (3, 3)
+    ///     Plan 2: (4, 1), (5, 2), (null, 3)
+    ///
+    /// Then we can join these two plans based on the row number.
+    /// The result is:
+    /// col1  col2
+    ///    1     4
+    ///    2     5
+    ///    3  null
+    // TODO: Fails to convert fold to try_fold.
+    #[allow(clippy::manual_try_fold)]
+    pub fn join_unnest_plans(
+        unnest_plans: Vec<LogicalPlan>,
+        column_names: Vec<String>,
+    ) -> Result<LogicalPlanBuilder> {
+        // Add row_number for each unnested array
+        let window_func_expr = Expr::WindowFunction(expr::WindowFunction::new(
+            WindowFunction::BuiltInWindowFunction(BuiltInWindowFunction::RowNumber),
+            vec![],
+            vec![],
+            vec![],
+            WindowFrame::new(false),
+        ));
+        let window_func_exprs = vec![window_func_expr.clone()];
+
+        let window_plans = unnest_plans
+            .into_iter()
+            .map(|plan| LogicalPlanBuilder::window_plan(plan, window_func_exprs.clone()))
+            .collect::<Result<Vec<LogicalPlan>>>()?;
+
+        // Create alias for row number
+        let row_numbers_name: Vec<String> = (0..column_names.len())
+            .map(|idx| format!("rn{idx}"))
+            .collect();
+
+        let project_exprs: Vec<Vec<Expr>> = column_names
+            .iter()
+            .zip(row_numbers_name.iter())
+            .map(|(col_name, row_number_name)| {
+                vec![
+                    ident(col_name),
+                    window_func_expr.clone().alias(row_number_name),
+                ]
+            })
+            .collect();
+        let project_plans = window_plans
+            .iter()
+            .zip(project_exprs.into_iter())
+            .map(|(plan, expr)| {
+                LogicalPlanBuilder::from(plan.clone())
+                    .project(expr)?
+                    .build()
+            })
+            .collect::<Result<Vec<LogicalPlan>>>()?;
+
+        let columns_to_join_on = project_plans
+            .iter()
+            .zip(row_numbers_name.iter())
+            .map(|(_, rn)| col(rn))
+            .collect::<Vec<Expr>>();
+
+        let subqueries_alias_plan = project_plans;
+
+        let (join_plan, _) = subqueries_alias_plan
+            .iter()
+            .zip(columns_to_join_on.iter())
+            .skip(1)
+            .fold(
+                Ok((
+                    subqueries_alias_plan[0].clone(),
+                    columns_to_join_on[0].clone(),
+                )),
+                |result: Result<(LogicalPlan, Expr)>, (right_plan, right_column)| {
+                    result.and_then(|(left_plan, left_column)| {
+                        let plan = LogicalPlanBuilder::from(left_plan)
+                            .join(
+                                right_plan.clone(),
+                                JoinType::Full,
+                                (Vec::<Column>::new(), Vec::<Column>::new()),
+                                Some(left_column.eq(right_column.clone())),
+                            )?
+                            .build()?;
+                        Ok((plan, right_column.clone()))
+                    })
+                },
+            )?;
+
+        let selected_exprs: Vec<Expr> = column_names.into_iter().map(col).collect();
+
+        LogicalPlanBuilder::from(join_plan).project(selected_exprs)
+    }
+
+    /// Unnest the given array expressions.
+    /// Expands an array into a set of rows.
+    /// First step is to create LogicalPlan::Unnest for each array expression (column).
+    /// Then join these plans side by side. If the row number is not equal, null is filled.
+    /// For example:
+    ///     Unnest(\[1,2,3\], \[4,5\]), generating 3 rows ((1,4), (2,5), (3,null)).
+    pub fn unnest_arrays(
+        self,
+        array_exprs: Vec<Expr>,
+        array_options: Vec<UnnestOptions>,
+    ) -> Result<Self> {
+        let (unnest_plans, column_names) =
+            build_unnest_plans(self.plan.clone(), array_exprs.clone(), array_options)?;
+
+        Self::join_unnest_plans(unnest_plans, column_names)
+    }
 }
 
 /// Creates a schema for a join operation.
@@ -1429,6 +1549,49 @@ pub fn wrap_projection_for_join_if_necessary(
     Ok((plan, join_on, need_project))
 }
 
+// TODO: Move this to array utils module.
+// Align arrays with nulls to have the same row size.
+fn align_arrays_with_nulls(array_exprs: &[Expr]) -> Result<Vec<Expr>> {
+    let array_exprs: Vec<Expr> = array_exprs.iter().map(|e| e.flatten()).collect();
+
+    // Append array with null to the same size, so we can join them easily.
+    // For example:
+    //  unnest([1, 2], [3, 4, 5]) => unnest([1, 2, null], [3, 4, 5])
+
+    // Calculate the maximum array size
+    let max_array_size = array_exprs
+        .iter()
+        .filter_map(|e| match e {
+            Expr::ScalarFunction(ScalarFunction { args, .. }) => Some(args.len()),
+            Expr::Literal(ScalarValue::List(Some(scalar_value), _)) => {
+                Some(scalar_value.len())
+            }
+            _ => None,
+        })
+        .max()
+        .ok_or_else(|| {
+            DataFusionError::NotImplemented("UNNEST only supports list type".to_string())
+        })?;
+
+    // Extend arrays with null values to match the maximum size
+    let array_exprs: Vec<Expr> = array_exprs
+        .into_iter()
+        .map(|e| {
+            if let Expr::ScalarFunction(ScalarFunction { fun, mut args }) = e {
+                args.extend(
+                    (args.len()..max_array_size)
+                        .map(|_| Expr::Literal(ScalarValue::Null)),
+                );
+                Expr::ScalarFunction(ScalarFunction { fun, args })
+            } else {
+                e
+            }
+        })
+        .collect();
+
+    Ok(array_exprs)
+}
+
 /// Basic TableSource implementation intended for use in tests and documentation. It is expected
 /// that users will provide their own TableSource implementations or use DataFusion's
 /// DefaultTableSource.
@@ -1515,6 +1678,38 @@ pub fn unnest_with_options(
         schema,
         options,
     }))
+}
+
+/// Create unnest plan from arrays.
+fn build_unnest_plans(
+    input: LogicalPlan,
+    array_exprs: Vec<Expr>,
+    array_options: Vec<UnnestOptions>,
+) -> Result<(Vec<LogicalPlan>, Vec<String>)> {
+    // Prepare array expressions
+    // 1. Fill nulls to the same size
+    // 2. Create projection for each array expression
+    let array_expression = align_arrays_with_nulls(&array_exprs)?;
+
+    let project_plan_builder =
+        LogicalPlanBuilder::from(input.clone()).project(array_expression.clone())?;
+
+    let mut unnest_plans = vec![];
+    let mut columns_name = vec![];
+
+    // Build unnest plan for each array expression
+    for (expr, options) in array_expression.iter().zip(array_options.into_iter()) {
+        let column = expr.display_name()?;
+        columns_name.push(column.clone());
+
+        let unnest_plan = project_plan_builder
+            .clone()
+            .unnest_column_with_options(column, options)?
+            .build()?;
+        unnest_plans.push(unnest_plan);
+    }
+
+    Ok((unnest_plans, columns_name))
 }
 
 #[cfg(test)]

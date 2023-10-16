@@ -28,6 +28,8 @@ use crate::window_function;
 use crate::Operator;
 use arrow::datatypes::DataType;
 use datafusion_common::internal_err;
+use datafusion_common::UnnestOptions;
+use datafusion_common::not_impl_err;
 use datafusion_common::{plan_err, Column, DataFusionError, Result, ScalarValue};
 use std::collections::HashSet;
 use std::fmt;
@@ -147,6 +149,8 @@ pub enum Expr {
     TryCast(TryCast),
     /// A sort expression, that can be used to sort values.
     Sort(Sort),
+    /// Unnest expression
+    Unnest(Unnest),
     /// Represents the call of a built-in scalar function with a set of arguments.
     ScalarFunction(ScalarFunction),
     /// Represents the call of a user-defined scalar function with arguments.
@@ -330,6 +334,24 @@ impl Between {
             negated,
             low,
             high,
+        }
+    }
+}
+
+/// Unnest expression
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct Unnest {
+    /// Arrays to unnest
+    pub array_exprs: Vec<Expr>,
+    pub options: UnnestOptions,
+}
+
+impl Unnest {
+    /// Create a new Unnest expression
+    pub fn new(array_exprs: Vec<Expr>, options: UnnestOptions) -> Self {
+        Self {
+            array_exprs,
+            options,
         }
     }
 }
@@ -734,6 +756,7 @@ impl Expr {
             Expr::TryCast { .. } => "TryCast",
             Expr::WindowFunction { .. } => "WindowFunction",
             Expr::Wildcard => "Wildcard",
+            Expr::Unnest(..) => "Unnest",
         }
     }
 
@@ -1036,6 +1059,47 @@ impl Expr {
     pub fn contains_outer(&self) -> bool {
         !find_out_reference_exprs(self).is_empty()
     }
+
+    /// Flatten the nested array expressions until the base array is reached.
+    /// For example:
+    ///  [[1, 2, 3], [4, 5, 6]] -> [1, 2, 3, 4, 5, 6]
+    ///  [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] -> [1, 2, 3, 4, 5, 6, 7, 8]
+    /// Panics if the expression is not an unnest expression.
+    pub fn flatten(&self) -> Self {
+        self.try_flatten().unwrap()
+    }
+
+    /// Flatten the nested array expressions until the base array is reached.
+    /// For example:
+    /// [[1, 2, 3], [4, 5, 6]] => [1, 2, 3, 4, 5, 6]
+    /// [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] => [1, 2, 3, 4, 5, 6, 7, 8]
+    /// Returns an error if the expression cannot be flattened.
+    pub fn try_flatten(&self) -> Result<Self> {
+        match self {
+            Self::ScalarFunction(ScalarFunction {
+                fun: built_in_function::BuiltinScalarFunction::MakeArray,
+                args,
+            }) => {
+                let flatten_args: Vec<Expr> =
+                    args.iter().flat_map(Self::flatten_internal).collect();
+                Ok(Self::ScalarFunction(ScalarFunction {
+                    fun: built_in_function::BuiltinScalarFunction::MakeArray,
+                    args: flatten_args,
+                }))
+            }
+            _ => not_impl_err!("flatten() is not implemented for {self}"),
+        }
+    }
+
+    fn flatten_internal(&self) -> Vec<Self> {
+        match self {
+            Self::ScalarFunction(ScalarFunction {
+                fun: built_in_function::BuiltinScalarFunction::MakeArray,
+                args,
+            }) => args.iter().flat_map(Self::flatten_internal).collect(),
+            _ => vec![self.clone()],
+        }
+    }
 }
 
 #[macro_export]
@@ -1123,6 +1187,9 @@ impl fmt::Display for Expr {
                 } else {
                     write!(f, " NULLS LAST")
                 }
+            }
+            Expr::Unnest(Unnest { array_exprs, .. }) => {
+                fmt_function(f, "unnest", false, array_exprs, false)
             }
             Expr::ScalarFunction(func) => {
                 fmt_function(f, &func.fun.to_string(), false, &func.args, true)
@@ -1292,7 +1359,6 @@ fn fmt_function(
         false => args.iter().map(|arg| format!("{arg:?}")).collect(),
     };
 
-    // let args: Vec<String> = args.iter().map(|arg| format!("{:?}", arg)).collect();
     let distinct_str = match distinct {
         true => "DISTINCT ",
         false => "",
@@ -1458,6 +1524,9 @@ fn create_name(e: &Expr) -> Result<String> {
                 }
             }
         }
+        Expr::Unnest(Unnest { array_exprs, .. }) => {
+            create_function_name("unnest", false, array_exprs)
+        }
         Expr::ScalarFunction(func) => {
             create_function_name(&func.fun.to_string(), false, &func.args)
         }
@@ -1588,6 +1657,69 @@ mod test {
     use arrow::datatypes::DataType;
     use datafusion_common::Column;
     use datafusion_common::{Result, ScalarValue};
+
+    use super::ScalarFunction;
+
+    fn create_make_array_expr(args: &[Expr]) -> Expr {
+        Expr::ScalarFunction(ScalarFunction::new(
+            crate::BuiltinScalarFunction::MakeArray,
+            args.to_vec(),
+        ))
+    }
+
+    #[test]
+    fn test_flatten() {
+        let i64_none = ScalarValue::try_from(&DataType::Int64).unwrap();
+
+        let arr = create_make_array_expr(&[
+            create_make_array_expr(&[lit(10i64), lit(20i64), lit(30i64)]),
+            create_make_array_expr(&[lit(1i64), lit(i64_none.clone()), lit(10i64)]),
+            create_make_array_expr(&[lit(4i64), lit(5i64), lit(6i64)]),
+        ]);
+
+        let flattened = arr.flatten();
+        assert_eq!(
+            flattened,
+            create_make_array_expr(&[
+                lit(10i64),
+                lit(20i64),
+                lit(30i64),
+                lit(1i64),
+                lit(i64_none),
+                lit(10i64),
+                lit(4i64),
+                lit(5i64),
+                lit(6i64),
+            ])
+        );
+
+        // [[[1, 2], [3, 4]], [[5, 6], [7, 8]]] -> [1, 2, 3, 4, 5, 6, 7, 8]
+        let arr = create_make_array_expr(&[
+            create_make_array_expr(&[
+                create_make_array_expr(&[lit(1i64), lit(2i64)]),
+                create_make_array_expr(&[lit(3i64), lit(4i64)]),
+            ]),
+            create_make_array_expr(&[
+                create_make_array_expr(&[lit(5i64), lit(6i64)]),
+                create_make_array_expr(&[lit(7i64), lit(8i64)]),
+            ]),
+        ]);
+
+        let flattened = arr.flatten();
+        assert_eq!(
+            flattened,
+            create_make_array_expr(&[
+                lit(1i64),
+                lit(2i64),
+                lit(3i64),
+                lit(4i64),
+                lit(5i64),
+                lit(6i64),
+                lit(7i64),
+                lit(8i64),
+            ])
+        );
+    }
 
     #[test]
     fn format_case_when() -> Result<()> {

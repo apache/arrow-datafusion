@@ -30,8 +30,8 @@ use crate::datasource::source_as_provider;
 use crate::execution::context::{ExecutionProps, SessionState};
 use crate::logical_expr::utils::generate_sort_key;
 use crate::logical_expr::{
-    Aggregate, EmptyRelation, Join, Projection, Sort, SubqueryAlias, TableScan, Unnest,
-    Window,
+    Aggregate, EmptyRelation, Join, Projection, Sort, SubqueryAlias, TableScan,
+    Unnest as UnnestPlan, Window,
 };
 use crate::logical_expr::{
     CrossJoin, Expr, LogicalPlan, Partitioning as LogicalPartitioning, PlanType,
@@ -83,8 +83,9 @@ use datafusion_common::{
 use datafusion_expr::expr::{
     self, AggregateFunction, AggregateUDF, Alias, Between, BinaryExpr, Cast,
     GetFieldAccess, GetIndexedField, GroupingSet, InList, Like, ScalarUDF, TryCast,
-    WindowFunction,
+    Unnest, WindowFunction,
 };
+
 use datafusion_expr::expr_rewriter::{unalias, unnormalize_cols};
 use datafusion_expr::logical_plan::builder::wrap_projection_for_join_if_necessary;
 use datafusion_expr::{DescribeTable, DmlStatement, StringifiedPlan, WriteOp};
@@ -215,6 +216,9 @@ fn create_physical_name(e: &Expr, is_first_expr: bool) -> Result<String> {
             };
 
             Ok(name)
+        }
+        Expr::Unnest(Unnest { array_exprs, .. }) => {
+            create_function_physical_name("unnest", false, array_exprs)
         }
         Expr::ScalarFunction(func) => {
             create_function_physical_name(&func.fun.to_string(), false, &func.args)
@@ -1224,7 +1228,7 @@ impl DefaultPhysicalPlanner {
 
                     Ok(Arc::new(GlobalLimitExec::new(input, *skip, *fetch)))
                 }
-                LogicalPlan::Unnest(Unnest { input, column, schema, options }) => {
+                LogicalPlan::Unnest(UnnestPlan { input, column, schema, options }) => {
                     let input = self.create_initial_plan(input, session_state).await?;
                     let column_exec = schema.index_of_column(column)
                         .map(|idx| Column::new(&column.name, idx))?;
