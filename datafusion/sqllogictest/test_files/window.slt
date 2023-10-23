@@ -3378,3 +3378,23 @@ SELECT
   window1 AS (ORDER BY C3)
   ORDER BY C3
   LIMIT 5
+
+# Create table with window functions that have nullable: false columns should result in correct schema during cross join
+
+statement ok
+CREATE TABLE row_num_table as SELECT *, ROW_NUMBER() OVER (ORDER BY c2) AS row_num FROM aggregate_test_100 LIMIT 10
+
+statement ok
+CREATE TABLE rank_table as SELECT *, RANK() OVER (ORDER BY c2) AS rank_num FROM aggregate_test_100 LIMIT 10
+
+statement ok
+CREATE TABLE cum_dist_table as SELECT *, CUME_DIST() OVER (ORDER BY c2) AS cum_dist_num FROM aggregate_test_100  LIMIT 10
+
+statement ok
+SELECT a.*, b.* FROM row_num_table a, row_num_table b
+
+statement ok
+SELECT a.*, b.* FROM rank_table a, rank_table b
+
+statement ok
+SELECT a.*, b.* FROM cum_dist_table a, cum_dist_table b

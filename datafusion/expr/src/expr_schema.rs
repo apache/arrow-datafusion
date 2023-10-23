@@ -227,11 +227,11 @@ impl ExprSchemable for Expr {
                 }
             }
             Expr::Cast(Cast { expr, .. }) => expr.nullable(input_schema),
+            Expr::WindowFunction(window_function) => Ok(window_function.nullable()),
             Expr::ScalarVariable(_, _)
             | Expr::TryCast { .. }
             | Expr::ScalarFunction(..)
             | Expr::ScalarUDF(..)
-            | Expr::WindowFunction { .. }
             | Expr::AggregateFunction { .. }
             | Expr::AggregateUDF { .. }
             | Expr::Placeholder(_) => Ok(true),
