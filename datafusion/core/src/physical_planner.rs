@@ -565,11 +565,7 @@ impl DefaultPhysicalPlanner {
                     copy_options,
                 }) => {
                     let input_exec = self.create_initial_plan(input, session_state).await?;
-
-                    // TODO: make this behavior configurable via options (should copy to create path/file as needed?)
-                    // TODO: add additional configurable options for if existing files should be overwritten or
-                    // appended to
-                    let parsed_url = ListingTableUrl::parse_create_local_if_not_exists(output_url, !*single_file_output)?;
+                    let parsed_url = ListingTableUrl::parse(output_url)?;
                     let object_store_url = parsed_url.object_store();
 
                     let schema: Schema = (**input.schema()).clone().into();

@@ -57,10 +57,9 @@ CREATE EXTERNAL TABLE dictionary_encoded_parquet_partitioned(
   b varchar,
 ) 
 STORED AS parquet
-LOCATION 'test_files/scratch/insert_to_external/parquet_types_partitioned'
+LOCATION 'test_files/scratch/insert_to_external/parquet_types_partitioned/'
 PARTITIONED BY (b)
 OPTIONS(
-create_local_path 'true',
 insert_mode 'append_new_files',
 );
 
@@ -88,7 +87,6 @@ STORED AS csv
 LOCATION 'test_files/scratch/insert_to_external/insert_to_ordered/'
 WITH ORDER (a ASC, B DESC)
 OPTIONS(
-create_local_path 'true',
 insert_mode 'append_new_files',
 );
 
@@ -130,9 +128,8 @@ CREATE EXTERNAL TABLE
 partitioned_insert_test(a string, b string, c bigint)
 STORED AS csv
 LOCATION 'test_files/scratch/insert_to_external/insert_to_partitioned/'
-PARTITIONED BY (a, b) 
+PARTITIONED BY (a, b)
 OPTIONS(
-create_local_path 'true',
 insert_mode 'append_new_files',
 );
 
@@ -172,9 +169,8 @@ CREATE EXTERNAL TABLE
 partitioned_insert_test_json(a string, b string)
 STORED AS json
 LOCATION 'test_files/scratch/insert_to_external/insert_to_partitioned_json/'
-PARTITIONED BY (a) 
+PARTITIONED BY (a)
 OPTIONS(
-create_local_path 'true',
 insert_mode 'append_new_files',
 );
 
@@ -207,9 +203,8 @@ CREATE EXTERNAL TABLE
 partitioned_insert_test_pq(a string, b bigint)
 STORED AS parquet
 LOCATION 'test_files/scratch/insert_to_external/insert_to_partitioned_pq/'
-PARTITIONED BY (a) 
+PARTITIONED BY (a)
 OPTIONS(
-create_local_path 'true',
 insert_mode 'append_new_files',
 );
 
@@ -250,7 +245,6 @@ single_file_test(a bigint, b bigint)
 STORED AS csv
 LOCATION 'test_files/scratch/insert_to_external/single_csv_table.csv'
 OPTIONS(
-create_local_path 'true',
 single_file 'true',
 );
 
@@ -276,10 +270,7 @@ statement ok
 CREATE EXTERNAL TABLE
 directory_test(a bigint, b bigint)
 STORED AS parquet
-LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q0'
-OPTIONS(
-create_local_path 'true',
-);
+LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q0/';
 
 query II
 INSERT INTO directory_test values (1, 2), (3, 4);
@@ -296,8 +287,7 @@ statement ok
 CREATE EXTERNAL TABLE
 table_without_values(field1 BIGINT NULL, field2 BIGINT NULL)
 STORED AS parquet
-LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q1'
-OPTIONS (create_local_path 'true');
+LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q1/';
 
 query TT
 EXPLAIN
@@ -362,8 +352,7 @@ statement ok
 CREATE EXTERNAL TABLE
 table_without_values(field1 BIGINT NULL, field2 BIGINT NULL)
 STORED AS parquet
-LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q2'
-OPTIONS (create_local_path 'true');
+LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q2/';
 
 query TT
 EXPLAIN
@@ -407,8 +396,7 @@ statement ok
 CREATE EXTERNAL TABLE
 table_without_values(c1 varchar NULL)
 STORED AS parquet
-LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q3'
-OPTIONS (create_local_path 'true');
+LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q3/';
 
 # verify that the sort order of the insert query is maintained into the
 # insert (there should be a SortExec in the following plan)
@@ -447,8 +435,7 @@ statement ok
 CREATE EXTERNAL TABLE
 table_without_values(id BIGINT, name varchar)
 STORED AS parquet
-LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q4'
-OPTIONS (create_local_path 'true');
+LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q4/';
 
 query IT
 insert into table_without_values(id, name) values(1, 'foo');
@@ -486,8 +473,7 @@ statement ok
 CREATE EXTERNAL TABLE
 table_without_values(field1 BIGINT NOT NULL, field2 BIGINT NULL)
 STORED AS parquet
-LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q5'
-OPTIONS (create_local_path 'true');
+LOCATION 'test_files/scratch/insert_to_external/external_parquet_table_q5/';
 
 query II
 insert into table_without_values values(1, 100);

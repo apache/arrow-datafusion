@@ -147,9 +147,6 @@ impl TableProviderFactory for ListingTableFactory {
                 .unwrap_or(false)
         };
 
-        let create_local_path = statement_options
-            .take_bool_option("create_local_path")?
-            .unwrap_or(false);
         let single_file = statement_options
             .take_bool_option("single_file")?
             .unwrap_or(false);
@@ -205,13 +202,7 @@ impl TableProviderFactory for ListingTableFactory {
             FileType::AVRO => file_type_writer_options,
         };
 
-        let table_path = match create_local_path {
-            true => ListingTableUrl::parse_create_local_if_not_exists(
-                &cmd.location,
-                !single_file,
-            ),
-            false => ListingTableUrl::parse(&cmd.location),
-        }?;
+        let table_path = ListingTableUrl::parse(&cmd.location)?;
 
         let options = ListingOptions::new(file_format)
             .with_collect_stat(state.config().collect_statistics())

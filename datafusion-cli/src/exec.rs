@@ -387,15 +387,7 @@ mod tests {
         // Ensure that local files are also registered
         let sql =
             format!("CREATE EXTERNAL TABLE test STORED AS PARQUET LOCATION '{location}'");
-        let err = create_external_table_test(location, &sql)
-            .await
-            .unwrap_err();
-
-        if let DataFusionError::IoError(e) = err {
-            assert_eq!(e.kind(), std::io::ErrorKind::NotFound);
-        } else {
-            return Err(err);
-        }
+        create_external_table_test(location, &sql).await.unwrap();
 
         Ok(())
     }

@@ -42,12 +42,11 @@ WITH HEADER ROW
 DELIMITER ';'
 LOCATION '/test/location/my_csv_table/'
 OPTIONS(
-CREATE_LOCAL_PATH 'true',
 NULL_VALUE 'NAN'
 );
 ```
 
-When running `INSERT INTO my_table ...`, the options from the `CREATE TABLE` will be respected (gzip compression, special delimiter, and header row included). Note that compression, header, and delimiter settings can also be specified within the `OPTIONS` tuple list. Dedicated syntax within the SQL statement always takes precedence over arbitrary option tuples, so if both are specified the `OPTIONS` setting will be ignored. CREATE_LOCAL_PATH is a special option that indicates if DataFusion should create local file paths when writing new files if they do not already exist. This option is useful if you wish to create an external table from scratch, using only DataFusion SQL statements. Finally, NULL_VALUE is a CSV format specific option that determines how null values should be encoded within the CSV file.
+When running `INSERT INTO my_table ...`, the options from the `CREATE TABLE` will be respected (gzip compression, special delimiter, and header row included). Note that compression, header, and delimiter settings can also be specified within the `OPTIONS` tuple list. Dedicated syntax within the SQL statement always takes precedence over arbitrary option tuples, so if both are specified the `OPTIONS` setting will be ignored. Finally, NULL_VALUE is a CSV format specific option that determines how null values should be encoded within the CSV file.
 
 Finally, options can be passed when running a `COPY` command.
 
@@ -78,11 +77,10 @@ The following special options are specific to the `COPY` command.
 
 The following special options are specific to creating an external table.
 
-| Option            | Description                                                                                                                                                                                                                                | Default Value                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| SINGLE_FILE       | If true, indicates that this external table is backed by a single file. INSERT INTO queries will append to this file.                                                                                                                      | false                                                                        |
-| CREATE_LOCAL_PATH | If true, the folder or file backing this table will be created on the local file system if it does not already exist when running INSERT INTO queries.                                                                                     | false                                                                        |
-| INSERT_MODE       | Determines if INSERT INTO queries should append to existing files or append new files to an existing directory. Valid values are append_to_file, append_new_files, and error. Note that "error" will block inserting data into this table. | CSV and JSON default to append_to_file. Parquet defaults to append_new_files |
+| Option      | Description                                                                                                                                                                                                                                | Default Value                                                                |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| SINGLE_FILE | If true, indicates that this external table is backed by a single file. INSERT INTO queries will append to this file.                                                                                                                      | false                                                                        |
+| INSERT_MODE | Determines if INSERT INTO queries should append to existing files or append new files to an existing directory. Valid values are append_to_file, append_new_files, and error. Note that "error" will block inserting data into this table. | CSV and JSON default to append_to_file. Parquet defaults to append_new_files |
 
 ### JSON Format Specific Options
 

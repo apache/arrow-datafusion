@@ -855,14 +855,17 @@ impl TableProvider for ListingTable {
         let input_partitions = input.output_partitioning().partition_count();
         let writer_mode = match self.options.insert_mode {
             ListingTableInsertMode::AppendToFile => {
-                if input_partitions > file_groups.len() {
+                if file_groups.is_empty() && self.options.single_file {
+                    // This is a hack, longer term append should be split out (#7994)
+                    crate::datasource::file_format::write::FileWriterMode::PutMultipart
+                } else if input_partitions > file_groups.len() {
                     return plan_err!(
                         "Cannot append {input_partitions} partitions to {} files!",
                         file_groups.len()
                     );
+                } else {
+                    crate::datasource::file_format::write::FileWriterMode::Append
                 }
-
-                crate::datasource::file_format::write::FileWriterMode::Append
             }
             ListingTableInsertMode::AppendNewFiles => {
                 crate::datasource::file_format::write::FileWriterMode::PutMultipart
