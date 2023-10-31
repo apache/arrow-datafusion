@@ -44,56 +44,90 @@ pub type SharedResult<T> = result::Result<T, Arc<DataFusionError>>;
 pub type GenericError = Box<dyn Error + Send + Sync>;
 
 /// DataFusion error
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DataFusionError {
     /// Error returned by arrow.
-    ArrowError(ArrowError),
+    #[error("Arrow error: {0}")]
+    ArrowError(#[from] ArrowError),
+
     /// Wraps an error from the Parquet crate
     #[cfg(feature = "parquet")]
-    ParquetError(ParquetError),
+    #[error("Parquet error: {0}")]
+    ParquetError(#[from] ParquetError),
+
     /// Wraps an error from the Avro crate
     #[cfg(feature = "avro")]
-    AvroError(AvroError),
+    #[error("Avro error: {0}")]
+    AvroError(#[from] AvroError),
+
     /// Wraps an error from the object_store crate
     #[cfg(feature = "object_store")]
+    #[error("Object Store error: {0}")]
     ObjectStore(object_store::Error),
+
     /// Error associated to I/O operations and associated traits.
-    IoError(io::Error),
+    #[error("IO error: {0}")]
+    IoError(#[from] io::Error),
+
     /// Error returned when SQL is syntactically incorrect.
-    SQL(ParserError),
+    #[error("SQL error: {0:?}")]
+    SQL(#[from] ParserError),
+
     /// Error returned on a branch that we know it is possible
     /// but to which we still have no implementation for.
     /// Often, these errors are tracked in our issue tracker.
+    #[error("This feature is not implemented: {0}")]
     NotImplemented(String),
+
     /// Error returned as a consequence of an error in DataFusion.
     /// This error should not happen in normal usage of DataFusion.
     ///
     /// DataFusions has internal invariants that the compiler is not
     /// always able to check.  This error is raised when one of those
     /// invariants is not verified during execution.
+    #[error(
+        "Internal error: {0}.\nThis was likely caused by a bug in DataFusion's \
+             code and we would welcome that you file an bug report in our issue tracker"
+    )]
     Internal(String),
+
     /// This error happens whenever a plan is not valid. Examples include
     /// impossible casts.
+    #[error("Error during planning: {0}")]
     Plan(String),
+
     /// This error happens when an invalid or unsupported option is passed
     /// in a SQL statement
+    #[error("Invalid or Unsupported Configuration: {0}")]
     Configuration(String),
+
     /// This error happens with schema-related errors, such as schema inference not possible
     /// and non-unique column names.
-    SchemaError(SchemaError),
+    #[error("Schema error: {0}")]
+    SchemaError(#[from] SchemaError),
+
     /// Error returned during execution of the query.
     /// Examples include files not found, errors in parsing certain types.
+    #[error("Execution error: {0}")]
     Execution(String),
+
     /// This error is thrown when a consumer cannot acquire memory from the Memory Manager
     /// we can just cancel the execution of the partition.
+    #[error("Resources exhausted: {0}")]
     ResourcesExhausted(String),
+
     /// Errors originating from outside DataFusion's core codebase.
     /// For example, a custom S3Error from the crate datafusion-objectstore-s3
-    External(GenericError),
+    #[error("External error: {0}")]
+    External(#[from] GenericError),
+
     /// Error with additional context
-    Context(String, Box<DataFusionError>),
+    #[error("{0}\ncaused by\n{1}")]
+    Context(String, #[source] Box<DataFusionError>),
+
     /// Errors originating from either mapping LogicalPlans to/from Substrait plans
     /// or serializing/deserializing protobytes to Substrait plans
+    #[error("Substrait error: {0}")]
     Substrait(String),
 }
 
@@ -215,18 +249,6 @@ impl From<std::fmt::Error> for DataFusionError {
     }
 }
 
-impl From<io::Error> for DataFusionError {
-    fn from(e: io::Error) -> Self {
-        DataFusionError::IoError(e)
-    }
-}
-
-impl From<ArrowError> for DataFusionError {
-    fn from(e: ArrowError) -> Self {
-        DataFusionError::ArrowError(e)
-    }
-}
-
 impl From<DataFusionError> for ArrowError {
     fn from(e: DataFusionError) -> Self {
         match e {
@@ -234,20 +256,6 @@ impl From<DataFusionError> for ArrowError {
             DataFusionError::External(e) => ArrowError::ExternalError(e),
             other => ArrowError::ExternalError(Box::new(other)),
         }
-    }
-}
-
-#[cfg(feature = "parquet")]
-impl From<ParquetError> for DataFusionError {
-    fn from(e: ParquetError) -> Self {
-        DataFusionError::ParquetError(e)
-    }
-}
-
-#[cfg(feature = "avro")]
-impl From<AvroError> for DataFusionError {
-    fn from(e: AvroError) -> Self {
-        DataFusionError::AvroError(e)
     }
 }
 
@@ -262,103 +270,6 @@ impl From<object_store::Error> for DataFusionError {
 impl From<object_store::path::Error> for DataFusionError {
     fn from(e: object_store::path::Error) -> Self {
         DataFusionError::ObjectStore(e.into())
-    }
-}
-
-impl From<ParserError> for DataFusionError {
-    fn from(e: ParserError) -> Self {
-        DataFusionError::SQL(e)
-    }
-}
-
-impl From<GenericError> for DataFusionError {
-    fn from(err: GenericError) -> Self {
-        DataFusionError::External(err)
-    }
-}
-
-impl Display for DataFusionError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match *self {
-            DataFusionError::ArrowError(ref desc) => {
-                write!(f, "Arrow error: {desc}")
-            }
-            #[cfg(feature = "parquet")]
-            DataFusionError::ParquetError(ref desc) => {
-                write!(f, "Parquet error: {desc}")
-            }
-            #[cfg(feature = "avro")]
-            DataFusionError::AvroError(ref desc) => {
-                write!(f, "Avro error: {desc}")
-            }
-            DataFusionError::IoError(ref desc) => {
-                write!(f, "IO error: {desc}")
-            }
-            DataFusionError::SQL(ref desc) => {
-                write!(f, "SQL error: {desc:?}")
-            }
-            DataFusionError::Configuration(ref desc) => {
-                write!(f, "Invalid or Unsupported Configuration: {desc}")
-            }
-            DataFusionError::NotImplemented(ref desc) => {
-                write!(f, "This feature is not implemented: {desc}")
-            }
-            DataFusionError::Internal(ref desc) => {
-                write!(f, "Internal error: {desc}.\nThis was likely caused by a bug in DataFusion's \
-                    code and we would welcome that you file an bug report in our issue tracker")
-            }
-            DataFusionError::Plan(ref desc) => {
-                write!(f, "Error during planning: {desc}")
-            }
-            DataFusionError::SchemaError(ref desc) => {
-                write!(f, "Schema error: {desc}")
-            }
-            DataFusionError::Execution(ref desc) => {
-                write!(f, "Execution error: {desc}")
-            }
-            DataFusionError::ResourcesExhausted(ref desc) => {
-                write!(f, "Resources exhausted: {desc}")
-            }
-            DataFusionError::External(ref desc) => {
-                write!(f, "External error: {desc}")
-            }
-            #[cfg(feature = "object_store")]
-            DataFusionError::ObjectStore(ref desc) => {
-                write!(f, "Object Store error: {desc}")
-            }
-            DataFusionError::Context(ref desc, ref err) => {
-                write!(f, "{}\ncaused by\n{}", desc, *err)
-            }
-            DataFusionError::Substrait(ref desc) => {
-                write!(f, "Substrait error: {desc}")
-            }
-        }
-    }
-}
-
-impl Error for DataFusionError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            DataFusionError::ArrowError(e) => Some(e),
-            #[cfg(feature = "parquet")]
-            DataFusionError::ParquetError(e) => Some(e),
-            #[cfg(feature = "avro")]
-            DataFusionError::AvroError(e) => Some(e),
-            #[cfg(feature = "object_store")]
-            DataFusionError::ObjectStore(e) => Some(e),
-            DataFusionError::IoError(e) => Some(e),
-            DataFusionError::SQL(e) => Some(e),
-            DataFusionError::NotImplemented(_) => None,
-            DataFusionError::Internal(_) => None,
-            DataFusionError::Configuration(_) => None,
-            DataFusionError::Plan(_) => None,
-            DataFusionError::SchemaError(e) => Some(e),
-            DataFusionError::Execution(_) => None,
-            DataFusionError::ResourcesExhausted(_) => None,
-            DataFusionError::External(e) => Some(e.as_ref()),
-            DataFusionError::Context(_, e) => Some(e.as_ref()),
-            DataFusionError::Substrait(_) => None,
-        }
     }
 }
 
@@ -397,6 +308,8 @@ impl DataFusionError {
             root_error = source;
             // remember the lowest datafusion error so far
             if let Some(e) = root_error.downcast_ref::<DataFusionError>() {
+                last_datafusion_error = e;
+            } else if let Some(e) = root_error.downcast_ref::<Box<DataFusionError>>() {
                 last_datafusion_error = e;
             } else if let Some(e) = root_error.downcast_ref::<Arc<DataFusionError>>() {
                 // As `Arc<T>::source()` calls through to `T::source()` we need to
