@@ -42,7 +42,6 @@ class QueryResult:
     def load_from(cls, data: Dict[str, Any]) -> QueryResult:
         return cls(elapsed=data["elapsed"], row_count=data["row_count"])
 
-
 @dataclass
 class QueryRun:
     query: int
@@ -64,7 +63,7 @@ class QueryRun:
         # Use minimum execution time to account for variations / other
         # things the system was doing
         return min(iteration.elapsed for iteration in self.iterations)
-
+    
 
 @dataclass
 class Context:
@@ -83,6 +82,9 @@ class Context:
             start_time=data["start_time"],
             arguments=data["arguments"],
         )
+    
+    def __str__(self) -> str:
+        return f"benchmark_version={self.benchmark_version},datafusion_version={self.datafusion_version},num_cpus={self.num_cpus}"
 
 
 @dataclass
@@ -101,6 +103,19 @@ class BenchmarkRun:
     def load_from_file(cls, path: Path) -> BenchmarkRun:
         with open(path, "r") as f:
             return cls.load_from(json.load(f))
+        
+    @classmethod
+    def to_line_protocol(cls, path: Path, output: Path) -> None:
+        results = []
+        with open(path, "r") as f:
+            measurement = "benchmark"
+            bench_data = cls.load_from(json.load(f))
+            for query in bench_data.queries:
+                for iteration in query.iterations:
+                    results.append(f'{measurement},{bench_data.context} query=\"{query.query}\",row_count=\"{iteration.row_count}\",elapsed=\"{iteration.elapsed}\" {query.start_time * 1000}')
+
+        with open(output, "w") as f:
+            f.writelines(("\n").join(results))
 
 
 def compare(
@@ -145,7 +160,6 @@ def compare(
 
     console.print(table)
 
-
 def main() -> None:
     parser = ArgumentParser()
     compare_parser = parser
@@ -168,6 +182,8 @@ def main() -> None:
 
     options = parser.parse_args()
 
+
+    # BenchmarkRun.to_line_protocol(options.baseline_path, "./benchmarks/history.lp")
     compare(options.baseline_path, options.comparison_path, options.noise_threshold)
 
 
