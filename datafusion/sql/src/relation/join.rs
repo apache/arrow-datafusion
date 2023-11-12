@@ -145,17 +145,13 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     .build()
             }
             JoinConstraint::Natural => {
-                let left_cols: HashSet<&String> = left
-                    .schema()
-                    .fields()
-                    .iter()
-                    .map(|f| f.field().name())
-                    .collect();
+                let left_cols: HashSet<&String> =
+                    left.schema().fields().iter().map(|f| f.name()).collect();
                 let keys: Vec<Column> = right
                     .schema()
                     .fields()
                     .iter()
-                    .map(|f| f.field().name())
+                    .map(|f| f.name())
                     .filter(|f| left_cols.contains(f))
                     .map(Column::from_name)
                     .collect();

@@ -69,7 +69,7 @@ pub fn create_arrow_cast(mut args: Vec<Expr>, schema: &DFSchema) -> Result<Expr>
     };
 
     // do the actual lookup to the appropriate data type
-    let data_type = parse_data_type(&data_type_string)?;
+    let data_type = parse_data_type(&data_type_string)?.into();
 
     arg0.cast_to(&data_type, schema)
 }

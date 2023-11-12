@@ -26,7 +26,7 @@ use crate::window_frame;
 use crate::window_function;
 use crate::Operator;
 use crate::{aggregate_function, ExprSchemable};
-use arrow::datatypes::DataType;
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{internal_err, DFSchema};
 use datafusion_common::{plan_err, Column, DataFusionError, Result, ScalarValue};
@@ -88,7 +88,7 @@ pub enum Expr {
     /// A named reference to a qualified filed in a schema.
     Column(Column),
     /// A named reference to a variable in a registry.
-    ScalarVariable(DataType, Vec<String>),
+    ScalarVariable(LogicalType, Vec<String>),
     /// A constant value.
     Literal(ScalarValue),
     /// A binary expression such as "age > 21"
@@ -184,7 +184,7 @@ pub enum Expr {
     Placeholder(Placeholder),
     /// A place holder which hold a reference to a qualified field
     /// in the outer query, used for correlated sub queries.
-    OuterReferenceColumn(DataType, Column),
+    OuterReferenceColumn(LogicalType, Column),
 }
 
 /// Alias expression
@@ -402,12 +402,12 @@ pub struct Cast {
     /// The expression being cast
     pub expr: Box<Expr>,
     /// The `DataType` the expression will yield
-    pub data_type: DataType,
+    pub data_type: LogicalType,
 }
 
 impl Cast {
     /// Create a new Cast expression
-    pub fn new(expr: Box<Expr>, data_type: DataType) -> Self {
+    pub fn new(expr: Box<Expr>, data_type: LogicalType) -> Self {
         Self { expr, data_type }
     }
 }
@@ -418,12 +418,12 @@ pub struct TryCast {
     /// The expression being cast
     pub expr: Box<Expr>,
     /// The `DataType` the expression will yield
-    pub data_type: DataType,
+    pub data_type: LogicalType,
 }
 
 impl TryCast {
     /// Create a new TryCast expression
-    pub fn new(expr: Box<Expr>, data_type: DataType) -> Self {
+    pub fn new(expr: Box<Expr>, data_type: LogicalType) -> Self {
         Self { expr, data_type }
     }
 }
@@ -615,12 +615,12 @@ pub struct Placeholder {
     /// The identifier of the parameter, including the leading `$` (e.g, `"$1"` or `"$foo"`)
     pub id: String,
     /// The type the parameter will be filled in with
-    pub data_type: Option<DataType>,
+    pub data_type: Option<LogicalType>,
 }
 
 impl Placeholder {
     /// Create a new Placeholder expression
-    pub fn new(id: String, data_type: Option<DataType>) -> Self {
+    pub fn new(id: String, data_type: Option<LogicalType>) -> Self {
         Self { id, data_type }
     }
 }
@@ -1635,7 +1635,7 @@ mod test {
     use crate::expr::Cast;
     use crate::expr_fn::col;
     use crate::{case, lit, Expr};
-    use arrow::datatypes::DataType;
+    use datafusion_common::logical_type::LogicalType;
     use datafusion_common::Column;
     use datafusion_common::{Result, ScalarValue};
 
@@ -1656,7 +1656,7 @@ mod test {
     fn format_cast() -> Result<()> {
         let expr = Expr::Cast(Cast {
             expr: Box::new(Expr::Literal(ScalarValue::Float32(Some(1.23)))),
-            data_type: DataType::Utf8,
+            data_type: LogicalType::Utf8,
         });
         let expected_canonical = "CAST(Float32(1.23) AS Utf8)";
         assert_eq!(expected_canonical, expr.canonical_name());
@@ -1685,7 +1685,7 @@ mod test {
     fn test_collect_expr() -> Result<()> {
         // single column
         {
-            let expr = &Expr::Cast(Cast::new(Box::new(col("a")), DataType::Float64));
+            let expr = &Expr::Cast(Cast::new(Box::new(col("a")), LogicalType::Float64));
             let columns = expr.to_columns()?;
             assert_eq!(1, columns.len());
             assert!(columns.contains(&Column::from_name("a")));

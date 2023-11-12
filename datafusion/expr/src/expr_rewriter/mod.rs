@@ -262,7 +262,7 @@ mod test {
     use super::*;
     use crate::expr::Sort;
     use crate::{col, lit, Cast};
-    use arrow::datatypes::DataType;
+    use datafusion_common::logical_type::LogicalType;
     use datafusion_common::tree_node::{RewriteRecursion, TreeNode, TreeNodeRewriter};
     use datafusion_common::{DFField, DFSchema, ScalarValue};
     use std::ops::Add;
@@ -393,7 +393,7 @@ mod test {
     }
 
     fn make_field(relation: &str, column: &str) -> DFField {
-        DFField::new(Some(relation.to_string()), column, DataType::Int8, false)
+        DFField::new(Some(relation.to_string()), column, LogicalType::Int8, false)
     }
 
     #[test]
@@ -423,7 +423,7 @@ mod test {
         // cast data types
         test_rewrite(
             col("a"),
-            Expr::Cast(Cast::new(Box::new(col("a")), DataType::Int32)),
+            Expr::Cast(Cast::new(Box::new(col("a")), LogicalType::Int32)),
         );
 
         // change literal type from i32 to i64

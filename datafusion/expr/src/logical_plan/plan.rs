@@ -41,6 +41,7 @@ use crate::{
 };
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::tree_node::{
     RewriteRecursion, Transformed, TreeNode, TreeNodeRewriter, TreeNodeVisitor,
     VisitRecursion,
@@ -48,7 +49,7 @@ use datafusion_common::tree_node::{
 use datafusion_common::{
     aggregate_functional_dependencies, internal_err, plan_err, Column, Constraints,
     DFField, DFSchema, DFSchemaRef, DataFusionError, FunctionalDependencies,
-    OwnedTableReference, Result, ScalarValue, UnnestOptions,
+    OwnedTableReference, Result, ScalarValue, TableReference, UnnestOptions,
 };
 // backwards compatibility
 pub use datafusion_common::display::{PlanType, StringifiedPlan, ToStringifiedPlan};
@@ -969,11 +970,11 @@ impl LogicalPlan {
                 // Verify if the types of the params matches the types of the values
                 let iter = prepare_lp.data_types.iter().zip(param_values.iter());
                 for (i, (param_type, value)) in iter.enumerate() {
-                    if *param_type != value.data_type() {
+                    if *param_type != value.logical_type() {
                         return plan_err!(
                             "Expected parameter of type {:?}, got {:?} at index {}",
                             param_type,
-                            value.data_type(),
+                            value.logical_type(),
                             i
                         );
                     }
@@ -1163,8 +1164,8 @@ impl LogicalPlan {
     /// Walk the logical plan, find any `PlaceHolder` tokens, and return a map of their IDs and DataTypes
     pub fn get_parameter_types(
         &self,
-    ) -> Result<HashMap<String, Option<DataType>>, DataFusionError> {
-        let mut param_types: HashMap<String, Option<DataType>> = HashMap::new();
+    ) -> Result<HashMap<String, Option<LogicalType>>, DataFusionError> {
+        let mut param_types: HashMap<String, Option<LogicalType>> = HashMap::new();
 
         self.apply(&mut |plan| {
             plan.inspect_expressions(|expr| {
@@ -1218,7 +1219,7 @@ impl LogicalPlan {
                         ))
                     })?;
                     // check if the data type of the value matches the data type of the placeholder
-                    if Some(value.data_type()) != *data_type {
+                    if Some(value.logical_type()) != *data_type {
                         return internal_err!(
                             "Placeholder value type mismatch: expected {:?}, got {:?}",
                             data_type,
@@ -1804,12 +1805,13 @@ impl SubqueryAlias {
         alias: impl Into<OwnedTableReference>,
     ) -> Result<Self> {
         let alias = alias.into();
-        let schema: Schema = plan.schema().as_ref().clone().into();
+        let schema = plan.schema().as_ref();
         // Since schema is the same, other than qualifier, we can use existing
         // functional dependencies:
         let func_dependencies = plan.schema().functional_dependencies().clone();
+
         let schema = DFSchemaRef::new(
-            DFSchema::try_from_qualified_schema(&alias, &schema)?
+            DFSchema::try_from_qualified_dfschema(&alias, schema)?
                 .with_functional_dependencies(func_dependencies),
         );
         Ok(SubqueryAlias {
@@ -1848,7 +1850,7 @@ impl Filter {
         // construction (such as with correlated subqueries) so we make a best effort here and
         // ignore errors resolving the expression against the schema.
         if let Ok(predicate_type) = predicate.get_type(input.schema()) {
-            if predicate_type != DataType::Boolean {
+            if predicate_type != LogicalType::Boolean {
                 return plan_err!(
                     "Cannot create filter with non-boolean predicate '{predicate}' returning {predicate_type}"
                 );
@@ -1952,7 +1954,7 @@ impl TableScan {
         filters: Vec<Expr>,
         fetch: Option<usize>,
     ) -> Result<Self> {
-        let table_name = table_name.into();
+        let table_name: TableReference = table_name.into();
 
         if table_name.table().is_empty() {
             return plan_err!("table_name cannot be empty");
@@ -1970,10 +1972,14 @@ impl TableScan {
                 DFSchema::new_with_metadata(
                     p.iter()
                         .map(|i| {
-                            DFField::from_qualified(
-                                table_name.clone(),
-                                schema.field(*i).clone(),
+                            let f = schema.field(*i);
+                            DFField::new(
+                                Some(table_name.clone()),
+                                f.name(),
+                                f.data_type().into(),
+                                f.is_nullable(),
                             )
+                            .with_metadata(f.metadata().clone())
                         })
                         .collect(),
                     schema.metadata().clone(),
@@ -1983,9 +1989,10 @@ impl TableScan {
                 })
             })
             .unwrap_or_else(|| {
-                DFSchema::try_from_qualified_schema(table_name.clone(), &schema).map(
-                    |df_schema| df_schema.with_functional_dependencies(func_dependencies),
-                )
+                DFSchema::try_from_qualified_schema(table_name.clone(), schema.as_ref())
+                    .map(|df_schema| {
+                        df_schema.with_functional_dependencies(func_dependencies)
+                    })
             })?;
         let projected_schema = Arc::new(projected_schema);
         Ok(Self {
@@ -2035,7 +2042,7 @@ pub struct Prepare {
     /// The name of the statement
     pub name: String,
     /// Data types of the parameters ([`Expr::Placeholder`])
-    pub data_types: Vec<DataType>,
+    pub data_types: Vec<LogicalType>,
     /// The logical plan of the statements
     pub input: Arc<LogicalPlan>,
 }

@@ -17,6 +17,7 @@
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion_common::config::ConfigOptions;
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{plan_err, DataFusionError, Result, ScalarValue};
 use datafusion_expr::{
@@ -212,7 +213,7 @@ impl ContextProvider for MyContextProvider {
         None
     }
 
-    fn get_variable_type(&self, _variable_names: &[String]) -> Option<DataType> {
+    fn get_variable_type(&self, _variable_names: &[String]) -> Option<LogicalType> {
         None
     }
 

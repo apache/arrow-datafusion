@@ -253,6 +253,7 @@ pub struct ListingOptions {
     pub format: Arc<dyn FileFormat>,
     /// The expected partition column names in the folder structure.
     /// See [Self::with_table_partition_cols] for details
+    /// TODO this maybe LogicalType
     pub table_partition_cols: Vec<(String, DataType)>,
     /// Set true to try to guess statistics from the files.
     /// This can add a lot of overhead as it will usually require files

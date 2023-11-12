@@ -27,8 +27,8 @@ use crate::planner::{
 };
 use crate::utils::normalize_ident;
 
-use arrow_schema::DataType;
 use datafusion_common::file_options::StatementOptions;
+use datafusion_common::logical_type::{LogicalType, NamedLogicalType};
 use datafusion_common::parsers::CompressionTypeVariant;
 use datafusion_common::{
     not_impl_err, plan_datafusion_err, plan_err, unqualified_field_not_found, Column,
@@ -42,14 +42,16 @@ use datafusion_expr::logical_plan::DdlStatement;
 use datafusion_expr::utils::expr_to_columns;
 use datafusion_expr::{
     cast, col, Analyze, CreateCatalog, CreateCatalogSchema,
-    CreateExternalTable as PlanCreateExternalTable, CreateMemoryTable, CreateView,
-    DescribeTable, DmlStatement, DropCatalogSchema, DropTable, DropView, EmptyRelation,
-    Explain, ExprSchemable, Filter, LogicalPlan, LogicalPlanBuilder, PlanType, Prepare,
-    SetVariable, Statement as PlanStatement, ToStringifiedPlan, TransactionAccessMode,
-    TransactionConclusion, TransactionEnd, TransactionIsolationLevel, TransactionStart,
-    WriteOp,
+    CreateExternalTable as PlanCreateExternalTable, CreateMemoryTable, CreateType,
+    CreateView, DescribeTable, DmlStatement, DropCatalogSchema, DropTable, DropView,
+    EmptyRelation, Explain, ExprSchemable, Filter, LogicalPlan, LogicalPlanBuilder,
+    PlanType, Prepare, SetVariable, Statement as PlanStatement, ToStringifiedPlan,
+    TransactionAccessMode, TransactionConclusion, TransactionEnd,
+    TransactionIsolationLevel, TransactionStart, WriteOp,
 };
-use sqlparser::ast;
+use sqlparser::ast::{
+    self, UserDefinedTypeCompositeAttributeDef, UserDefinedTypeRepresentation,
+};
 use sqlparser::ast::{
     Assignment, ColumnDef, Expr as SQLExpr, Expr, Ident, ObjectName, ObjectType, Query,
     SchemaName, SetExpr, ShowCreateObject, ShowStatementFilter, Statement,
@@ -61,7 +63,7 @@ fn ident_to_string(ident: &Ident) -> String {
     normalize_ident(ident.to_owned())
 }
 
-fn object_name_to_string(object_name: &ObjectName) -> String {
+pub fn object_name_to_string(object_name: &ObjectName) -> String {
     object_name
         .0
         .iter()
@@ -210,13 +212,13 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                         let input_schema = plan.schema();
 
                         let plan = if !columns.is_empty() {
-                            let schema = self.build_schema(columns)?.to_dfschema_ref()?;
+                            let schema = self.build_schema(columns)?;
                             if schema.fields().len() != input_schema.fields().len() {
                                 return plan_err!(
-                            "Mismatch: {} columns specified, but result has {} columns",
-                            schema.fields().len(),
-                            input_schema.fields().len()
-                        );
+                                    "Mismatch: {} columns specified, but result has {} columns",
+                                    schema.fields().len(),
+                                    input_schema.fields().len()
+                                );
                             }
                             let input_fields = input_schema.fields();
                             let project_exprs = schema
@@ -255,7 +257,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     }
 
                     None => {
-                        let schema = self.build_schema(columns)?.to_dfschema_ref()?;
+                        let schema = Arc::new(self.build_schema(columns)?);
                         let plan = EmptyRelation {
                             produce_one_row: false,
                             schema,
@@ -323,6 +325,43 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     schema: Arc::new(DFSchema::empty()),
                 },
             ))),
+            Statement::CreateType {
+                name,
+                representation,
+            } => {
+                let name = object_name_to_string(&name);
+
+                let UserDefinedTypeRepresentation::Composite { attributes } =
+                    representation;
+                let fields = attributes
+                    .into_iter()
+                    .map(
+                        |UserDefinedTypeCompositeAttributeDef {
+                             name,
+                             data_type,
+                             collation,
+                         }| {
+                            if collation.is_some() {
+                                return not_impl_err!("Collation not supported");
+                            }
+                            let field_name = ident_to_string(&name);
+                            let field_data_type = self.convert_data_type(&data_type)?;
+
+                            Ok(Arc::new(NamedLogicalType::new(
+                                field_name,
+                                field_data_type,
+                            )))
+                        },
+                    )
+                    .collect::<Result<Vec<_>>>()?;
+                let data_type = LogicalType::Struct(fields.into());
+
+                Ok(LogicalPlan::Ddl(DdlStatement::CreateType(CreateType {
+                    name,
+                    data_type,
+                    schema: Arc::new(DFSchema::empty()),
+                })))
+            }
             Statement::Drop {
                 object_type,
                 if_exists,
@@ -383,10 +422,10 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 statement,
             } => {
                 // Convert parser data types to DataFusion data types
-                let data_types: Vec<DataType> = data_types
+                let data_types = data_types
                     .into_iter()
                     .map(|t| self.convert_data_type(&t))
-                    .collect::<Result<_>>()?;
+                    .collect::<Result<Vec<_>>>()?;
 
                 // Create planner context with parameters
                 let mut planner_context = PlannerContext::new()
@@ -750,19 +789,18 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             )?;
         }
 
-        let schema = self.build_schema(columns)?;
-        let df_schema = schema.to_dfschema_ref()?;
+        let schema = Arc::new(self.build_schema(columns)?);
 
         let ordered_exprs =
-            self.build_order_by(order_exprs, &df_schema, &mut PlannerContext::new())?;
+            self.build_order_by(order_exprs, &schema, &mut PlannerContext::new())?;
 
         // External tables do not support schemas at the moment, so the name is just a table name
         let name = OwnedTableReference::bare(name);
         let constraints =
-            Constraints::new_from_table_constraints(&all_constraints, &df_schema)?;
+            Constraints::new_from_table_constraints(&all_constraints, &schema)?;
         Ok(LogicalPlan::Ddl(DdlStatement::CreateExternalTable(
             PlanCreateExternalTable {
-                schema: df_schema,
+                schema,
                 name,
                 location,
                 file_type,
@@ -1138,7 +1176,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                                 idx + 1
                             )
                         })?;
-                        let dt = field.field().data_type().clone();
+                        let dt = field.data_type().clone();
                         let _ = prepare_param_data_types.insert(name, dt);
                     }
                 }

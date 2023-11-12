@@ -29,6 +29,7 @@ use arrow::{
     record_batch::RecordBatch,
 };
 use arrow_schema::ArrowError;
+use datafusion_common::logical_type::LogicalType;
 use std::sync::Arc;
 
 use datafusion::dataframe::DataFrame;
@@ -1551,7 +1552,7 @@ impl VarProvider for HardcodedIntProvider {
     }
 
     fn get_type(&self, _: &[String]) -> Option<DataType> {
-        Some(DataType::Int64)
+        Some(LogicalType::Int64)
     }
 }
 

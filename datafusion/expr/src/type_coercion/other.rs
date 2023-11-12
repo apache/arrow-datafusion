@@ -16,6 +16,7 @@
 // under the License.
 
 use arrow::datatypes::DataType;
+use datafusion_common::logical_type::{ExtensionType, LogicalType};
 
 use super::binary::comparison_coercion;
 
@@ -37,18 +38,22 @@ pub fn get_coerce_type_for_list(
 /// and the `case_or_else_type`, if specified.
 /// Returns the common data type for `when_or_then_types` and `case_or_else_type`
 pub fn get_coerce_type_for_case_expression(
-    when_or_then_types: &[DataType],
-    case_or_else_type: Option<&DataType>,
-) -> Option<DataType> {
+    when_or_then_types: &[LogicalType],
+    case_or_else_type: Option<&LogicalType>,
+) -> Option<LogicalType> {
     let case_or_else_type = match case_or_else_type {
         None => when_or_then_types[0].clone(),
         Some(data_type) => data_type.clone(),
-    };
+    }
+    .physical_type();
+    // FIXME comparison_coercion use LogicalType
     when_or_then_types
         .iter()
+        .map(|e| e.physical_type())
         .try_fold(case_or_else_type, |left_type, right_type| {
             // TODO: now just use the `equal` coercion rule for case when. If find the issue, and
             // refactor again.
-            comparison_coercion(&left_type, right_type)
+            comparison_coercion(&left_type, &right_type)
         })
+        .map(Into::into)
 }

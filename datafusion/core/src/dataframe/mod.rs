@@ -30,6 +30,7 @@ use arrow::datatypes::{DataType, Field};
 use async_trait::async_trait;
 use datafusion_common::file_options::csv_writer::CsvWriterOptions;
 use datafusion_common::file_options::json_writer::JsonWriterOptions;
+use datafusion_common::logical_type::{ExtensionType, LogicalType};
 use datafusion_common::parsers::CompressionTypeVariant;
 use datafusion_common::{
     DataFusionError, FileType, FileTypeWriterOptions, SchemaError, UnnestOptions,
@@ -464,7 +465,10 @@ impl DataFrame {
                 original_schema_fields
                     .clone()
                     .filter(|f| {
-                        !matches!(f.data_type(), DataType::Binary | DataType::Boolean)
+                        !matches!(
+                            f.data_type(),
+                            LogicalType::Binary | LogicalType::Boolean
+                        )
                     })
                     .map(|f| min(col(f.name())).alias(f.name()))
                     .collect::<Vec<_>>(),
@@ -475,7 +479,10 @@ impl DataFrame {
                 original_schema_fields
                     .clone()
                     .filter(|f| {
-                        !matches!(f.data_type(), DataType::Binary | DataType::Boolean)
+                        !matches!(
+                            f.data_type(),
+                            LogicalType::Binary | LogicalType::Boolean
+                        )
                     })
                     .map(|f| max(col(f.name())).alias(f.name()))
                     .collect::<Vec<_>>(),
@@ -2252,7 +2259,7 @@ mod tests {
             .await?
             .select_columns(&["c2", "c3"])?
             .limit(0, Some(1))?
-            .with_column("sum", cast(col("c2") + col("c3"), DataType::Int64))?;
+            .with_column("sum", cast(col("c2") + col("c3"), LogicalType::Int64))?;
 
         let df_results = df.clone().collect().await?;
         df.clone().show().await?;
@@ -2343,7 +2350,7 @@ mod tests {
             .await?
             .select_columns(&["c2", "c3"])?
             .limit(0, Some(1))?
-            .with_column("sum", cast(col("c2") + col("c3"), DataType::Int64))?;
+            .with_column("sum", cast(col("c2") + col("c3"), LogicalType::Int64))?;
 
         let cached_df = df.clone().cache().await?;
 

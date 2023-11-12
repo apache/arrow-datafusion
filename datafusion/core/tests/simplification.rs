@@ -20,6 +20,7 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use datafusion::common::DFSchema;
 use datafusion::{error::Result, execution::context::ExecutionProps, prelude::*};
+use datafusion_common::logical_type::LogicalType;
 use datafusion_expr::{Expr, ExprSchemable};
 use datafusion_optimizer::simplify_expressions::{ExprSimplifier, SimplifyInfo};
 
@@ -39,7 +40,7 @@ struct MyInfo {
 
 impl SimplifyInfo for MyInfo {
     fn is_boolean_type(&self, expr: &Expr) -> Result<bool> {
-        Ok(matches!(expr.get_type(&self.schema)?, DataType::Boolean))
+        Ok(matches!(expr.get_type(&self.schema)?, LogicalType::Boolean))
     }
 
     fn nullable(&self, expr: &Expr) -> Result<bool> {
@@ -50,7 +51,7 @@ impl SimplifyInfo for MyInfo {
         &self.execution_props
     }
 
-    fn get_data_type(&self, expr: &Expr) -> Result<DataType> {
+    fn get_data_type(&self, expr: &Expr) -> Result<LogicalType> {
         expr.get_type(&self.schema)
     }
 }

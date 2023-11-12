@@ -22,9 +22,10 @@ use crate::optimizer::ApplyOrder;
 use crate::utils::merge_schema;
 use crate::{OptimizerConfig, OptimizerRule};
 use arrow::datatypes::{
-    DataType, TimeUnit, MAX_DECIMAL_FOR_EACH_PRECISION, MIN_DECIMAL_FOR_EACH_PRECISION,
+    TimeUnit, MAX_DECIMAL_FOR_EACH_PRECISION, MIN_DECIMAL_FOR_EACH_PRECISION,
 };
 use arrow::temporal_conversions::{MICROSECONDS, MILLISECONDS, NANOSECONDS};
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::tree_node::{RewriteRecursion, TreeNodeRewriter};
 use datafusion_common::{
     internal_err, DFSchema, DFSchemaRef, DataFusionError, Result, ScalarValue,
@@ -284,27 +285,27 @@ fn is_comparison_op(op: &Operator) -> bool {
     )
 }
 
-fn is_support_data_type(data_type: &DataType) -> bool {
+fn is_support_data_type(data_type: &LogicalType) -> bool {
     matches!(
         data_type,
-        DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64
-            | DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::Decimal128(_, _)
-            | DataType::Timestamp(_, _)
+        LogicalType::UInt8
+            | LogicalType::UInt16
+            | LogicalType::UInt32
+            | LogicalType::UInt64
+            | LogicalType::Int8
+            | LogicalType::Int16
+            | LogicalType::Int32
+            | LogicalType::Int64
+            | LogicalType::Decimal128(_, _)
+            | LogicalType::Timestamp(_, _)
     )
 }
 
 fn try_cast_literal_to_type(
     lit_value: &ScalarValue,
-    target_type: &DataType,
+    target_type: &LogicalType,
 ) -> Result<Option<ScalarValue>> {
-    let lit_data_type = lit_value.data_type();
+    let lit_data_type = lit_value.logical_type();
     // the rule just support the signed numeric data type now
     if !is_support_data_type(&lit_data_type) || !is_support_data_type(target_type) {
         return Ok(None);
@@ -314,31 +315,31 @@ fn try_cast_literal_to_type(
         return Ok(Some(ScalarValue::try_from(target_type)?));
     }
     let mul = match target_type {
-        DataType::UInt8
-        | DataType::UInt16
-        | DataType::UInt32
-        | DataType::UInt64
-        | DataType::Int8
-        | DataType::Int16
-        | DataType::Int32
-        | DataType::Int64 => 1_i128,
-        DataType::Timestamp(_, _) => 1_i128,
-        DataType::Decimal128(_, scale) => 10_i128.pow(*scale as u32),
+        LogicalType::UInt8
+        | LogicalType::UInt16
+        | LogicalType::UInt32
+        | LogicalType::UInt64
+        | LogicalType::Int8
+        | LogicalType::Int16
+        | LogicalType::Int32
+        | LogicalType::Int64 => 1_i128,
+        LogicalType::Timestamp(_, _) => 1_i128,
+        LogicalType::Decimal128(_, scale) => 10_i128.pow(*scale as u32),
         other_type => {
             return internal_err!("Error target data type {other_type:?}");
         }
     };
     let (target_min, target_max) = match target_type {
-        DataType::UInt8 => (u8::MIN as i128, u8::MAX as i128),
-        DataType::UInt16 => (u16::MIN as i128, u16::MAX as i128),
-        DataType::UInt32 => (u32::MIN as i128, u32::MAX as i128),
-        DataType::UInt64 => (u64::MIN as i128, u64::MAX as i128),
-        DataType::Int8 => (i8::MIN as i128, i8::MAX as i128),
-        DataType::Int16 => (i16::MIN as i128, i16::MAX as i128),
-        DataType::Int32 => (i32::MIN as i128, i32::MAX as i128),
-        DataType::Int64 => (i64::MIN as i128, i64::MAX as i128),
-        DataType::Timestamp(_, _) => (i64::MIN as i128, i64::MAX as i128),
-        DataType::Decimal128(precision, _) => (
+        LogicalType::UInt8 => (u8::MIN as i128, u8::MAX as i128),
+        LogicalType::UInt16 => (u16::MIN as i128, u16::MAX as i128),
+        LogicalType::UInt32 => (u32::MIN as i128, u32::MAX as i128),
+        LogicalType::UInt64 => (u64::MIN as i128, u64::MAX as i128),
+        LogicalType::Int8 => (i8::MIN as i128, i8::MAX as i128),
+        LogicalType::Int16 => (i16::MIN as i128, i16::MAX as i128),
+        LogicalType::Int32 => (i32::MIN as i128, i32::MAX as i128),
+        LogicalType::Int64 => (i64::MIN as i128, i64::MAX as i128),
+        LogicalType::Timestamp(_, _) => (i64::MIN as i128, i64::MAX as i128),
+        LogicalType::Decimal128(precision, _) => (
             // Different precision for decimal128 can store different range of value.
             // For example, the precision is 3, the max of value is `999` and the min
             // value is `-999`
@@ -393,47 +394,47 @@ fn try_cast_literal_to_type(
                 // the value casted from lit to the target type is in the range of target type.
                 // return the target type of scalar value
                 let result_scalar = match target_type {
-                    DataType::Int8 => ScalarValue::Int8(Some(value as i8)),
-                    DataType::Int16 => ScalarValue::Int16(Some(value as i16)),
-                    DataType::Int32 => ScalarValue::Int32(Some(value as i32)),
-                    DataType::Int64 => ScalarValue::Int64(Some(value as i64)),
-                    DataType::UInt8 => ScalarValue::UInt8(Some(value as u8)),
-                    DataType::UInt16 => ScalarValue::UInt16(Some(value as u16)),
-                    DataType::UInt32 => ScalarValue::UInt32(Some(value as u32)),
-                    DataType::UInt64 => ScalarValue::UInt64(Some(value as u64)),
-                    DataType::Timestamp(TimeUnit::Second, tz) => {
+                    LogicalType::Int8 => ScalarValue::Int8(Some(value as i8)),
+                    LogicalType::Int16 => ScalarValue::Int16(Some(value as i16)),
+                    LogicalType::Int32 => ScalarValue::Int32(Some(value as i32)),
+                    LogicalType::Int64 => ScalarValue::Int64(Some(value as i64)),
+                    LogicalType::UInt8 => ScalarValue::UInt8(Some(value as u8)),
+                    LogicalType::UInt16 => ScalarValue::UInt16(Some(value as u16)),
+                    LogicalType::UInt32 => ScalarValue::UInt32(Some(value as u32)),
+                    LogicalType::UInt64 => ScalarValue::UInt64(Some(value as u64)),
+                    LogicalType::Timestamp(TimeUnit::Second, tz) => {
                         let value = cast_between_timestamp(
                             lit_data_type,
-                            DataType::Timestamp(TimeUnit::Second, tz.clone()),
+                            LogicalType::Timestamp(TimeUnit::Second, tz.clone()),
                             value,
                         );
                         ScalarValue::TimestampSecond(value, tz.clone())
                     }
-                    DataType::Timestamp(TimeUnit::Millisecond, tz) => {
+                    LogicalType::Timestamp(TimeUnit::Millisecond, tz) => {
                         let value = cast_between_timestamp(
                             lit_data_type,
-                            DataType::Timestamp(TimeUnit::Millisecond, tz.clone()),
+                            LogicalType::Timestamp(TimeUnit::Millisecond, tz.clone()),
                             value,
                         );
                         ScalarValue::TimestampMillisecond(value, tz.clone())
                     }
-                    DataType::Timestamp(TimeUnit::Microsecond, tz) => {
+                    LogicalType::Timestamp(TimeUnit::Microsecond, tz) => {
                         let value = cast_between_timestamp(
                             lit_data_type,
-                            DataType::Timestamp(TimeUnit::Microsecond, tz.clone()),
+                            LogicalType::Timestamp(TimeUnit::Microsecond, tz.clone()),
                             value,
                         );
                         ScalarValue::TimestampMicrosecond(value, tz.clone())
                     }
-                    DataType::Timestamp(TimeUnit::Nanosecond, tz) => {
+                    LogicalType::Timestamp(TimeUnit::Nanosecond, tz) => {
                         let value = cast_between_timestamp(
                             lit_data_type,
-                            DataType::Timestamp(TimeUnit::Nanosecond, tz.clone()),
+                            LogicalType::Timestamp(TimeUnit::Nanosecond, tz.clone()),
                             value,
                         );
                         ScalarValue::TimestampNanosecond(value, tz.clone())
                     }
-                    DataType::Decimal128(p, s) => {
+                    LogicalType::Decimal128(p, s) => {
                         ScalarValue::Decimal128(Some(value), *p, *s)
                     }
                     other_type => {
@@ -449,21 +450,25 @@ fn try_cast_literal_to_type(
 }
 
 /// Cast a timestamp value from one unit to another
-fn cast_between_timestamp(from: DataType, to: DataType, value: i128) -> Option<i64> {
+fn cast_between_timestamp(
+    from: LogicalType,
+    to: LogicalType,
+    value: i128,
+) -> Option<i64> {
     let value = value as i64;
     let from_scale = match from {
-        DataType::Timestamp(TimeUnit::Second, _) => 1,
-        DataType::Timestamp(TimeUnit::Millisecond, _) => MILLISECONDS,
-        DataType::Timestamp(TimeUnit::Microsecond, _) => MICROSECONDS,
-        DataType::Timestamp(TimeUnit::Nanosecond, _) => NANOSECONDS,
+        LogicalType::Timestamp(TimeUnit::Second, _) => 1,
+        LogicalType::Timestamp(TimeUnit::Millisecond, _) => MILLISECONDS,
+        LogicalType::Timestamp(TimeUnit::Microsecond, _) => MICROSECONDS,
+        LogicalType::Timestamp(TimeUnit::Nanosecond, _) => NANOSECONDS,
         _ => return Some(value),
     };
 
     let to_scale = match to {
-        DataType::Timestamp(TimeUnit::Second, _) => 1,
-        DataType::Timestamp(TimeUnit::Millisecond, _) => MILLISECONDS,
-        DataType::Timestamp(TimeUnit::Microsecond, _) => MICROSECONDS,
-        DataType::Timestamp(TimeUnit::Nanosecond, _) => NANOSECONDS,
+        LogicalType::Timestamp(TimeUnit::Second, _) => 1,
+        LogicalType::Timestamp(TimeUnit::Millisecond, _) => MILLISECONDS,
+        LogicalType::Timestamp(TimeUnit::Microsecond, _) => MICROSECONDS,
+        LogicalType::Timestamp(TimeUnit::Nanosecond, _) => NANOSECONDS,
         _ => return Some(value),
     };
 

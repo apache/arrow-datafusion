@@ -37,6 +37,7 @@ pub mod functions;
 pub mod other;
 
 use arrow::datatypes::DataType;
+use datafusion_common::logical_type::LogicalType;
 /// Determine whether the given data type `dt` represents signed numeric values.
 pub fn is_signed_numeric(dt: &DataType) -> bool {
     matches!(
@@ -69,19 +70,22 @@ pub fn is_interval(dt: &DataType) -> bool {
 }
 
 /// Determine whether the given data type `dt` is a `Date` or `Timestamp`.
-pub fn is_datetime(dt: &DataType) -> bool {
+pub fn is_datetime(dt: &LogicalType) -> bool {
     matches!(
         dt,
-        DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _)
+        LogicalType::Date32 | LogicalType::Date64 | LogicalType::Timestamp(_, _)
     )
 }
 
 /// Determine whether the given data type `dt` is a `Utf8` or `LargeUtf8`.
-pub fn is_utf8_or_large_utf8(dt: &DataType) -> bool {
-    matches!(dt, DataType::Utf8 | DataType::LargeUtf8)
+pub fn is_utf8_or_large_utf8(dt: &LogicalType) -> bool {
+    matches!(dt, LogicalType::Utf8 | LogicalType::LargeUtf8)
 }
 
 /// Determine whether the given data type `dt` is a `Decimal`.
-pub fn is_decimal(dt: &DataType) -> bool {
-    matches!(dt, DataType::Decimal128(_, _) | DataType::Decimal256(_, _))
+pub fn is_decimal(dt: &LogicalType) -> bool {
+    matches!(
+        dt,
+        LogicalType::Decimal128(_, _) | LogicalType::Decimal256(_, _)
+    )
 }

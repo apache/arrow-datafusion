@@ -357,7 +357,6 @@ impl fmt::Display for Column {
 mod tests {
     use super::*;
     use crate::DFField;
-    use arrow::datatypes::DataType;
     use std::collections::HashMap;
 
     fn create_schema(names: &[(Option<&str>, &str)]) -> Result<DFSchema> {
@@ -367,7 +366,7 @@ mod tests {
                 DFField::new(
                     qualifier.to_owned().map(|s| s.to_string()),
                     name,
-                    DataType::Boolean,
+                    LogicalType::Boolean,
                     true,
                 )
             })

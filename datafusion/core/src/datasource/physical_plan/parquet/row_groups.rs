@@ -1348,7 +1348,7 @@ mod tests {
             None
         }
 
-        fn get_variable_type(&self, _variable_names: &[String]) -> Option<DataType> {
+        fn get_variable_type(&self, _variable_names: &[String]) -> Option<LogicalType> {
             None
         }
 

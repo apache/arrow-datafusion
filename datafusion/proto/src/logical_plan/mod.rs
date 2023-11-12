@@ -43,6 +43,7 @@ use datafusion::{
     datasource::{provider_as_source, source_as_provider},
     prelude::SessionContext,
 };
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::plan_datafusion_err;
 use datafusion_common::{
     context, internal_err, not_impl_err, parsers::CompressionTypeVariant,
@@ -771,10 +772,12 @@ impl AsLogicalPlan for LogicalPlanNode {
             LogicalPlanType::Prepare(prepare) => {
                 let input: LogicalPlan =
                     into_logical_plan!(prepare.input, ctx, extension_codec)?;
-                let data_types: Vec<DataType> = prepare
+                // FIXME Use LogicalType in proto
+                let data_types: Vec<LogicalType> = prepare
                     .data_types
                     .iter()
                     .map(DataType::try_from)
+                    .map(Into::into)
                     .collect::<Result<_, _>>()?;
                 LogicalPlanBuilder::from(input)
                     .prepare(prepare.name.clone(), data_types)?

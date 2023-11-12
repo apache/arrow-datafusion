@@ -704,9 +704,9 @@ mod tests {
             **optimized_join.schema(),
             DFSchema::new_with_metadata(
                 vec![
-                    DFField::new(Some("test"), "a", DataType::UInt32, false),
-                    DFField::new(Some("test"), "b", DataType::UInt32, false),
-                    DFField::new(Some("test2"), "c1", DataType::UInt32, true),
+                    DFField::new(Some("test"), "a", LogicalType::UInt32, false),
+                    DFField::new(Some("test"), "b", LogicalType::UInt32, false),
+                    DFField::new(Some("test2"), "c1", LogicalType::UInt32, true),
                 ],
                 HashMap::new(),
             )?,
@@ -747,9 +747,9 @@ mod tests {
             **optimized_join.schema(),
             DFSchema::new_with_metadata(
                 vec![
-                    DFField::new(Some("test"), "a", DataType::UInt32, false),
-                    DFField::new(Some("test"), "b", DataType::UInt32, false),
-                    DFField::new(Some("test2"), "c1", DataType::UInt32, true),
+                    DFField::new(Some("test"), "a", LogicalType::UInt32, false),
+                    DFField::new(Some("test"), "b", LogicalType::UInt32, false),
+                    DFField::new(Some("test2"), "c1", LogicalType::UInt32, true),
                 ],
                 HashMap::new(),
             )?,
@@ -788,9 +788,9 @@ mod tests {
             **optimized_join.schema(),
             DFSchema::new_with_metadata(
                 vec![
-                    DFField::new(Some("test"), "a", DataType::UInt32, false),
-                    DFField::new(Some("test"), "b", DataType::UInt32, false),
-                    DFField::new(Some("test2"), "a", DataType::UInt32, true),
+                    DFField::new(Some("test"), "a", LogicalType::UInt32, false),
+                    DFField::new(Some("test"), "b", LogicalType::UInt32, false),
+                    DFField::new(Some("test2"), "a", LogicalType::UInt32, true),
                 ],
                 HashMap::new(),
             )?,
@@ -806,7 +806,7 @@ mod tests {
         let projection = LogicalPlanBuilder::from(table_scan)
             .project(vec![Expr::Cast(Cast::new(
                 Box::new(col("c")),
-                DataType::Float64,
+                LogicalType::Float64,
             ))])?
             .build()?;
 

@@ -24,6 +24,7 @@ use std::{
 
 use crate::{Expr, LogicalPlan};
 
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::parsers::CompressionTypeVariant;
 use datafusion_common::{
     Constraints, DFSchemaRef, OwnedSchemaReference, OwnedTableReference,
@@ -42,6 +43,8 @@ pub enum DdlStatement {
     CreateCatalogSchema(CreateCatalogSchema),
     /// Creates a new catalog (aka "Database").
     CreateCatalog(CreateCatalog),
+    /// Creates a new user defined data type.
+    CreateType(CreateType),
     /// Drops a table.
     DropTable(DropTable),
     /// Drops a view.
@@ -63,6 +66,7 @@ impl DdlStatement {
                 schema
             }
             DdlStatement::CreateCatalog(CreateCatalog { schema, .. }) => schema,
+            DdlStatement::CreateType(CreateType { schema, .. }) => schema,
             DdlStatement::DropTable(DropTable { schema, .. }) => schema,
             DdlStatement::DropView(DropView { schema, .. }) => schema,
             DdlStatement::DropCatalogSchema(DropCatalogSchema { schema, .. }) => schema,
@@ -78,6 +82,7 @@ impl DdlStatement {
             DdlStatement::CreateView(_) => "CreateView",
             DdlStatement::CreateCatalogSchema(_) => "CreateCatalogSchema",
             DdlStatement::CreateCatalog(_) => "CreateCatalog",
+            DdlStatement::CreateType(_) => "CreateType",
             DdlStatement::DropTable(_) => "DropTable",
             DdlStatement::DropView(_) => "DropView",
             DdlStatement::DropCatalogSchema(_) => "DropCatalogSchema",
@@ -94,6 +99,7 @@ impl DdlStatement {
                 vec![input]
             }
             DdlStatement::CreateView(CreateView { input, .. }) => vec![input],
+            DdlStatement::CreateType(_) => vec![],
             DdlStatement::DropTable(_) => vec![],
             DdlStatement::DropView(_) => vec![],
             DdlStatement::DropCatalogSchema(_) => vec![],
@@ -137,6 +143,9 @@ impl DdlStatement {
                         catalog_name, ..
                     }) => {
                         write!(f, "CreateCatalog: {catalog_name:?}")
+                    }
+                    DdlStatement::CreateType(CreateType { name, .. }) => {
+                        write!(f, "CreateType: {name}")
                     }
                     DdlStatement::DropTable(DropTable {
                         name, if_exists, ..
@@ -261,6 +270,15 @@ pub struct CreateCatalogSchema {
     pub schema_name: String,
     /// Do nothing (except issuing a notice) if a schema with the same name already exists
     pub if_not_exists: bool,
+    /// Empty schema
+    pub schema: DFSchemaRef,
+}
+
+/// Creates a schema.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct CreateType {
+    pub name: String,
+    pub data_type: LogicalType,
     /// Empty schema
     pub schema: DFSchemaRef,
 }

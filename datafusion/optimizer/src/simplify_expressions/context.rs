@@ -17,8 +17,9 @@
 
 //! Structs and traits to provide the information needed for expression simplification.
 
-use arrow::datatypes::DataType;
-use datafusion_common::{DFSchemaRef, DataFusionError, Result};
+use datafusion_common::{
+    logical_type::LogicalType, DFSchemaRef, DataFusionError, Result,
+};
 use datafusion_expr::{Expr, ExprSchemable};
 use datafusion_physical_expr::execution_props::ExecutionProps;
 
@@ -40,7 +41,7 @@ pub trait SimplifyInfo {
     fn execution_props(&self) -> &ExecutionProps;
 
     /// Returns data type of this expr needed for determining optimized int type of a value
-    fn get_data_type(&self, expr: &Expr) -> Result<DataType>;
+    fn get_data_type(&self, expr: &Expr) -> Result<LogicalType>;
 }
 
 /// Provides simplification information based on DFSchema and
@@ -100,7 +101,7 @@ impl<'a> SimplifyInfo for SimplifyContext<'a> {
     /// returns true if this Expr has boolean type
     fn is_boolean_type(&self, expr: &Expr) -> Result<bool> {
         for schema in &self.schema {
-            if let Ok(DataType::Boolean) = expr.get_type(schema) {
+            if let Ok(LogicalType::Boolean) = expr.get_type(schema) {
                 return Ok(true);
             }
         }
@@ -119,7 +120,7 @@ impl<'a> SimplifyInfo for SimplifyContext<'a> {
     }
 
     /// Returns data type of this expr needed for determining optimized int type of a value
-    fn get_data_type(&self, expr: &Expr) -> Result<DataType> {
+    fn get_data_type(&self, expr: &Expr) -> Result<LogicalType> {
         let schema = self.schema.as_ref().ok_or_else(|| {
             DataFusionError::Internal(
                 "attempt to get data type without schema".to_string(),

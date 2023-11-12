@@ -152,6 +152,7 @@ mod test {
     use std::sync::Arc;
 
     use arrow::datatypes::{DataType, Field, Schema};
+    use datafusion_common::logical_type::LogicalType;
 
     use crate::{
         avg, cast, col, lit, logical_plan::builder::LogicalTableSource, min, try_cast,
@@ -268,13 +269,13 @@ mod test {
         let cases = vec![
             TestCase {
                 desc: "Cast is preserved by rewrite_sort_cols_by_aggs",
-                input: sort(cast(col("c2"), DataType::Int64)),
-                expected: sort(cast(col("c2").alias("c2"), DataType::Int64)),
+                input: sort(cast(col("c2"), LogicalType::Int64)),
+                expected: sort(cast(col("c2").alias("c2"), LogicalType::Int64)),
             },
             TestCase {
                 desc: "TryCast is preserved by rewrite_sort_cols_by_aggs",
-                input: sort(try_cast(col("c2"), DataType::Int64)),
-                expected: sort(try_cast(col("c2").alias("c2"), DataType::Int64)),
+                input: sort(try_cast(col("c2"), LogicalType::Int64)),
+                expected: sort(try_cast(col("c2").alias("c2"), LogicalType::Int64)),
             },
         ];
 

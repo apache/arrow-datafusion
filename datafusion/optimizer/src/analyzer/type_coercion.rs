@@ -22,10 +22,11 @@ use std::sync::Arc;
 use arrow::datatypes::{DataType, IntervalUnit};
 
 use datafusion_common::config::ConfigOptions;
+use datafusion_common::logical_type::{ExtensionType, LogicalType};
 use datafusion_common::tree_node::{RewriteRecursion, TreeNodeRewriter};
 use datafusion_common::{
     exec_err, internal_err, plan_datafusion_err, plan_err, DFSchema, DFSchemaRef,
-    DataFusionError, Result, ScalarValue,
+    DataFusionError, Result, ScalarValue, ToDFSchema,
 };
 use datafusion_expr::expr::{
     self, Between, BinaryExpr, Case, Exists, InList, InSubquery, Like, ScalarFunction,
@@ -162,10 +163,11 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                 let new_plan = analyze_internal(&self.schema, &subquery.subquery)?;
                 let expr_type = expr.get_type(&self.schema)?;
                 let subquery_type = new_plan.schema().field(0).data_type();
-                let common_type = comparison_coercion(&expr_type, subquery_type).ok_or(plan_datafusion_err!(
+                // FIXME use logical type
+                let common_type = comparison_coercion(&expr_type.physical_type(), &subquery_type.physical_type()).ok_or(plan_datafusion_err!(
                         "expr type {expr_type:?} can't cast to {subquery_type:?} in InSubquery"
                     ),
-                )?;
+                )?.into();
                 let new_subquery = Subquery {
                     subquery: Arc::new(new_plan),
                     outer_ref_columns: subquery.outer_ref_columns,
@@ -209,8 +211,9 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                 escape_char,
                 case_insensitive,
             }) => {
-                let left_type = expr.get_type(&self.schema)?;
-                let right_type = pattern.get_type(&self.schema)?;
+                // FIXME like_coercion use LogicalType
+                let left_type = expr.get_type(&self.schema)?.physical_type();
+                let right_type = pattern.get_type(&self.schema)?.physical_type();
                 let coerced_type = like_coercion(&left_type,  &right_type).ok_or_else(|| {
                     let op_name = if case_insensitive {
                         "ILIKE"
@@ -220,7 +223,7 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                     plan_datafusion_err!(
                         "There isn't a common type to coerce {left_type} and {right_type} in {op_name} expression"
                     )
-                })?;
+                })?.into();
                 let expr = Box::new(expr.cast_to(&coerced_type, &self.schema)?);
                 let pattern = Box::new(pattern.cast_to(&coerced_type, &self.schema)?);
                 let expr = Expr::Like(Like::new(
@@ -233,16 +236,17 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                 Ok(expr)
             }
             Expr::BinaryExpr(BinaryExpr { left, op, right }) => {
+                // FIXME get_input_types use LogicalType
                 let (left_type, right_type) = get_input_types(
-                    &left.get_type(&self.schema)?,
+                    &left.get_type(&self.schema)?.physical_type(),
                     &op,
-                    &right.get_type(&self.schema)?,
+                    &right.get_type(&self.schema)?.physical_type(),
                 )?;
 
                 Ok(Expr::BinaryExpr(BinaryExpr::new(
-                    Box::new(left.cast_to(&left_type, &self.schema)?),
+                    Box::new(left.cast_to(&left_type.into(), &self.schema)?),
                     op,
-                    Box::new(right.cast_to(&right_type, &self.schema)?),
+                    Box::new(right.cast_to(&right_type.into(), &self.schema)?),
                 )))
             }
             Expr::Between(Between {
@@ -251,8 +255,9 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                 low,
                 high,
             }) => {
-                let expr_type = expr.get_type(&self.schema)?;
-                let low_type = low.get_type(&self.schema)?;
+                // FIXME comparison_coercion use LogicalType
+                let expr_type = expr.get_type(&self.schema)?.physical_type();
+                let low_type = low.get_type(&self.schema)?.physical_type();
                 let low_coerced_type = comparison_coercion(&expr_type, &low_type)
                     .ok_or_else(|| {
                         DataFusionError::Internal(format!(
@@ -272,7 +277,7 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                             DataFusionError::Internal(format!(
                                 "Failed to coerce types {expr_type} and {high_type} in BETWEEN expression"
                             ))
-                        })?;
+                        })?.into();
                 let expr = Expr::Between(Between::new(
                     Box::new(expr.cast_to(&coercion_type, &self.schema)?),
                     negated,
@@ -286,10 +291,13 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                 list,
                 negated,
             }) => {
-                let expr_data_type = expr.get_type(&self.schema)?;
+                // FIXME get_coerce_type_for_list use LogicalType
+                let expr_data_type = expr.get_type(&self.schema)?.physical_type();
                 let list_data_types = list
                     .iter()
-                    .map(|list_expr| list_expr.get_type(&self.schema))
+                    .map(|list_expr| {
+                        list_expr.get_type(&self.schema).map(|e| e.physical_type())
+                    })
                     .collect::<Result<Vec<_>>>()?;
                 let result_type =
                     get_coerce_type_for_list(&expr_data_type, &list_data_types);
@@ -298,12 +306,13 @@ impl TreeNodeRewriter for TypeCoercionRewriter {
                         "Can not find compatible types to compare {expr_data_type:?} with {list_data_types:?}"
                     ),
                     Some(coerced_type) => {
+                        let logical_coerced_type = coerced_type.into();
                         // find the coerced type
-                        let cast_expr = expr.cast_to(&coerced_type, &self.schema)?;
+                        let cast_expr = expr.cast_to(&logical_coerced_type, &self.schema)?;
                         let cast_list_expr = list
                             .into_iter()
                             .map(|list_expr| {
-                                list_expr.cast_to(&coerced_type, &self.schema)
+                                list_expr.cast_to(&logical_coerced_type, &self.schema)
                             })
                             .collect::<Result<Vec<_>>>()?;
                         let expr = Expr::InList(InList ::new(
@@ -436,15 +445,16 @@ fn coerce_scalar(target_type: &DataType, value: &ScalarValue) -> Result<ScalarVa
 /// family), we return a `Null` value of this type to signal this situation.
 /// Downstream code uses this signal to treat these values as *unbounded*.
 fn coerce_scalar_range_aware(
-    target_type: &DataType,
+    target_type: &LogicalType,
     value: &ScalarValue,
 ) -> Result<ScalarValue> {
-    coerce_scalar(target_type, value).or_else(|err| {
+    let target_type = target_type.physical_type();
+    coerce_scalar(&target_type, value).or_else(|err| {
         // If type coercion fails, check if the largest type in family works:
-        if let Some(largest_type) = get_widest_type_in_family(target_type) {
+        if let Some(largest_type) = get_widest_type_in_family(&target_type) {
             coerce_scalar(largest_type, value).map_or_else(
                 |_| exec_err!("Cannot cast {value:?} to {target_type:?}"),
-                |_| ScalarValue::try_from(target_type),
+                |_| ScalarValue::try_from(&target_type),
             )
         } else {
             Err(err)
@@ -466,7 +476,7 @@ fn get_widest_type_in_family(given_type: &DataType) -> Option<&DataType> {
 
 /// Coerces the given (window frame) `bound` to `target_type`.
 fn coerce_frame_bound(
-    target_type: &DataType,
+    target_type: &LogicalType,
     bound: &WindowFrameBound,
 ) -> Result<WindowFrameBound> {
     match bound {
@@ -498,7 +508,7 @@ fn coerce_window_frame(
                 if col_type.is_numeric() || is_utf8_or_large_utf8(col_type) {
                     col_type
                 } else if is_datetime(col_type) {
-                    &DataType::Interval(IntervalUnit::MonthDayNano)
+                    &LogicalType::Interval(IntervalUnit::MonthDayNano)
                 } else {
                     return internal_err!(
                         "Cannot run range queries on datatype: {col_type:?}"
@@ -508,7 +518,7 @@ fn coerce_window_frame(
                 return internal_err!("ORDER BY column cannot be empty");
             }
         }
-        WindowFrameUnits::Rows | WindowFrameUnits::Groups => &DataType::UInt64,
+        WindowFrameUnits::Rows | WindowFrameUnits::Groups => &LogicalType::UInt64,
     };
     window_frame.start_bound =
         coerce_frame_bound(target_type, &window_frame.start_bound)?;
@@ -520,8 +530,13 @@ fn coerce_window_frame(
 // The above op will be rewrite to the binary op when creating the physical op.
 fn get_casted_expr_for_bool_op(expr: &Expr, schema: &DFSchemaRef) -> Result<Expr> {
     let left_type = expr.get_type(schema)?;
-    get_input_types(&left_type, &Operator::IsDistinctFrom, &DataType::Boolean)?;
-    cast_expr(expr, &DataType::Boolean, schema)
+    // FIXME use logical type
+    get_input_types(
+        &left_type.physical_type(),
+        &Operator::IsDistinctFrom,
+        &DataType::Boolean,
+    )?;
+    cast_expr(expr, &LogicalType::Boolean, schema)
 }
 
 /// Returns `expressions` coerced to types compatible with
@@ -539,10 +554,13 @@ fn coerce_arguments_for_signature(
 
     let current_types = expressions
         .iter()
-        .map(|e| e.get_type(schema))
+        .map(|e| e.get_type(schema).map(|t| t.physical_type()))
         .collect::<Result<Vec<_>>>()?;
-
-    let new_types = data_types(&current_types, signature)?;
+    // FIXME data_types use logical type
+    let new_types = data_types(&current_types, signature)?
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<_>>();
 
     expressions
         .iter()
@@ -568,9 +586,9 @@ fn coerce_arguments_for_fun(
             .into_iter()
             .map(|expr| {
                 let data_type = expr.get_type(schema).unwrap();
-                if let DataType::FixedSizeList(field, _) = data_type {
+                if let LogicalType::FixedSizeList(field, _) = data_type {
                     let field = field.as_ref().clone();
-                    let to_type = DataType::List(Arc::new(field));
+                    let to_type = LogicalType::List(Box::new(field));
                     expr.cast_to(&to_type, schema)
                 } else {
                     Ok(expr)
@@ -589,9 +607,15 @@ fn coerce_arguments_for_fun(
         let new_type = current_types
             .iter()
             .skip(1)
-            .fold(current_types.first().unwrap().clone(), |acc, x| {
-                comparison_coercion(&acc, x).unwrap_or(acc)
-            });
+            .map(|e| e.physical_type())
+            .fold(
+                current_types.first().unwrap().clone().physical_type(),
+                |acc, x| {
+                    // FIXME comparison_coercion use logical type
+                    comparison_coercion(&acc, &x).unwrap_or(acc)
+                },
+            )
+            .into();
 
         return expressions
             .iter()
@@ -603,18 +627,18 @@ fn coerce_arguments_for_fun(
 }
 
 /// Cast `expr` to the specified type, if possible
-fn cast_expr(expr: &Expr, to_type: &DataType, schema: &DFSchema) -> Result<Expr> {
+fn cast_expr(expr: &Expr, to_type: &LogicalType, schema: &DFSchema) -> Result<Expr> {
     expr.clone().cast_to(to_type, schema)
 }
 
 /// Cast array `expr` to the specified type, if possible
 fn cast_array_expr(
     expr: &Expr,
-    from_type: &DataType,
-    to_type: &DataType,
+    from_type: &LogicalType,
+    to_type: &LogicalType,
     schema: &DFSchema,
 ) -> Result<Expr> {
-    if from_type.equals_datatype(&DataType::Null) {
+    if from_type == &LogicalType::Null {
         Ok(expr.clone())
     } else {
         cast_expr(expr, to_type, schema)
@@ -635,11 +659,14 @@ fn coerce_agg_exprs_for_signature(
     }
     let current_types = input_exprs
         .iter()
-        .map(|e| e.get_type(schema))
+        .map(|e| e.get_type(schema).map(|e| e.physical_type()))
         .collect::<Result<Vec<_>>>()?;
-
+    // FIXME coerce_types use logical type
     let coerced_types =
-        type_coercion::aggregates::coerce_types(agg_fun, &current_types, signature)?;
+        type_coercion::aggregates::coerce_types(agg_fun, &current_types, signature)?
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<_>>();
 
     input_exprs
         .iter()
@@ -736,7 +763,9 @@ fn coerce_case_expression(case: Case, schema: &DFSchemaRef) -> Result<Case> {
         .when_then_expr
         .into_iter()
         .map(|(when, then)| {
-            let when_type = case_when_coerce_type.as_ref().unwrap_or(&DataType::Boolean);
+            let when_type = case_when_coerce_type
+                .as_ref()
+                .unwrap_or(&LogicalType::Boolean);
             let when = when.cast_to(when_type, &schema).map_err(|e| {
                 DataFusionError::Context(
                     format!(
