@@ -21,8 +21,14 @@
 set -e
 rm -rf build 2> /dev/null
 rm -rf temp 2> /dev/null
+
+# copy source to temp dir
 mkdir temp
 cp -rf source/* temp/
+
+# update markdown files with latest example source code from tests
+python preprocess.py
+
 # replace relative URLs with absolute URLs
 sed -i -e 's/\.\.\/\.\.\/\.\.\//https:\/\/github.com\/apache\/arrow-datafusion\/blob\/main\//g' temp/contributor-guide/index.md
 make SOURCEDIR=`pwd`/temp html

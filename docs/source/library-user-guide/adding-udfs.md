@@ -35,23 +35,16 @@ First we'll talk about adding an Scalar UDF end-to-end, then we'll talk about th
 
 A Scalar UDF is a function that takes a row of data and returns a single value. For example, this function takes a single i64 and returns a single i64 with 1 added to it:
 
+<!-- include: library_udfs::add_one -->
+
 ```rust
-use std::sync::Arc;
-
-use arrow::array::{ArrayRef, Int64Array};
-use datafusion::common::Result;
-
-use datafusion::common::cast::as_int64_array;
-
-pub fn add_one(args: &[ArrayRef]) -> Result<ArrayRef> {
-    // Error handling omitted for brevity
-
+fn add_one(args: &[ArrayRef]) -> Result<ArrayRef> {
     let i64s = as_int64_array(&args[0])?;
 
     let new_array = i64s
-      .iter()
-      .map(|array_elem| array_elem.map(|value| value + 1))
-      .collect::<Int64Array>();
+        .iter()
+        .map(|array_elem| array_elem.map(|value| value + 1))
+        .collect::<Int64Array>();
 
     Ok(Arc::new(new_array))
 }
@@ -61,12 +54,17 @@ For brevity, we'll skipped some error handling, but e.g. you may want to check t
 
 This "works" in isolation, i.e. if you have a slice of `ArrayRef`s, you can call `add_one` and it will return a new `ArrayRef` with 1 added to each value.
 
+<!-- include: library_udfs::call_add_one -->
+
 ```rust
 let input = vec![Some(1), None, Some(3)];
 let input = Arc::new(Int64Array::from(input)) as ArrayRef;
 
-let result = add_one(&[input]).unwrap();
-let result = result.as_any().downcast_ref::<Int64Array>().unwrap();
+let result = add_one(&[input])?;
+let result = result
+    .as_any()
+    .downcast_ref::<Int64Array>()
+    .expect("result is Int64Array");
 
 assert_eq!(result, &Int64Array::from(vec![Some(2), None, Some(4)]));
 ```
@@ -76,6 +74,8 @@ The challenge however is that DataFusion doesn't know about this function. We ne
 ### Registering a Scalar UDF
 
 To register a Scalar UDF, you need to wrap the function implementation in a `ScalarUDF` struct and then register it with the `SessionContext`. DataFusion provides the `create_udf` and `make_scalar_function` helper functions to make this easier.
+
+<!-- include: library_udfs::create_udf -->
 
 ```rust
 let udf = create_udf(
@@ -97,18 +97,20 @@ A few things to note:
 
 That gives us a `ScalarUDF` that we can register with the `SessionContext`:
 
-```rust
-let mut ctx = SessionContext::new();
+<!-- include: library_udfs::register_udf -->
 
+```rust
+let ctx = SessionContext::new();
 ctx.register_udf(udf);
 ```
 
 At this point, you can use the `add_one` function in your query:
 
+<!-- include: library_udfs::call_udf -->
+
 ```rust
 let sql = "SELECT add_one(1)";
-
-let df = ctx.sql(&sql).await.unwrap();
+let df = ctx.sql(&sql).await?;
 ```
 
 ## Adding a Window UDF

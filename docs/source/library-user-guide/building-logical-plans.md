@@ -36,7 +36,7 @@ much easier to use the [LogicalPlanBuilder], which is described in the next sect
 
 Here is an example of building a logical plan directly:
 
-<!-- source for this example is in datafusion_docs::library_logical_plan::plan_1 -->
+<!-- include: library_logical_plan::create_plan -->
 
 ```rust
 // create a logical table source
@@ -58,7 +58,7 @@ let table_scan = LogicalPlan::TableScan(TableScan::try_new(
     fetch,
 )?);
 
-// create a Filter plan that evaluates `id > 500` that wraps the TableScan
+// create a Filter plan that evaluates `id > 500` and wraps the TableScan
 let filter_expr = col("id").gt(lit(500));
 let plan = LogicalPlan::Filter(Filter::try_new(filter_expr, Arc::new(table_scan))?);
 
@@ -99,7 +99,7 @@ Here are some examples of transformation methods, but for a full list, refer to 
 
 The following example demonstrates building the same simple query plan as the previous example, with a table scan followed by a filter.
 
-<!-- source for this example is in datafusion_docs::library_logical_plan::plan_builder_1 -->
+<!-- include: library_logical_plan::build_plan -->
 
 ```rust
 // create a logical table source
@@ -115,10 +115,8 @@ let projection = None;
 // create a LogicalPlanBuilder for a table scan
 let builder = LogicalPlanBuilder::scan("person", Arc::new(table_source), projection)?;
 
-// perform a filter operation and build the plan
-let plan = builder
-    .filter(col("id").gt(lit(500)))? // WHERE id > 500
-    .build()?;
+// perform a filter that evaluates `id > 500`, and build the plan
+let plan = builder.filter(col("id").gt(lit(500)))?.build()?;
 
 // print the plan
 println!("{}", plan.display_indent_schema());
