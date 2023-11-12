@@ -18,8 +18,9 @@
 //! SQL Utility Functions
 
 use arrow_schema::{
-    DataType, DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION, DECIMAL_DEFAULT_SCALE,
+    DECIMAL128_MAX_PRECISION, DECIMAL256_MAX_PRECISION, DECIMAL_DEFAULT_SCALE,
 };
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use sqlparser::ast::Ident;
 
@@ -212,7 +213,7 @@ pub fn window_expr_common_partition_keys(window_exprs: &[Expr]) -> Result<&[Expr
 pub(crate) fn make_decimal_type(
     precision: Option<u64>,
     scale: Option<u64>,
-) -> Result<DataType> {
+) -> Result<LogicalType> {
     // postgres like behavior
     let (precision, scale) = match (precision, scale) {
         (Some(p), Some(s)) => (p as u8, s as i8),
@@ -233,9 +234,9 @@ pub(crate) fn make_decimal_type(
     } else if precision > DECIMAL128_MAX_PRECISION
         && precision <= DECIMAL256_MAX_PRECISION
     {
-        Ok(DataType::Decimal256(precision, scale))
+        Ok(LogicalType::Decimal256(precision, scale))
     } else {
-        Ok(DataType::Decimal128(precision, scale))
+        Ok(LogicalType::Decimal128(precision, scale))
     }
 }
 

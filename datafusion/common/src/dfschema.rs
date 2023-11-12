@@ -19,14 +19,14 @@
 //! fields with optional relation names.
 
 use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::error::{
     unqualified_field_not_found, DataFusionError, Result, SchemaError, _plan_err,
 };
+use crate::logical_type::{ExtensionType, LogicalType};
 use crate::{
     field_not_found, Column, FunctionalDependencies, OwnedTableReference, TableReference,
 };
@@ -116,12 +116,28 @@ impl DFSchema {
         qualifier: impl Into<TableReference<'a>>,
         schema: &Schema,
     ) -> Result<Self> {
-        let qualifier = qualifier.into();
+        let qualifier: TableReference<'a> = qualifier.into();
         Self::new_with_metadata(
             schema
                 .fields()
                 .iter()
                 .map(|f| DFField::from_qualified(qualifier.clone(), f.clone()))
+                .collect(),
+            schema.metadata().clone(),
+        )
+    }
+
+    /// Create a `DFSchema` from an Arrow schema and a given qualifier
+    pub fn try_from_qualified_dfschema<'a>(
+        qualifier: impl Into<TableReference<'a>>,
+        schema: &DFSchema,
+    ) -> Result<Self> {
+        let qualifier: TableReference<'a> = qualifier.into();
+        Self::new_with_metadata(
+            schema
+                .fields()
+                .iter()
+                .map(|f| f.clone().with_qualifier(qualifier.to_owned_reference()))
                 .collect(),
             schema.metadata().clone(),
         )
@@ -427,7 +443,7 @@ impl DFSchema {
         self_fields.zip(other_fields).all(|(f1, f2)| {
             f1.qualifier() == f2.qualifier()
                 && f1.name() == f2.name()
-                && Self::datatype_is_semantically_equal(f1.data_type(), f2.data_type())
+                && Self::datatype_is_logically_equal(f1.data_type(), f2.data_type())
         })
     }
 
@@ -435,40 +451,8 @@ impl DFSchema {
     /// than datatype_is_semantically_equal in that a Dictionary<K,V> type is logically
     /// equal to a plain V type, but not semantically equal. Dictionary<K1, V1> is also
     /// logically equal to Dictionary<K2, V1>.
-    fn datatype_is_logically_equal(dt1: &DataType, dt2: &DataType) -> bool {
-        // check nested fields
-        match (dt1, dt2) {
-            (DataType::Dictionary(_, v1), DataType::Dictionary(_, v2)) => {
-                v1.as_ref() == v2.as_ref()
-            }
-            (DataType::Dictionary(_, v1), othertype) => v1.as_ref() == othertype,
-            (othertype, DataType::Dictionary(_, v1)) => v1.as_ref() == othertype,
-            (DataType::List(f1), DataType::List(f2))
-            | (DataType::LargeList(f1), DataType::LargeList(f2))
-            | (DataType::FixedSizeList(f1, _), DataType::FixedSizeList(f2, _))
-            | (DataType::Map(f1, _), DataType::Map(f2, _)) => {
-                Self::field_is_logically_equal(f1, f2)
-            }
-            (DataType::Struct(fields1), DataType::Struct(fields2)) => {
-                let iter1 = fields1.iter();
-                let iter2 = fields2.iter();
-                fields1.len() == fields2.len() &&
-                        // all fields have to be the same
-                    iter1
-                    .zip(iter2)
-                        .all(|(f1, f2)| Self::field_is_logically_equal(f1, f2))
-            }
-            (DataType::Union(fields1, _), DataType::Union(fields2, _)) => {
-                let iter1 = fields1.iter();
-                let iter2 = fields2.iter();
-                fields1.len() == fields2.len() &&
-                    // all fields have to be the same
-                    iter1
-                        .zip(iter2)
-                        .all(|((t1, f1), (t2, f2))| t1 == t2 && Self::field_is_logically_equal(f1, f2))
-            }
-            _ => dt1 == dt2,
-        }
+    fn datatype_is_logically_equal(dt1: &LogicalType, dt2: &LogicalType) -> bool {
+        dt1 == dt2
     }
 
     /// Returns true of two [`DataType`]s are semantically equal (same
@@ -518,11 +502,6 @@ impl DFSchema {
         }
     }
 
-    fn field_is_logically_equal(f1: &Field, f2: &Field) -> bool {
-        f1.name() == f2.name()
-            && Self::datatype_is_logically_equal(f1.data_type(), f2.data_type())
-    }
-
     fn field_is_semantically_equal(f1: &Field, f2: &Field) -> bool {
         f1.name() == f2.name()
             && Self::datatype_is_semantically_equal(f1.data_type(), f2.data_type())
@@ -547,7 +526,7 @@ impl DFSchema {
             fields: self
                 .fields
                 .into_iter()
-                .map(|f| DFField::from_qualified(qualifier.clone(), f.field))
+                .map(|f| f.with_qualifier(qualifier.clone()))
                 .collect(),
             ..self
         }
@@ -575,7 +554,14 @@ impl DFSchema {
 impl From<DFSchema> for Schema {
     /// Convert DFSchema into a Schema
     fn from(df_schema: DFSchema) -> Self {
-        let fields: Fields = df_schema.fields.into_iter().map(|f| f.field).collect();
+        let fields: Fields = df_schema
+            .fields
+            .into_iter()
+            .map(|f| {
+                Field::new(f.name, f.data_type.physical_type(), f.nullable)
+                    .with_metadata(f.metadata)
+            })
+            .collect();
         Schema::new_with_metadata(fields, df_schema.metadata)
     }
 }
@@ -583,7 +569,14 @@ impl From<DFSchema> for Schema {
 impl From<&DFSchema> for Schema {
     /// Convert DFSchema reference into a Schema
     fn from(df_schema: &DFSchema) -> Self {
-        let fields: Fields = df_schema.fields.iter().map(|f| f.field.clone()).collect();
+        let fields: Fields = df_schema
+            .fields
+            .iter()
+            .map(|f| {
+                Field::new(f.name(), f.data_type().physical_type(), f.is_nullable())
+                    .with_metadata(f.metadata.clone())
+            })
+            .collect();
         Schema::new_with_metadata(fields, df_schema.metadata.clone())
     }
 }
@@ -596,7 +589,14 @@ impl TryFrom<Schema> for DFSchema {
             schema
                 .fields()
                 .iter()
-                .map(|f| DFField::from(f.clone()))
+                .map(|f| {
+                    DFField::new_unqualified(
+                        f.name(),
+                        f.data_type().into(),
+                        f.is_nullable(),
+                    )
+                    .with_metadata(f.metadata().clone())
+                })
                 .collect(),
             schema.metadata().clone(),
         )
@@ -679,7 +679,7 @@ pub trait ExprSchema: std::fmt::Debug {
     fn nullable(&self, col: &Column) -> Result<bool>;
 
     /// What is the datatype of this column?
-    fn data_type(&self, col: &Column) -> Result<&DataType>;
+    fn data_type(&self, col: &Column) -> Result<&LogicalType>;
 
     /// Returns the column's optional metadata.
     fn metadata(&self, col: &Column) -> Result<&HashMap<String, String>>;
@@ -691,7 +691,7 @@ impl<P: AsRef<DFSchema> + std::fmt::Debug> ExprSchema for P {
         self.as_ref().nullable(col)
     }
 
-    fn data_type(&self, col: &Column) -> Result<&DataType> {
+    fn data_type(&self, col: &Column) -> Result<&LogicalType> {
         self.as_ref().data_type(col)
     }
 
@@ -705,7 +705,7 @@ impl ExprSchema for DFSchema {
         Ok(self.field_from_column(col)?.is_nullable())
     }
 
-    fn data_type(&self, col: &Column) -> Result<&DataType> {
+    fn data_type(&self, col: &Column) -> Result<&LogicalType> {
         Ok(self.field_from_column(col)?.data_type())
     }
 
@@ -715,12 +715,34 @@ impl ExprSchema for DFSchema {
 }
 
 /// DFField wraps an Arrow field and adds an optional qualifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DFField {
     /// Optional qualifier (usually a table or relation name)
     qualifier: Option<OwnedTableReference>,
     /// Arrow field definition
-    field: FieldRef,
+    // field: FieldRef,
+    name: String,
+    data_type: LogicalType,
+    nullable: bool,
+    /// A map of key-value pairs containing additional custom meta data.
+    metadata: HashMap<String, String>,
+}
+
+impl Hash for DFField {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.qualifier.hash(state);
+        self.name.hash(state);
+        self.data_type.hash(state);
+        self.nullable.hash(state);
+
+        // ensure deterministic key order
+        let mut keys: Vec<&String> = self.metadata.keys().collect();
+        keys.sort();
+        for k in keys {
+            k.hash(state);
+            self.metadata.get(k).expect("key valid").hash(state);
+        }
+    }
 }
 
 impl DFField {
@@ -728,20 +750,26 @@ impl DFField {
     pub fn new<R: Into<OwnedTableReference>>(
         qualifier: Option<R>,
         name: &str,
-        data_type: DataType,
+        data_type: LogicalType,
         nullable: bool,
     ) -> Self {
         DFField {
             qualifier: qualifier.map(|s| s.into()),
-            field: Arc::new(Field::new(name, data_type, nullable)),
+            name: name.to_string(),
+            data_type,
+            nullable,
+            metadata: Default::default(),
         }
     }
 
     /// Convenience method for creating new `DFField` without a qualifier
-    pub fn new_unqualified(name: &str, data_type: DataType, nullable: bool) -> Self {
+    pub fn new_unqualified(name: &str, data_type: LogicalType, nullable: bool) -> Self {
         DFField {
             qualifier: None,
-            field: Arc::new(Field::new(name, data_type, nullable)),
+            name: name.to_string(),
+            data_type,
+            nullable,
+            metadata: Default::default(),
         }
     }
 
@@ -750,37 +778,41 @@ impl DFField {
         qualifier: impl Into<TableReference<'a>>,
         field: impl Into<FieldRef>,
     ) -> Self {
-        Self {
-            qualifier: Some(qualifier.into().to_owned_reference()),
-            field: field.into(),
-        }
+        let field: FieldRef = field.into();
+        Self::new(
+            Some(qualifier.into().to_owned_reference()),
+            field.name(),
+            field.data_type().into(),
+            field.is_nullable(),
+        )
+        .with_metadata(field.metadata().clone())
     }
 
     /// Returns an immutable reference to the `DFField`'s unqualified name
     pub fn name(&self) -> &String {
-        self.field.name()
+        &self.name
     }
 
     /// Returns an immutable reference to the `DFField`'s data-type
-    pub fn data_type(&self) -> &DataType {
-        self.field.data_type()
+    pub fn data_type(&self) -> &LogicalType {
+        &self.data_type
     }
 
     /// Indicates whether this `DFField` supports null values
     pub fn is_nullable(&self) -> bool {
-        self.field.is_nullable()
+        self.nullable
     }
 
     pub fn metadata(&self) -> &HashMap<String, String> {
-        self.field.metadata()
+        &self.metadata
     }
 
     /// Returns a string to the `DFField`'s qualified name
     pub fn qualified_name(&self) -> String {
         if let Some(qualifier) = &self.qualifier {
-            format!("{}.{}", qualifier, self.field.name())
+            format!("{}.{}", qualifier, self.name)
         } else {
-            self.field.name().to_owned()
+            self.name.clone()
         }
     }
 
@@ -788,7 +820,7 @@ impl DFField {
     pub fn qualified_column(&self) -> Column {
         Column {
             relation: self.qualifier.clone(),
-            name: self.field.name().to_string(),
+            name: self.name.clone(),
         }
     }
 
@@ -796,18 +828,13 @@ impl DFField {
     pub fn unqualified_column(&self) -> Column {
         Column {
             relation: None,
-            name: self.field.name().to_string(),
+            name: self.name.clone(),
         }
     }
 
     /// Get the optional qualifier
     pub fn qualifier(&self) -> Option<&OwnedTableReference> {
         self.qualifier.as_ref()
-    }
-
-    /// Get the arrow field
-    pub fn field(&self) -> &FieldRef {
-        &self.field
     }
 
     /// Return field with qualifier stripped
@@ -818,25 +845,27 @@ impl DFField {
 
     /// Return field with nullable specified
     pub fn with_nullable(mut self, nullable: bool) -> Self {
-        let f = self.field().as_ref().clone().with_nullable(nullable);
-        self.field = f.into();
+        self.nullable = nullable;
         self
     }
 
     /// Return field with new metadata
     pub fn with_metadata(mut self, metadata: HashMap<String, String>) -> Self {
-        let f = self.field().as_ref().clone().with_metadata(metadata);
-        self.field = f.into();
+        self.metadata = metadata;
+        self
+    }
+
+    /// Return field with new qualifier
+    pub fn with_qualifier(mut self, qualifier: impl Into<OwnedTableReference>) -> Self {
+        self.qualifier = Some(qualifier.into());
         self
     }
 }
 
 impl From<FieldRef> for DFField {
     fn from(value: FieldRef) -> Self {
-        Self {
-            qualifier: None,
-            field: value,
-        }
+        Self::new_unqualified(value.name(), value.data_type().into(), value.is_nullable())
+            .with_metadata(value.metadata().clone())
     }
 }
 
@@ -890,7 +919,7 @@ impl SchemaExt for Schema {
             .zip(other.fields().iter())
             .all(|(f1, f2)| {
                 f1.name() == f2.name()
-                    && DFSchema::datatype_is_logically_equal(
+                    && DFSchema::datatype_is_semantically_equal(
                         f1.data_type(),
                         f2.data_type(),
                     )

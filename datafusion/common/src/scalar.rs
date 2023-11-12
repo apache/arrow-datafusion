@@ -22,7 +22,8 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::convert::{Infallible, TryInto};
 use std::str::FromStr;
-use std::{convert::TryFrom, fmt, iter::repeat, sync::Arc};
+use std::sync::Arc;
+use std::{convert::TryFrom, fmt, iter::repeat};
 
 use crate::cast::{
     as_decimal128_array, as_decimal256_array, as_dictionary_array,
@@ -30,10 +31,11 @@ use crate::cast::{
 };
 use crate::error::{DataFusionError, Result, _internal_err, _not_impl_err};
 use crate::hash_utils::create_hashes;
+use crate::logical_type::{ExtensionType, LogicalType, NamedLogicalType};
 use crate::utils::array_into_list_array;
 use arrow::buffer::{NullBuffer, OffsetBuffer};
 use arrow::compute::kernels::numeric::*;
-use arrow::datatypes::{i256, FieldRef, Fields, SchemaBuilder};
+use arrow::datatypes::{i256, Fields, SchemaBuilder};
 use arrow::{
     array::*,
     compute::kernels::cast::{cast_with_options, CastOptions},
@@ -48,6 +50,7 @@ use arrow::{
 };
 use arrow_array::cast::as_list_array;
 use arrow_array::{ArrowNativeTypeOp, Scalar};
+use arrow_schema::FieldRef;
 
 /// Represents a dynamically typed, nullable single value.
 /// This is the single-valued counter-part to arrow's [`Array`].
@@ -845,6 +848,90 @@ impl ScalarValue {
     }
 
     /// return the [`DataType`] of this `ScalarValue`
+    pub fn logical_type(&self) -> LogicalType {
+        match self {
+            ScalarValue::Boolean(_) => LogicalType::Boolean,
+            ScalarValue::UInt8(_) => LogicalType::UInt8,
+            ScalarValue::UInt16(_) => LogicalType::UInt16,
+            ScalarValue::UInt32(_) => LogicalType::UInt32,
+            ScalarValue::UInt64(_) => LogicalType::UInt64,
+            ScalarValue::Int8(_) => LogicalType::Int8,
+            ScalarValue::Int16(_) => LogicalType::Int16,
+            ScalarValue::Int32(_) => LogicalType::Int32,
+            ScalarValue::Int64(_) => LogicalType::Int64,
+            ScalarValue::Decimal128(_, precision, scale) => {
+                LogicalType::Decimal128(*precision, *scale)
+            }
+            ScalarValue::Decimal256(_, precision, scale) => {
+                LogicalType::Decimal256(*precision, *scale)
+            }
+            ScalarValue::TimestampSecond(_, tz_opt) => {
+                LogicalType::Timestamp(TimeUnit::Second, tz_opt.clone())
+            }
+            ScalarValue::TimestampMillisecond(_, tz_opt) => {
+                LogicalType::Timestamp(TimeUnit::Millisecond, tz_opt.clone())
+            }
+            ScalarValue::TimestampMicrosecond(_, tz_opt) => {
+                LogicalType::Timestamp(TimeUnit::Microsecond, tz_opt.clone())
+            }
+            ScalarValue::TimestampNanosecond(_, tz_opt) => {
+                LogicalType::Timestamp(TimeUnit::Nanosecond, tz_opt.clone())
+            }
+            ScalarValue::Float32(_) => LogicalType::Float32,
+            ScalarValue::Float64(_) => LogicalType::Float64,
+            ScalarValue::Utf8(_) => LogicalType::Utf8,
+            ScalarValue::LargeUtf8(_) => LogicalType::LargeUtf8,
+            ScalarValue::Binary(_) => LogicalType::Binary,
+            ScalarValue::FixedSizeBinary(sz, _) => LogicalType::FixedSizeBinary(*sz),
+            ScalarValue::LargeBinary(_) => LogicalType::LargeBinary,
+            ScalarValue::Fixedsizelist(_, field, length) => {
+                LogicalType::FixedSizeList(Box::new(field.data_type().into()), *length)
+            }
+            ScalarValue::List(arr) => arr.data_type().into(),
+            ScalarValue::Date32(_) => LogicalType::Date32,
+            ScalarValue::Date64(_) => LogicalType::Date64,
+            ScalarValue::Time32Second(_) => LogicalType::Time32(TimeUnit::Second),
+            ScalarValue::Time32Millisecond(_) => {
+                LogicalType::Time32(TimeUnit::Millisecond)
+            }
+            ScalarValue::Time64Microsecond(_) => {
+                LogicalType::Time64(TimeUnit::Microsecond)
+            }
+            ScalarValue::Time64Nanosecond(_) => LogicalType::Time64(TimeUnit::Nanosecond),
+            ScalarValue::IntervalYearMonth(_) => {
+                LogicalType::Interval(IntervalUnit::YearMonth)
+            }
+            ScalarValue::IntervalDayTime(_) => {
+                LogicalType::Interval(IntervalUnit::DayTime)
+            }
+            ScalarValue::IntervalMonthDayNano(_) => {
+                LogicalType::Interval(IntervalUnit::MonthDayNano)
+            }
+            ScalarValue::DurationSecond(_) => LogicalType::Duration(TimeUnit::Second),
+            ScalarValue::DurationMillisecond(_) => {
+                LogicalType::Duration(TimeUnit::Millisecond)
+            }
+            ScalarValue::DurationMicrosecond(_) => {
+                LogicalType::Duration(TimeUnit::Microsecond)
+            }
+            ScalarValue::DurationNanosecond(_) => {
+                LogicalType::Duration(TimeUnit::Nanosecond)
+            }
+            ScalarValue::Struct(_, fields) => {
+                let fields = fields
+                    .iter()
+                    .map(|f| {
+                        Arc::new(NamedLogicalType::new(f.name(), f.data_type().into()))
+                    })
+                    .collect::<Vec<_>>();
+                LogicalType::Struct(fields.into())
+            }
+            ScalarValue::Dictionary(_k, v) => v.data_type().into(),
+            ScalarValue::Null => LogicalType::Null,
+        }
+    }
+
+    /// return the [`DataType`] of this `ScalarValue`
     pub fn data_type(&self) -> DataType {
         match self {
             ScalarValue::Boolean(_) => DataType::Boolean,
@@ -881,10 +968,9 @@ impl ScalarValue {
             ScalarValue::Binary(_) => DataType::Binary,
             ScalarValue::FixedSizeBinary(sz, _) => DataType::FixedSizeBinary(*sz),
             ScalarValue::LargeBinary(_) => DataType::LargeBinary,
-            ScalarValue::Fixedsizelist(_, field, length) => DataType::FixedSizeList(
-                Arc::new(Field::new("item", field.data_type().clone(), true)),
-                *length,
-            ),
+            ScalarValue::Fixedsizelist(_, field, length) => {
+                DataType::FixedSizeList(field.clone(), *length)
+            }
             ScalarValue::List(arr) => arr.data_type().to_owned(),
             ScalarValue::Date32(_) => DataType::Date32,
             ScalarValue::Date64(_) => DataType::Date64,
@@ -2849,6 +2935,114 @@ impl TryFrom<&DataType> for ScalarValue {
             _ => {
                 return _not_impl_err!(
                     "Can't create a scalar from data_type \"{data_type:?}\""
+                );
+            }
+        })
+    }
+}
+
+impl TryFrom<LogicalType> for ScalarValue {
+    type Error = DataFusionError;
+
+    /// Create a Null instance of ScalarValue for this datatype
+    fn try_from(datatype: LogicalType) -> Result<Self> {
+        (&datatype).try_into()
+    }
+}
+
+impl TryFrom<&LogicalType> for ScalarValue {
+    type Error = DataFusionError;
+
+    /// Create a Null instance of ScalarValue for this LogicalType
+    fn try_from(data_type: &LogicalType) -> Result<Self> {
+        Ok(match data_type {
+            LogicalType::Boolean => ScalarValue::Boolean(None),
+            LogicalType::Float64 => ScalarValue::Float64(None),
+            LogicalType::Float32 => ScalarValue::Float32(None),
+            LogicalType::Int8 => ScalarValue::Int8(None),
+            LogicalType::Int16 => ScalarValue::Int16(None),
+            LogicalType::Int32 => ScalarValue::Int32(None),
+            LogicalType::Int64 => ScalarValue::Int64(None),
+            LogicalType::UInt8 => ScalarValue::UInt8(None),
+            LogicalType::UInt16 => ScalarValue::UInt16(None),
+            LogicalType::UInt32 => ScalarValue::UInt32(None),
+            LogicalType::UInt64 => ScalarValue::UInt64(None),
+            LogicalType::Decimal128(precision, scale) => {
+                ScalarValue::Decimal128(None, *precision, *scale)
+            }
+            LogicalType::Decimal256(precision, scale) => {
+                ScalarValue::Decimal256(None, *precision, *scale)
+            }
+            LogicalType::Utf8 => ScalarValue::Utf8(None),
+            LogicalType::LargeUtf8 => ScalarValue::LargeUtf8(None),
+            LogicalType::Binary => ScalarValue::Binary(None),
+            LogicalType::FixedSizeBinary(len) => ScalarValue::FixedSizeBinary(*len, None),
+            LogicalType::LargeBinary => ScalarValue::LargeBinary(None),
+            LogicalType::Date32 => ScalarValue::Date32(None),
+            LogicalType::Date64 => ScalarValue::Date64(None),
+            LogicalType::Time32(TimeUnit::Second) => ScalarValue::Time32Second(None),
+            LogicalType::Time32(TimeUnit::Millisecond) => {
+                ScalarValue::Time32Millisecond(None)
+            }
+            LogicalType::Time64(TimeUnit::Microsecond) => {
+                ScalarValue::Time64Microsecond(None)
+            }
+            LogicalType::Time64(TimeUnit::Nanosecond) => {
+                ScalarValue::Time64Nanosecond(None)
+            }
+            LogicalType::Timestamp(TimeUnit::Second, tz_opt) => {
+                ScalarValue::TimestampSecond(None, tz_opt.clone())
+            }
+            LogicalType::Timestamp(TimeUnit::Millisecond, tz_opt) => {
+                ScalarValue::TimestampMillisecond(None, tz_opt.clone())
+            }
+            LogicalType::Timestamp(TimeUnit::Microsecond, tz_opt) => {
+                ScalarValue::TimestampMicrosecond(None, tz_opt.clone())
+            }
+            LogicalType::Timestamp(TimeUnit::Nanosecond, tz_opt) => {
+                ScalarValue::TimestampNanosecond(None, tz_opt.clone())
+            }
+            LogicalType::Interval(IntervalUnit::YearMonth) => {
+                ScalarValue::IntervalYearMonth(None)
+            }
+            LogicalType::Interval(IntervalUnit::DayTime) => {
+                ScalarValue::IntervalDayTime(None)
+            }
+            LogicalType::Interval(IntervalUnit::MonthDayNano) => {
+                ScalarValue::IntervalMonthDayNano(None)
+            }
+
+            LogicalType::Duration(TimeUnit::Second) => ScalarValue::DurationSecond(None),
+            LogicalType::Duration(TimeUnit::Millisecond) => {
+                ScalarValue::DurationMillisecond(None)
+            }
+            LogicalType::Duration(TimeUnit::Microsecond) => {
+                ScalarValue::DurationMicrosecond(None)
+            }
+            LogicalType::Duration(TimeUnit::Nanosecond) => {
+                ScalarValue::DurationNanosecond(None)
+            }
+
+            LogicalType::List(_) => ScalarValue::List(new_null_array(&DataType::Null, 0)),
+
+            LogicalType::Struct(fields) => {
+                let fields = fields
+                    .iter()
+                    .map(|e| {
+                        Arc::new(Field::new(
+                            e.name(),
+                            e.data_type().physical_type(),
+                            false,
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+
+                ScalarValue::Struct(None, fields.into())
+            }
+            LogicalType::Null => ScalarValue::Null,
+            _ => {
+                return _not_impl_err!(
+                    "Can't create a scalar from logical_type \"{data_type:?}\""
                 );
             }
         })

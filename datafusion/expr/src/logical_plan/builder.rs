@@ -47,8 +47,9 @@ use crate::{
     TableProviderFilterPushDown, TableSource, WriteOp,
 };
 
-use arrow::datatypes::{DataType, Schema, SchemaRef};
+use arrow::datatypes::{Schema, SchemaRef};
 use datafusion_common::display::ToStringifiedPlan;
+use datafusion_common::logical_type::{ExtensionType, LogicalType};
 use datafusion_common::{
     plan_datafusion_err, plan_err, Column, DFField, DFSchema, DFSchemaRef,
     DataFusionError, FileType, OwnedTableReference, Result, ScalarValue, TableReference,
@@ -139,7 +140,7 @@ impl LogicalPlanBuilder {
             return plan_err!("Values list cannot be zero length");
         }
         let empty_schema = DFSchema::empty();
-        let mut field_types: Vec<Option<DataType>> = Vec::with_capacity(n_cols);
+        let mut field_types: Vec<Option<LogicalType>> = Vec::with_capacity(n_cols);
         for _ in 0..n_cols {
             field_types.push(None);
         }
@@ -171,7 +172,7 @@ impl LogicalPlanBuilder {
                         Ok(Some(data_type))
                     }
                 })
-                .collect::<Result<Vec<Option<DataType>>>>()?;
+                .collect::<Result<Vec<Option<LogicalType>>>>()?;
         }
         let fields = field_types
             .iter()
@@ -181,7 +182,7 @@ impl LogicalPlanBuilder {
                 let name = &format!("column{}", j + 1);
                 DFField::new_unqualified(
                     name,
-                    data_type.clone().unwrap_or(DataType::Utf8),
+                    data_type.clone().unwrap_or(LogicalType::Utf8),
                     true,
                 )
             })
@@ -350,7 +351,7 @@ impl LogicalPlanBuilder {
     }
 
     /// Make a builder for a prepare logical plan from the builder's plan
-    pub fn prepare(self, name: String, data_types: Vec<DataType>) -> Result<Self> {
+    pub fn prepare(self, name: String, data_types: Vec<LogicalType>) -> Result<Self> {
         Ok(Self::from(LogicalPlan::Prepare(Prepare {
             name,
             data_types,
@@ -1223,17 +1224,21 @@ pub fn union(left_plan: LogicalPlan, right_plan: LogicalPlan) -> Result<LogicalP
     )
     .map(|(left_field, right_field)| {
         let nullable = left_field.is_nullable() || right_field.is_nullable();
-        let data_type =
-            comparison_coercion(left_field.data_type(), right_field.data_type())
-                .ok_or_else(|| {
-                    plan_datafusion_err!(
+        // FIXME support logical data types, not convert to DataType
+        let data_type = comparison_coercion(
+            &left_field.data_type().physical_type(),
+            &right_field.data_type().physical_type(),
+        )
+        .ok_or_else(|| {
+            plan_datafusion_err!(
                 "UNION Column {} (type: {}) is not compatible with column {} (type: {})",
                 right_field.name(),
                 right_field.data_type(),
                 left_field.name(),
                 left_field.data_type()
             )
-                })?;
+        })?
+        .into();
 
         Ok(DFField::new(
             left_field.qualifier().cloned(),
@@ -1441,12 +1446,12 @@ pub fn unnest_with_options(
 
     // Extract the type of the nested field in the list.
     let unnested_field = match unnest_field.data_type() {
-        DataType::List(field)
-        | DataType::FixedSizeList(field, _)
-        | DataType::LargeList(field) => DFField::new(
+        LogicalType::List(dt)
+        | LogicalType::FixedSizeList(dt, _)
+        | LogicalType::LargeList(dt) => DFField::new(
             unnest_field.qualifier().cloned(),
             unnest_field.name(),
-            field.data_type().clone(),
+            dt.as_ref().clone(),
             unnest_field.is_nullable(),
         ),
         _ => {
@@ -1924,7 +1929,7 @@ mod tests {
             .schema()
             .field_with_name(Some(&TableReference::bare("test_table")), "strings")
             .unwrap();
-        assert_eq!(&DataType::Utf8, field.data_type());
+        assert_eq!(&LogicalType::Utf8, field.data_type());
 
         // Unnesting multiple fields.
         let plan = nested_table_scan("test_table")?
@@ -1943,7 +1948,7 @@ mod tests {
             .schema()
             .field_with_name(Some(&TableReference::bare("test_table")), "structs")
             .unwrap();
-        assert!(matches!(field.data_type(), DataType::Struct(_)));
+        assert!(matches!(field.data_type(), LogicalType::Struct(_)));
 
         // Unnesting missing column should fail.
         let plan = nested_table_scan("test_table")?.unnest_column("missing");

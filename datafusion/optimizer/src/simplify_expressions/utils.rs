@@ -18,6 +18,7 @@
 //! Utility functions for expression simplification
 
 use crate::simplify_expressions::SimplifyInfo;
+use datafusion_common::logical_type::ExtensionType;
 use datafusion_common::{internal_err, DataFusionError, Result, ScalarValue};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{
@@ -350,7 +351,9 @@ pub fn distribute_negation(expr: Expr) -> Expr {
 /// 3. Log(a, Power(a, b)) ===> b
 pub fn simpl_log(current_args: Vec<Expr>, info: &dyn SimplifyInfo) -> Result<Expr> {
     let mut number = &current_args[0];
-    let mut base = &Expr::Literal(ScalarValue::new_ten(&info.get_data_type(number)?)?);
+    let mut base = &Expr::Literal(ScalarValue::new_ten(
+        &info.get_data_type(number)?.physical_type(),
+    )?);
     if current_args.len() == 2 {
         base = &current_args[0];
         number = &current_args[1];
@@ -358,10 +361,13 @@ pub fn simpl_log(current_args: Vec<Expr>, info: &dyn SimplifyInfo) -> Result<Exp
 
     match number {
         Expr::Literal(value)
-            if value == &ScalarValue::new_one(&info.get_data_type(number)?)? =>
+            if value
+                == &ScalarValue::new_one(
+                    &info.get_data_type(number)?.physical_type(),
+                )? =>
         {
             Ok(Expr::Literal(ScalarValue::new_zero(
-                &info.get_data_type(base)?,
+                &info.get_data_type(base)?.physical_type(),
             )?))
         }
         Expr::ScalarFunction(ScalarFunction {
@@ -371,7 +377,7 @@ pub fn simpl_log(current_args: Vec<Expr>, info: &dyn SimplifyInfo) -> Result<Exp
         _ => {
             if number == base {
                 Ok(Expr::Literal(ScalarValue::new_one(
-                    &info.get_data_type(number)?,
+                    &info.get_data_type(number)?.physical_type(),
                 )?))
             } else {
                 Ok(Expr::ScalarFunction(ScalarFunction::new(
@@ -393,14 +399,20 @@ pub fn simpl_power(current_args: Vec<Expr>, info: &dyn SimplifyInfo) -> Result<E
 
     match exponent {
         Expr::Literal(value)
-            if value == &ScalarValue::new_zero(&info.get_data_type(exponent)?)? =>
+            if value
+                == &ScalarValue::new_zero(
+                    &info.get_data_type(exponent)?.physical_type(),
+                )? =>
         {
             Ok(Expr::Literal(ScalarValue::new_one(
-                &info.get_data_type(base)?,
+                &info.get_data_type(base)?.physical_type(),
             )?))
         }
         Expr::Literal(value)
-            if value == &ScalarValue::new_one(&info.get_data_type(exponent)?)? =>
+            if value
+                == &ScalarValue::new_one(
+                    &info.get_data_type(exponent)?.physical_type(),
+                )? =>
         {
             Ok(base.clone())
         }

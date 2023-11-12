@@ -19,6 +19,7 @@
 use crate::expr::Case;
 use crate::{expr_schema::ExprSchemable, Expr};
 use arrow::datatypes::DataType;
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::{plan_err, DFSchema, DataFusionError, Result};
 use std::collections::HashSet;
 
@@ -89,18 +90,18 @@ impl CaseBuilder {
             then_expr.push(e.as_ref().to_owned());
         }
 
-        let then_types: Vec<DataType> = then_expr
+        let then_types: Vec<LogicalType> = then_expr
             .iter()
             .map(|e| match e {
                 Expr::Literal(_) => e.get_type(&DFSchema::empty()),
-                _ => Ok(DataType::Null),
+                _ => Ok(LogicalType::Null),
             })
             .collect::<Result<Vec<_>>>()?;
 
-        if then_types.contains(&DataType::Null) {
+        if then_types.contains(&LogicalType::Null) {
             // cannot verify types until execution type
         } else {
-            let unique_types: HashSet<&DataType> = then_types.iter().collect();
+            let unique_types: HashSet<&LogicalType> = then_types.iter().collect();
             if unique_types.len() != 1 {
                 return plan_err!(
                     "CASE expression 'then' values had multiple data types: {unique_types:?}"

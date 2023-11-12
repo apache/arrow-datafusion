@@ -22,6 +22,7 @@ use crate::logical_plan::Aggregate;
 use crate::signature::{Signature, TypeSignature};
 use crate::{Cast, Expr, ExprSchemable, GroupingSet, LogicalPlan, TryCast};
 use arrow::datatypes::{DataType, TimeUnit};
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::tree_node::{TreeNode, VisitRecursion};
 use datafusion_common::{
     internal_err, plan_datafusion_err, plan_err, Column, DFField, DFSchema, DFSchemaRef,
@@ -886,39 +887,34 @@ pub(crate) fn find_column_indexes_referenced_by_expr(
 /// can this data type be used in hash join equal conditions??
 /// data types here come from function 'equal_rows', if more data types are supported
 /// in equal_rows(hash join), add those data types here to generate join logical plan.
-pub fn can_hash(data_type: &DataType) -> bool {
+pub fn can_hash(data_type: &LogicalType) -> bool {
     match data_type {
-        DataType::Null => true,
-        DataType::Boolean => true,
-        DataType::Int8 => true,
-        DataType::Int16 => true,
-        DataType::Int32 => true,
-        DataType::Int64 => true,
-        DataType::UInt8 => true,
-        DataType::UInt16 => true,
-        DataType::UInt32 => true,
-        DataType::UInt64 => true,
-        DataType::Float32 => true,
-        DataType::Float64 => true,
-        DataType::Timestamp(time_unit, None) => match time_unit {
+        LogicalType::Null => true,
+        LogicalType::Boolean => true,
+        LogicalType::Int8 => true,
+        LogicalType::Int16 => true,
+        LogicalType::Int32 => true,
+        LogicalType::Int64 => true,
+        LogicalType::UInt8 => true,
+        LogicalType::UInt16 => true,
+        LogicalType::UInt32 => true,
+        LogicalType::UInt64 => true,
+        LogicalType::Float32 => true,
+        LogicalType::Float64 => true,
+        LogicalType::Timestamp(time_unit, None) => match time_unit {
             TimeUnit::Second => true,
             TimeUnit::Millisecond => true,
             TimeUnit::Microsecond => true,
             TimeUnit::Nanosecond => true,
         },
-        DataType::Utf8 => true,
-        DataType::LargeUtf8 => true,
-        DataType::Decimal128(_, _) => true,
-        DataType::Date32 => true,
-        DataType::Date64 => true,
-        DataType::FixedSizeBinary(_) => true,
-        DataType::Dictionary(key_type, value_type)
-            if *value_type.as_ref() == DataType::Utf8 =>
-        {
-            DataType::is_dictionary_key_type(key_type)
-        }
-        DataType::List(_) => true,
-        DataType::LargeList(_) => true,
+        LogicalType::Utf8 => true,
+        LogicalType::LargeUtf8 => true,
+        LogicalType::Decimal128(_, _) => true,
+        LogicalType::Date32 => true,
+        LogicalType::Date64 => true,
+        LogicalType::FixedSizeBinary(_) => true,
+        LogicalType::List(_) => true,
+        LogicalType::LargeList(_) => true,
         _ => false,
     }
 }

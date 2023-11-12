@@ -372,8 +372,7 @@ fn build_join(
 mod tests {
     use super::*;
     use crate::test::*;
-    use arrow::datatypes::DataType;
-    use datafusion_common::Result;
+    use datafusion_common::{logical_type::LogicalType as DataType, Result};
     use datafusion_expr::{
         col, lit, logical_plan::LogicalPlanBuilder, max, min, out_ref_col,
         scalar_subquery, sum, Between,

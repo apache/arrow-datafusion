@@ -263,7 +263,7 @@ async fn prune_partitions(
     let df_schema = DFSchema::new_with_metadata(
         partition_cols
             .iter()
-            .map(|(n, d)| DFField::new_unqualified(n, d.clone(), true))
+            .map(|(n, d)| DFField::new_unqualified(n, d.into(), true))
             .collect(),
         Default::default(),
     )?;

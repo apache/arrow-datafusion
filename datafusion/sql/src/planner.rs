@@ -23,6 +23,9 @@ use std::vec;
 use arrow_schema::*;
 use datafusion_common::field_not_found;
 use datafusion_common::internal_err;
+use datafusion_common::logical_type::LogicalType;
+use datafusion_common::logical_type::TypeSignature;
+use datafusion_common::DFField;
 use datafusion_expr::WindowUDF;
 use sqlparser::ast::TimezoneInfo;
 use sqlparser::ast::{ArrayElemTypeDef, ExactNumberInfo};
@@ -40,6 +43,7 @@ use datafusion_expr::utils::find_column_exprs;
 use datafusion_expr::TableSource;
 use datafusion_expr::{col, AggregateUDF, Expr, ScalarUDF};
 
+use crate::statement::object_name_to_string;
 use crate::utils::make_decimal_type;
 
 /// The ContextProvider trait allows the query planner to obtain meta-data about tables and
@@ -58,7 +62,11 @@ pub trait ContextProvider {
     /// Getter for a UDWF
     fn get_window_meta(&self, name: &str) -> Option<Arc<WindowUDF>>;
     /// Getter for system/user-defined variable type
-    fn get_variable_type(&self, variable_names: &[String]) -> Option<DataType>;
+    fn get_variable_type(&self, variable_names: &[String]) -> Option<LogicalType>;
+    /// Getter for extension data type
+    fn get_data_type(&self, _name: &TypeSignature) -> Option<LogicalType> {
+        None
+    }
 
     /// Get configuration options
     fn options(&self) -> &ConfigOptions;
@@ -115,7 +123,7 @@ impl IdentNormalizer {
 pub struct PlannerContext {
     /// Data types for numbered parameters ($1, $2, etc), if supplied
     /// in `PREPARE` statement
-    prepare_param_data_types: Vec<DataType>,
+    prepare_param_data_types: Vec<LogicalType>,
     /// Map of CTE name to logical plan of the WITH clause.
     /// Use `Arc<LogicalPlan>` to allow cheap cloning
     ctes: HashMap<String, Arc<LogicalPlan>>,
@@ -142,7 +150,7 @@ impl PlannerContext {
     /// Update the PlannerContext with provided prepare_param_data_types
     pub fn with_prepare_param_data_types(
         mut self,
-        prepare_param_data_types: Vec<DataType>,
+        prepare_param_data_types: Vec<LogicalType>,
     ) -> Self {
         self.prepare_param_data_types = prepare_param_data_types;
         self
@@ -164,7 +172,7 @@ impl PlannerContext {
     }
 
     /// Return the types of parameters (`$1`, `$2`, etc) if known
-    pub fn prepare_param_data_types(&self) -> &[DataType] {
+    pub fn prepare_param_data_types(&self) -> &[LogicalType] {
         &self.prepare_param_data_types
     }
 
@@ -211,7 +219,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         }
     }
 
-    pub fn build_schema(&self, columns: Vec<SQLColumnDef>) -> Result<Schema> {
+    pub fn build_schema(&self, columns: Vec<SQLColumnDef>) -> Result<DFSchema> {
         let mut fields = Vec::with_capacity(columns.len());
 
         for column in columns {
@@ -220,14 +228,14 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 .options
                 .iter()
                 .any(|x| x.option == ColumnOption::NotNull);
-            fields.push(Field::new(
-                self.normalizer.normalize(column.name),
+            fields.push(DFField::new_unqualified(
+                &self.normalizer.normalize(column.name),
                 data_type,
                 !not_nullable,
             ));
         }
 
-        Ok(Schema::new(fields))
+        DFSchema::new_with_metadata(fields, Default::default())
     }
 
     /// Apply the given TableAlias to the input plan
@@ -295,15 +303,16 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             })
     }
 
-    pub(crate) fn convert_data_type(&self, sql_type: &SQLDataType) -> Result<DataType> {
+    pub(crate) fn convert_data_type(
+        &self,
+        sql_type: &SQLDataType,
+    ) -> Result<LogicalType> {
         match sql_type {
             SQLDataType::Array(ArrayElemTypeDef::AngleBracket(inner_sql_type))
             | SQLDataType::Array(ArrayElemTypeDef::SquareBracket(inner_sql_type)) => {
                 let data_type = self.convert_simple_data_type(inner_sql_type)?;
 
-                Ok(DataType::List(Arc::new(Field::new(
-                    "field", data_type, true,
-                ))))
+                Ok(LogicalType::List(Box::new(data_type)))
             }
             SQLDataType::Array(ArrayElemTypeDef::None) => {
                 not_impl_err!("Arrays with unspecified type is not supported")
@@ -312,26 +321,26 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         }
     }
 
-    fn convert_simple_data_type(&self, sql_type: &SQLDataType) -> Result<DataType> {
+    fn convert_simple_data_type(&self, sql_type: &SQLDataType) -> Result<LogicalType> {
         match sql_type {
-            SQLDataType::Boolean | SQLDataType::Bool => Ok(DataType::Boolean),
-            SQLDataType::TinyInt(_) => Ok(DataType::Int8),
-            SQLDataType::SmallInt(_) | SQLDataType::Int2(_) => Ok(DataType::Int16),
-            SQLDataType::Int(_) | SQLDataType::Integer(_) | SQLDataType::Int4(_) => Ok(DataType::Int32),
-            SQLDataType::BigInt(_) | SQLDataType::Int8(_) => Ok(DataType::Int64),
-            SQLDataType::UnsignedTinyInt(_) => Ok(DataType::UInt8),
-            SQLDataType::UnsignedSmallInt(_) | SQLDataType::UnsignedInt2(_) => Ok(DataType::UInt16),
+            SQLDataType::Boolean | SQLDataType::Bool => Ok(LogicalType::Boolean),
+            SQLDataType::TinyInt(_) => Ok(LogicalType::Int8),
+            SQLDataType::SmallInt(_) | SQLDataType::Int2(_) => Ok(LogicalType::Int16),
+            SQLDataType::Int(_) | SQLDataType::Integer(_) | SQLDataType::Int4(_) => Ok(LogicalType::Int32),
+            SQLDataType::BigInt(_) | SQLDataType::Int8(_) => Ok(LogicalType::Int64),
+            SQLDataType::UnsignedTinyInt(_) => Ok(LogicalType::UInt8),
+            SQLDataType::UnsignedSmallInt(_) | SQLDataType::UnsignedInt2(_) => Ok(LogicalType::UInt16),
             SQLDataType::UnsignedInt(_) | SQLDataType::UnsignedInteger(_) | SQLDataType::UnsignedInt4(_) => {
-                Ok(DataType::UInt32)
+                Ok(LogicalType::UInt32)
             }
-            SQLDataType::UnsignedBigInt(_) | SQLDataType::UnsignedInt8(_) => Ok(DataType::UInt64),
-            SQLDataType::Float(_) => Ok(DataType::Float32),
-            SQLDataType::Real | SQLDataType::Float4 => Ok(DataType::Float32),
-            SQLDataType::Double | SQLDataType::DoublePrecision | SQLDataType::Float8 => Ok(DataType::Float64),
+            SQLDataType::UnsignedBigInt(_) | SQLDataType::UnsignedInt8(_) => Ok(LogicalType::UInt64),
+            SQLDataType::Float(_) => Ok(LogicalType::Float32),
+            SQLDataType::Real | SQLDataType::Float4 => Ok(LogicalType::Float32),
+            SQLDataType::Double | SQLDataType::DoublePrecision | SQLDataType::Float8 => Ok(LogicalType::Float64),
             SQLDataType::Char(_)
             | SQLDataType::Varchar(_)
             | SQLDataType::Text
-            | SQLDataType::String(_) => Ok(DataType::Utf8),
+            | SQLDataType::String(_) => Ok(LogicalType::Utf8),
             SQLDataType::Timestamp(None, tz_info) => {
                 let tz = if matches!(tz_info, TimezoneInfo::Tz)
                     || matches!(tz_info, TimezoneInfo::WithTimeZone)
@@ -344,14 +353,14 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     // Timestamp Without Time zone
                     None
                 };
-                Ok(DataType::Timestamp(TimeUnit::Nanosecond, tz.map(Into::into)))
+                Ok(LogicalType::Timestamp(TimeUnit::Nanosecond, tz.map(Into::into)))
             }
-            SQLDataType::Date => Ok(DataType::Date32),
+            SQLDataType::Date => Ok(LogicalType::Date32),
             SQLDataType::Time(None, tz_info) => {
                 if matches!(tz_info, TimezoneInfo::None)
                     || matches!(tz_info, TimezoneInfo::WithoutTimeZone)
                 {
-                    Ok(DataType::Time64(TimeUnit::Nanosecond))
+                    Ok(LogicalType::Time64(TimeUnit::Nanosecond))
                 } else {
                     // We dont support TIMETZ and TIME WITH TIME ZONE for now
                     not_impl_err!(
@@ -370,11 +379,21 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 };
                 make_decimal_type(precision, scale)
             }
-            SQLDataType::Bytea => Ok(DataType::Binary),
-            SQLDataType::Interval => Ok(DataType::Interval(IntervalUnit::MonthDayNano)),
+            SQLDataType::Bytea => Ok(LogicalType::Binary),
+            SQLDataType::Interval => Ok(LogicalType::Interval(IntervalUnit::MonthDayNano)),
             // Explicitly list all other types so that if sqlparser
             // adds/changes the `SQLDataType` the compiler will tell us on upgrade
             // and avoid bugs like https://github.com/apache/arrow-datafusion/issues/3059
+            SQLDataType::Custom(name, params) => {
+                let name = object_name_to_string(name);
+                let params = params.iter().map(Into::into).collect();
+                let type_signature = TypeSignature::new_with_params(name, params);
+                if let Some(data_type) = self.context_provider.get_data_type(&type_signature) {
+                    return Ok(data_type);
+                }
+
+                plan_err!("User-Defined SQL type {sql_type:?} not found")
+            }
             SQLDataType::Nvarchar(_)
             | SQLDataType::JSON
             | SQLDataType::Uuid
@@ -383,7 +402,6 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             | SQLDataType::Blob(_)
             | SQLDataType::Datetime(_)
             | SQLDataType::Regclass
-            | SQLDataType::Custom(_, _)
             | SQLDataType::Array(_)
             | SQLDataType::Enum(_)
             | SQLDataType::Set(_)

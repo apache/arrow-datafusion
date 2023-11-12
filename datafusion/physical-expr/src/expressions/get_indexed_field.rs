@@ -18,7 +18,7 @@
 //! get field of a `ListArray`
 
 use crate::PhysicalExpr;
-use datafusion_common::exec_err;
+use datafusion_common::{exec_err, plan_err};
 
 use crate::array_expressions::{array_element, array_slice};
 use crate::physical_expr::down_cast_any_ref;
@@ -144,14 +144,33 @@ impl GetIndexedFieldExpr {
             GetFieldAccessExpr::NamedStructField { name } => {
                 GetFieldAccessSchema::NamedStructField { name: name.clone() }
             }
-            GetFieldAccessExpr::ListIndex { key } => GetFieldAccessSchema::ListIndex {
-                key_dt: key.data_type(input_schema)?,
-            },
-            GetFieldAccessExpr::ListRange { start, stop } => {
-                GetFieldAccessSchema::ListRange {
-                    start_dt: start.data_type(input_schema)?,
-                    stop_dt: stop.data_type(input_schema)?,
+            GetFieldAccessExpr::ListIndex { key } => {
+                let data_type = key.data_type(input_schema)?;
+                match data_type {
+                    DataType::Int64 => {}
+                    _ => {
+                        return plan_err!(
+                            "Only ints are valid as an indexed field in a list"
+                        );
+                    }
                 }
+
+                GetFieldAccessSchema::ListIndex
+            }
+            GetFieldAccessExpr::ListRange { start, stop } => {
+                match (
+                    start.data_type(input_schema)?,
+                    stop.data_type(input_schema)?,
+                ) {
+                    (DataType::Int64, DataType::Int64) => {}
+                    _ => {
+                        return plan_err!(
+                            "Only ints are valid as an indexed field in a list"
+                        );
+                    }
+                }
+
+                GetFieldAccessSchema::ListRange
             }
         })
     }

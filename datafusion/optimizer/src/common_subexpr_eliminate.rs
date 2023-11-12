@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use crate::{utils, OptimizerConfig, OptimizerRule};
 
-use arrow::datatypes::DataType;
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::tree_node::{
     RewriteRecursion, TreeNode, TreeNodeRewriter, TreeNodeVisitor, VisitRecursion,
 };
@@ -39,7 +39,7 @@ use datafusion_expr::{col, Expr, ExprSchemable};
 /// - the expression itself (cloned)
 /// - counter
 /// - DataType of this expression.
-type ExprSet = HashMap<Identifier, (Expr, usize, DataType)>;
+type ExprSet = HashMap<Identifier, (Expr, usize, LogicalType)>;
 
 /// Identifier type. Current implementation use describe of a expression (type String) as
 /// Identifier.
@@ -794,8 +794,8 @@ mod test {
 
         let schema = Arc::new(DFSchema::new_with_metadata(
             vec![
-                DFField::new_unqualified("a", DataType::Int64, false),
-                DFField::new_unqualified("c", DataType::Int64, false),
+                DFField::new_unqualified("a", LogicalType::Int64, false),
+                DFField::new_unqualified("c", LogicalType::Int64, false),
             ],
             Default::default(),
         )?);
@@ -1287,7 +1287,7 @@ mod test {
     fn test_extract_expressions_from_col() -> Result<()> {
         let mut result = Vec::with_capacity(1);
         let schema = DFSchema::new_with_metadata(
-            vec![DFField::new_unqualified("a", DataType::Int32, false)],
+            vec![DFField::new_unqualified("a", LogicalType::Int32, false)],
             HashMap::default(),
         )?;
         extract_expressions(&col("a"), &schema, &mut result)?;

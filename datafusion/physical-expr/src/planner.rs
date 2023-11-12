@@ -25,6 +25,7 @@ use crate::{
     PhysicalExpr,
 };
 use arrow::datatypes::Schema;
+use datafusion_common::logical_type::ExtensionType;
 use datafusion_common::{
     exec_err, internal_err, not_impl_err, plan_err, DFSchema, DataFusionError, Result,
     ScalarValue,
@@ -278,12 +279,12 @@ pub fn create_physical_expr(
         Expr::Cast(Cast { expr, data_type }) => expressions::cast(
             create_physical_expr(expr, input_dfschema, input_schema, execution_props)?,
             input_schema,
-            data_type.clone(),
+            data_type.physical_type(),
         ),
         Expr::TryCast(TryCast { expr, data_type }) => expressions::try_cast(
             create_physical_expr(expr, input_dfschema, input_schema, execution_props)?,
             input_schema,
-            data_type.clone(),
+            data_type.physical_type(),
         ),
         Expr::Not(expr) => expressions::not(create_physical_expr(
             expr,

@@ -33,6 +33,7 @@ pub mod display;
 pub mod file_options;
 pub mod format;
 pub mod hash_utils;
+pub mod logical_type;
 pub mod parsers;
 pub mod scalar;
 pub mod stats;

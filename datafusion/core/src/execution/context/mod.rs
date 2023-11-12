@@ -37,13 +37,18 @@ use crate::{
 };
 use datafusion_common::{
     alias::AliasGenerator,
-    exec_err, not_impl_err, plan_datafusion_err, plan_err,
+    exec_err,
+    logical_type::{
+        ExtensionType, ExtensionTypeRef, LogicalType, NamedLogicalType,
+        OwnedTypeSignature, TypeManager, TypeSignature,
+    },
+    not_impl_err, plan_datafusion_err, plan_err,
     tree_node::{TreeNode, TreeNodeVisitor, VisitRecursion},
 };
 use datafusion_execution::registry::SerializerRegistry;
 use datafusion_expr::{
     logical_plan::{DdlStatement, Statement},
-    StringifiedPlan, UserDefinedLogicalNode, WindowUDF,
+    CreateType, StringifiedPlan, UserDefinedLogicalNode, WindowUDF,
 };
 pub use datafusion_physical_expr::execution_props::ExecutionProps;
 use datafusion_physical_expr::var_provider::is_system_variables;
@@ -57,7 +62,7 @@ use std::{
 };
 use std::{ops::ControlFlow, sync::Weak};
 
-use arrow::datatypes::{DataType, SchemaRef};
+use arrow::datatypes::SchemaRef;
 use arrow::record_batch::RecordBatch;
 
 use crate::catalog::{
@@ -483,6 +488,7 @@ impl SessionContext {
                     self.create_catalog_schema(cmd).await
                 }
                 DdlStatement::CreateCatalog(cmd) => self.create_catalog(cmd).await,
+                DdlStatement::CreateType(cmd) => self.create_type(cmd).await,
                 DdlStatement::DropTable(cmd) => self.drop_table(cmd).await,
                 DdlStatement::DropView(cmd) => self.drop_view(cmd).await,
                 DdlStatement::DropCatalogSchema(cmd) => self.drop_schema(cmd).await,
@@ -659,6 +665,28 @@ impl SessionContext {
             }
             (false, Some(_)) => exec_err!("Catalog '{catalog_name}' already exists"),
         }
+    }
+
+    async fn create_type(&self, cmd: CreateType) -> Result<DataFrame> {
+        let CreateType {
+            name, data_type, ..
+        } = cmd;
+
+        let extension_type = Arc::new(NamedLogicalType::new(name, data_type));
+        let name = extension_type.display_name();
+        let type_signature = extension_type.type_signature();
+
+        let exists_type = self.data_type(&type_signature)?;
+        if exists_type.is_some() {
+            return exec_err!("DataType '{name}' already exists");
+        }
+
+        self.register_data_type(
+            type_signature.to_owned_type_signature(),
+            extension_type,
+        )?;
+
+        self.return_empty_dataframe()
     }
 
     async fn drop_table(&self, cmd: DropTable) -> Result<DataFrame> {
@@ -1007,6 +1035,25 @@ impl SessionContext {
         self.state.read().catalog_list.catalog(name)
     }
 
+    /// TODO
+    pub fn data_type(
+        &self,
+        signature: &TypeSignature,
+    ) -> Result<Option<ExtensionTypeRef>> {
+        self.state.read().data_type(signature)
+    }
+
+    /// TODO
+    pub fn register_data_type(
+        &self,
+        signature: impl Into<TypeSignature<'static>>,
+        extension_type: ExtensionTypeRef,
+    ) -> Result<()> {
+        self.state
+            .write()
+            .register_data_type(signature, extension_type)
+    }
+
     /// Registers a [`TableProvider`] as a table that can be
     /// referenced from SQL statements executed against this context.
     ///
@@ -1230,6 +1277,7 @@ pub struct SessionState {
     aggregate_functions: HashMap<String, Arc<AggregateUDF>>,
     /// Window functions registered in the context
     window_functions: HashMap<String, Arc<WindowUDF>>,
+    data_types: HashMap<OwnedTypeSignature, ExtensionTypeRef>,
     /// Deserializer registry for extensions.
     serializer_registry: Arc<dyn SerializerRegistry>,
     /// Session configuration
@@ -1325,6 +1373,7 @@ impl SessionState {
             scalar_functions: HashMap::new(),
             aggregate_functions: HashMap::new(),
             window_functions: HashMap::new(),
+            data_types: HashMap::new(),
             serializer_registry: Arc::new(EmptySerializerRegistry),
             config,
             execution_props: ExecutionProps::new(),
@@ -1846,6 +1895,22 @@ impl SessionState {
     }
 }
 
+impl TypeManager for SessionState {
+    fn register_data_type(
+        &mut self,
+        signature: impl Into<OwnedTypeSignature>,
+        extension_type: ExtensionTypeRef,
+    ) -> Result<()> {
+        self.data_types.insert(signature.into(), extension_type);
+
+        Ok(())
+    }
+
+    fn data_type(&self, signature: &TypeSignature) -> Result<Option<ExtensionTypeRef>> {
+        Ok(self.data_types.get(signature).cloned())
+    }
+}
+
 struct SessionContextProvider<'a> {
     state: &'a SessionState,
     tables: HashMap<String, Arc<dyn TableSource>>,
@@ -1872,7 +1937,7 @@ impl<'a> ContextProvider for SessionContextProvider<'a> {
         self.state.window_functions().get(name).cloned()
     }
 
-    fn get_variable_type(&self, variable_names: &[String]) -> Option<DataType> {
+    fn get_variable_type(&self, variable_names: &[String]) -> Option<LogicalType> {
         if variable_names.is_empty() {
             return None;
         }
@@ -1888,6 +1953,14 @@ impl<'a> ContextProvider for SessionContextProvider<'a> {
             .var_providers
             .as_ref()
             .and_then(|provider| provider.get(&provider_type)?.get_type(variable_names))
+    }
+
+    fn get_data_type(&self, signature: &TypeSignature) -> Option<LogicalType> {
+        self.state
+            .data_type(signature)
+            .ok()
+            .flatten()
+            .map(LogicalType::Extension)
     }
 
     fn options(&self) -> &ConfigOptions {

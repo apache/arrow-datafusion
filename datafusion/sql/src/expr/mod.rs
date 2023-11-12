@@ -28,7 +28,7 @@ mod unary_op;
 mod value;
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
-use arrow_schema::DataType;
+use datafusion_common::logical_type::LogicalType;
 use datafusion_common::{
     internal_err, not_impl_err, plan_err, Column, DFSchema, DataFusionError, Result,
     ScalarValue,
@@ -584,7 +584,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     ) -> Result<Expr> {
         let pattern = self.sql_expr_to_logical_expr(pattern, schema, planner_context)?;
         let pattern_type = pattern.get_type(schema)?;
-        if pattern_type != DataType::Utf8 && pattern_type != DataType::Null {
+        if pattern_type != LogicalType::Utf8 && pattern_type != LogicalType::Null {
             return plan_err!("Invalid pattern in LIKE expression");
         }
         Ok(Expr::Like(Like::new(
@@ -607,7 +607,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     ) -> Result<Expr> {
         let pattern = self.sql_expr_to_logical_expr(pattern, schema, planner_context)?;
         let pattern_type = pattern.get_type(schema)?;
-        if pattern_type != DataType::Utf8 && pattern_type != DataType::Null {
+        if pattern_type != LogicalType::Utf8 && pattern_type != LogicalType::Null {
             return plan_err!("Invalid pattern in SIMILAR TO expression");
         }
         Ok(Expr::SimilarTo(Like::new(
@@ -750,6 +750,7 @@ mod tests {
     use std::sync::Arc;
 
     use arrow::datatypes::{DataType, Field, Schema};
+    use datafusion_common::logical_type::LogicalType;
     use sqlparser::dialect::GenericDialect;
     use sqlparser::parser::Parser;
 
@@ -799,7 +800,7 @@ mod tests {
             None
         }
 
-        fn get_variable_type(&self, _variable_names: &[String]) -> Option<DataType> {
+        fn get_variable_type(&self, _variable_names: &[String]) -> Option<LogicalType> {
             None
         }
 
