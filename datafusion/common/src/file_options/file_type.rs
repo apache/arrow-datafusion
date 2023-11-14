@@ -48,7 +48,6 @@ pub enum FileType {
     /// Apache Avro file
     AVRO,
     /// Apache Parquet file
-    #[cfg(feature = "parquet")]
     PARQUET,
     /// CSV file
     CSV,
@@ -61,7 +60,6 @@ impl GetExt for FileType {
         match self {
             FileType::ARROW => DEFAULT_ARROW_EXTENSION.to_owned(),
             FileType::AVRO => DEFAULT_AVRO_EXTENSION.to_owned(),
-            #[cfg(feature = "parquet")]
             FileType::PARQUET => DEFAULT_PARQUET_EXTENSION.to_owned(),
             FileType::CSV => DEFAULT_CSV_EXTENSION.to_owned(),
             FileType::JSON => DEFAULT_JSON_EXTENSION.to_owned(),
@@ -74,7 +72,6 @@ impl Display for FileType {
         let out = match self {
             FileType::CSV => "csv",
             FileType::JSON => "json",
-            #[cfg(feature = "parquet")]
             FileType::PARQUET => "parquet",
             FileType::AVRO => "avro",
             FileType::ARROW => "arrow",
@@ -91,7 +88,6 @@ impl FromStr for FileType {
         match s.as_str() {
             "ARROW" => Ok(FileType::ARROW),
             "AVRO" => Ok(FileType::AVRO),
-            #[cfg(feature = "parquet")]
             "PARQUET" => Ok(FileType::PARQUET),
             "CSV" => Ok(FileType::CSV),
             "JSON" | "NDJSON" => Ok(FileType::JSON),

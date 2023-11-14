@@ -180,7 +180,6 @@ pub fn arrow_test_data() -> String {
 /// let filename = format!("{}/binary.parquet", testdata);
 /// assert!(std::path::PathBuf::from(filename).exists());
 /// ```
-#[cfg(feature = "parquet")]
 pub fn parquet_test_data() -> String {
     match get_data_dir("PARQUET_TEST_DATA", "../../parquet-testing/data") {
         Ok(pb) => pb.display().to_string(),

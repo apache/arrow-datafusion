@@ -23,7 +23,6 @@ use std::{any::Any, sync::Arc};
 use super::helpers::{expr_applicable_for_cols, pruned_partition_list, split_files};
 use super::PartitionedFile;
 
-#[cfg(feature = "parquet")]
 use crate::datasource::file_format::parquet::ParquetFormat;
 use crate::datasource::{
     file_format::{
@@ -151,7 +150,6 @@ impl ListingTableConfig {
             FileType::JSON => Arc::new(
                 JsonFormat::default().with_file_compression_type(file_compression_type),
             ),
-            #[cfg(feature = "parquet")]
             FileType::PARQUET => Arc::new(ParquetFormat::default()),
         };
 
@@ -1024,7 +1022,6 @@ mod tests {
     use std::fs::File;
 
     use super::*;
-    #[cfg(feature = "parquet")]
     use crate::datasource::file_format::parquet::ParquetFormat;
     use crate::datasource::{provider_as_source, MemTable};
     use crate::execution::options::ArrowReadOptions;

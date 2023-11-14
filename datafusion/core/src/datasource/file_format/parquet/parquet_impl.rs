@@ -54,17 +54,20 @@ use parquet::file::metadata::ParquetMetaData;
 use parquet::file::properties::WriterProperties;
 use parquet::file::statistics::Statistics as ParquetStatistics;
 
-use super::write::demux::start_demuxer_task;
-use super::write::{create_writer, AbortableWrite, FileWriterMode};
-use super::{FileFormat, FileScanConfig};
 use crate::arrow::array::{
     BooleanArray, Float32Array, Float64Array, Int32Array, Int64Array,
 };
 use crate::arrow::datatypes::DataType;
 use crate::config::ConfigOptions;
+use crate::datasource::file_format::write::demux::start_demuxer_task;
+use crate::datasource::file_format::write::{
+    create_writer, AbortableWrite, FileWriterMode,
+};
+use crate::datasource::file_format::FileFormat;
 
 use crate::datasource::physical_plan::{
-    FileGroupDisplay, FileMeta, FileSinkConfig, ParquetExec, SchemaAdapter,
+    FileGroupDisplay, FileMeta, FileScanConfig, FileSinkConfig, ParquetExec,
+    SchemaAdapter,
 };
 use crate::error::Result;
 use crate::execution::context::SessionState;
@@ -1204,7 +1207,6 @@ pub(crate) mod test_util {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_util::scan_format;
     use crate::physical_plan::collect;
     use std::fmt::{Display, Formatter};
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1212,6 +1214,7 @@ mod tests {
     use super::*;
 
     use crate::datasource::file_format::parquet::test_util::store_parquet;
+    use crate::datasource::file_format::test_util::scan_format;
     use crate::physical_plan::metrics::MetricValue;
     use crate::prelude::{SessionConfig, SessionContext};
     use arrow::array::{Array, ArrayRef, StringArray};

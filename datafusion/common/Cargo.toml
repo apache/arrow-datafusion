@@ -35,7 +35,8 @@ path = "src/lib.rs"
 [features]
 avro = ["apache-avro"]
 backtrace = []
-pyarrow = ["pyo3", "arrow/pyarrow", "parquet"]
+default = ["parquet"]
+pyarrow = ["pyo3", "arrow/pyarrow"]
 
 [dependencies]
 ahash = { version = "0.8", default-features = false, features = ["runtime-rng"] }

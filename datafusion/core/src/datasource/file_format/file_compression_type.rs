@@ -243,7 +243,6 @@ impl FileTypeExt for FileType {
                     "FileCompressionType can be specified for CSV/JSON FileType.".into(),
                 )),
             },
-            #[cfg(feature = "parquet")]
             FileType::PARQUET => match c.variant {
                 UNCOMPRESSED => Ok(ext),
                 _ => Err(DataFusionError::Internal(
@@ -285,7 +284,6 @@ mod tests {
 
         let mut ty_ext_tuple = vec![];
         ty_ext_tuple.push((FileType::AVRO, ".avro"));
-        #[cfg(feature = "parquet")]
         ty_ext_tuple.push((FileType::PARQUET, ".parquet"));
 
         // Cannot specify compression for these file types

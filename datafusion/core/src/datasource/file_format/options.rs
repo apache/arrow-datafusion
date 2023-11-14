@@ -25,7 +25,6 @@ use datafusion_common::{plan_err, DataFusionError};
 
 use crate::datasource::file_format::arrow::ArrowFormat;
 use crate::datasource::file_format::file_compression_type::FileCompressionType;
-#[cfg(feature = "parquet")]
 use crate::datasource::file_format::parquet::ParquetFormat;
 use crate::datasource::file_format::DEFAULT_SCHEMA_INFER_MAX_RECORD;
 use crate::datasource::listing::{ListingTableInsertMode, ListingTableUrl};

@@ -1284,7 +1284,6 @@ impl SessionState {
         // Create table_factories for all default formats
         let mut table_factories: HashMap<String, Arc<dyn TableProviderFactory>> =
             HashMap::new();
-        #[cfg(feature = "parquet")]
         table_factories.insert("PARQUET".into(), Arc::new(ListingTableFactory::new()));
         table_factories.insert("CSV".into(), Arc::new(ListingTableFactory::new()));
         table_factories.insert("JSON".into(), Arc::new(ListingTableFactory::new()));

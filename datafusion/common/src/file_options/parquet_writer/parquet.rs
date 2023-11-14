@@ -21,8 +21,7 @@ use parquet::file::properties::{WriterProperties, WriterPropertiesBuilder};
 
 use crate::{config::ConfigOptions, DataFusionError, Result};
 
-use super::StatementOptions;
-
+use crate::file_options::StatementOptions;
 use parquet::{
     basic::{BrotliLevel, GzipLevel, ZstdLevel},
     file::properties::{EnabledStatistics, WriterVersion},

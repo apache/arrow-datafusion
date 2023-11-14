@@ -23,7 +23,6 @@ use std::sync::Arc;
 
 use super::listing::ListingTableInsertMode;
 
-#[cfg(feature = "parquet")]
 use crate::datasource::file_format::parquet::ParquetFormat;
 use crate::datasource::file_format::{
     arrow::ArrowFormat, avro::AvroFormat, csv::CsvFormat,
@@ -80,7 +79,6 @@ impl TableProviderFactory for ListingTableFactory {
                     .with_delimiter(cmd.delimiter as u8)
                     .with_file_compression_type(file_compression_type),
             ),
-            #[cfg(feature = "parquet")]
             FileType::PARQUET => Arc::new(ParquetFormat::default()),
             FileType::AVRO => Arc::new(AvroFormat),
             FileType::JSON => Arc::new(
@@ -159,7 +157,6 @@ impl TableProviderFactory for ListingTableFactory {
             Some(mode) => ListingTableInsertMode::from_str(mode.as_str()),
             None => match file_type {
                 FileType::CSV => Ok(ListingTableInsertMode::AppendToFile),
-                #[cfg(feature = "parquet")]
                 FileType::PARQUET => Ok(ListingTableInsertMode::AppendNewFiles),
                 FileType::AVRO => Ok(ListingTableInsertMode::AppendNewFiles),
                 FileType::JSON => Ok(ListingTableInsertMode::AppendToFile),
@@ -199,7 +196,6 @@ impl TableProviderFactory for ListingTableFactory {
                 json_writer_options.compression = cmd.file_compression_type;
                 FileTypeWriterOptions::JSON(json_writer_options)
             }
-            #[cfg(feature = "parquet")]
             FileType::PARQUET => file_type_writer_options,
             FileType::ARROW => file_type_writer_options,
             FileType::AVRO => file_type_writer_options,

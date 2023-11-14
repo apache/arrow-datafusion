@@ -54,7 +54,6 @@ use async_trait::async_trait;
 use futures::Stream;
 
 // backwards compatibility
-#[cfg(feature = "parquet")]
 pub use datafusion_common::test_util::parquet_test_data;
 pub use datafusion_common::test_util::{arrow_test_data, get_data_dir};
 
