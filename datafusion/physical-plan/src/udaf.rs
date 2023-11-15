@@ -32,6 +32,7 @@ pub use datafusion_expr::AggregateUDF;
 use datafusion_physical_expr::PhysicalExpr;
 
 use datafusion_physical_expr::aggregate::utils::down_cast_any_ref;
+use datafusion_physical_expr::utils::extract_constant_args;
 use std::sync::Arc;
 
 /// Creates a physical expression of the UDAF, that includes all necessary type coercion.
@@ -46,11 +47,16 @@ pub fn create_aggregate_expr(
         .iter()
         .map(|arg| arg.data_type(input_schema))
         .collect::<Result<Vec<_>>>()?;
+    let constant_args = extract_constant_args(input_phy_exprs);
 
     Ok(Arc::new(AggregateFunctionExpr {
         fun: fun.clone(),
         args: input_phy_exprs.to_vec(),
-        data_type: (fun.return_type)(&input_exprs_types)?.as_ref().clone(),
+        data_type: fun
+            .return_type
+            .infer(&input_exprs_types, &constant_args)?
+            .as_ref()
+            .clone(),
         name: name.into(),
     }))
 }

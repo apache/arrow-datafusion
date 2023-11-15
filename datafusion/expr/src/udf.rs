@@ -17,6 +17,7 @@
 
 //! Udf module contains foundational types that are used to represent UDFs in DataFusion.
 
+use crate::function::ReturnTypeFactory;
 use crate::{Expr, ReturnTypeFunction, ScalarFunctionImplementation, Signature};
 use std::fmt;
 use std::fmt::Debug;
@@ -31,7 +32,7 @@ pub struct ScalarUDF {
     /// signature
     pub signature: Signature,
     /// Return type
-    pub return_type: ReturnTypeFunction,
+    pub return_type: Arc<dyn ReturnTypeFactory>,
     /// actual implementation
     ///
     /// The fn param is the wrapped function but be aware that the function will
@@ -79,7 +80,7 @@ impl ScalarUDF {
         Self {
             name: name.to_owned(),
             signature: signature.clone(),
-            return_type: return_type.clone(),
+            return_type: Arc::new(return_type.clone()),
             fun: fun.clone(),
         }
     }

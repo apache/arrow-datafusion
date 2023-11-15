@@ -48,6 +48,7 @@ mod bounded_window_agg_exec;
 mod window_agg_exec;
 
 pub use bounded_window_agg_exec::BoundedWindowAggExec;
+use datafusion_physical_expr::utils::extract_constant_args;
 pub use window_agg_exec::WindowAggExec;
 
 pub use datafusion_physical_expr::window::{
@@ -253,9 +254,10 @@ fn create_udwf_window_expr(
         .iter()
         .map(|arg| arg.data_type(input_schema))
         .collect::<Result<_>>()?;
+    let constant_args = extract_constant_args(args);
 
     // figure out the output type
-    let data_type = (fun.return_type)(&input_types)?;
+    let data_type = fun.return_type.infer(&input_types, &constant_args)?;
     Ok(Arc::new(WindowUDFExpr {
         fun: Arc::clone(fun),
         args: args.to_vec(),

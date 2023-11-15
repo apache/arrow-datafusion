@@ -22,6 +22,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::function::ReturnTypeFactory;
 use crate::{
     Expr, PartitionEvaluatorFactory, ReturnTypeFunction, Signature, WindowFrame,
 };
@@ -39,7 +40,7 @@ pub struct WindowUDF {
     /// signature
     pub signature: Signature,
     /// Return type
-    pub return_type: ReturnTypeFunction,
+    pub return_type: Arc<dyn ReturnTypeFactory>,
     /// Return the partition evaluator
     pub partition_evaluator_factory: PartitionEvaluatorFactory,
 }
@@ -88,7 +89,7 @@ impl WindowUDF {
         Self {
             name: name.to_owned(),
             signature: signature.clone(),
-            return_type: return_type.clone(),
+            return_type: Arc::new(return_type.clone()),
             partition_evaluator_factory: partition_evaluator_factory.clone(),
         }
     }

@@ -22,6 +22,7 @@ use crate::expr::{
     TryCast, WindowFunction,
 };
 use crate::field_util::GetFieldAccessSchema;
+use crate::function::ConstantArg;
 use crate::type_coercion::binary::get_result_type;
 use crate::type_coercion::functions::data_types;
 use crate::{utils, LogicalPlan, Projection, Subquery};
@@ -87,7 +88,12 @@ impl ExprSchemable for Expr {
                     .iter()
                     .map(|e| e.get_type(schema))
                     .collect::<Result<Vec<_>>>()?;
-                Ok((fun.return_type)(&data_types)?.as_ref().clone())
+                let constant_args = extract_constant_args(&args);
+                Ok(fun
+                    .return_type
+                    .infer(&data_types, &constant_args)?
+                    .as_ref()
+                    .clone())
             }
             Expr::ScalarFunction(ScalarFunction { fun, args }) => {
                 let arg_data_types = args
@@ -114,7 +120,8 @@ impl ExprSchemable for Expr {
                     .iter()
                     .map(|e| e.get_type(schema))
                     .collect::<Result<Vec<_>>>()?;
-                fun.return_type(&data_types)
+                let constant_args = extract_constant_args(&args);
+                fun.return_type(&data_types, &constant_args)
             }
             Expr::AggregateFunction(AggregateFunction { fun, args, .. }) => {
                 let data_types = args
@@ -128,7 +135,12 @@ impl ExprSchemable for Expr {
                     .iter()
                     .map(|e| e.get_type(schema))
                     .collect::<Result<Vec<_>>>()?;
-                Ok((fun.return_type)(&data_types)?.as_ref().clone())
+                let constant_args = extract_constant_args(&args);
+                Ok(fun
+                    .return_type
+                    .infer(&data_types, &constant_args)?
+                    .as_ref()
+                    .clone())
             }
             Expr::Not(_)
             | Expr::IsNull(_)
@@ -348,6 +360,17 @@ impl ExprSchemable for Expr {
             plan_err!("Cannot automatically convert {this_type:?} to {cast_to_type:?}")
         }
     }
+}
+
+/// Extract constant from input Expr
+pub fn extract_constant_args(args: &[Expr]) -> Vec<ConstantArg> {
+    let mut constant_args = vec![];
+    args.iter().enumerate().for_each(|(i, arg)| {
+        if let Expr::Literal(scalar_value) = arg {
+            constant_args.push((i, scalar_value.clone()));
+        }
+    });
+    constant_args
 }
 
 /// return the schema [`Field`] for the type referenced by `get_indexed_field`

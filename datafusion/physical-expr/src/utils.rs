@@ -31,6 +31,7 @@ use datafusion_common::tree_node::{
 use datafusion_common::Result;
 use datafusion_expr::Operator;
 
+use datafusion_expr::function::ConstantArg;
 use itertools::Itertools;
 use petgraph::graph::NodeIndex;
 use petgraph::stable_graph::StableGraph;
@@ -357,6 +358,18 @@ pub fn merge_vectors(
         .chain(right.iter().cloned())
         .unique()
         .collect()
+}
+
+/// Extract constant from input PhysicalExprs
+pub fn extract_constant_args(args: &[Arc<dyn PhysicalExpr>]) -> Vec<ConstantArg> {
+    let mut constant_args = vec![];
+    args.iter().enumerate().for_each(|(i, expr)| {
+        if let Some(literal) = expr.as_any().downcast_ref::<crate::expressions::Literal>()
+        {
+            constant_args.push((i, literal.value().clone()));
+        }
+    });
+    constant_args
 }
 
 #[cfg(test)]

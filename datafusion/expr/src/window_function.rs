@@ -21,6 +21,7 @@
 //! see also <https://www.postgresql.org/docs/current/functions-window.html>
 
 use crate::aggregate_function::AggregateFunction;
+use crate::function::ConstantArg;
 use crate::type_coercion::functions::data_types;
 use crate::utils;
 use crate::{AggregateUDF, Signature, TypeSignature, Volatility, WindowUDF};
@@ -160,23 +161,31 @@ pub fn return_type(
     fun: &WindowFunction,
     input_expr_types: &[DataType],
 ) -> Result<DataType> {
-    fun.return_type(input_expr_types)
+    fun.return_type(input_expr_types, &[])
 }
 
 impl WindowFunction {
     /// Returns the datatype of the window function
-    pub fn return_type(&self, input_expr_types: &[DataType]) -> Result<DataType> {
+    pub fn return_type(
+        &self,
+        input_expr_types: &[DataType],
+        constant_args: &[ConstantArg],
+    ) -> Result<DataType> {
         match self {
             WindowFunction::AggregateFunction(fun) => fun.return_type(input_expr_types),
             WindowFunction::BuiltInWindowFunction(fun) => {
                 fun.return_type(input_expr_types)
             }
-            WindowFunction::AggregateUDF(fun) => {
-                Ok((*(fun.return_type)(input_expr_types)?).clone())
-            }
-            WindowFunction::WindowUDF(fun) => {
-                Ok((*(fun.return_type)(input_expr_types)?).clone())
-            }
+            WindowFunction::AggregateUDF(fun) => Ok(fun
+                .return_type
+                .infer(input_expr_types, constant_args)?
+                .as_ref()
+                .clone()),
+            WindowFunction::WindowUDF(fun) => Ok(fun
+                .return_type
+                .infer(input_expr_types, constant_args)?
+                .as_ref()
+                .clone()),
         }
     }
 }
@@ -286,10 +295,10 @@ mod tests {
     #[test]
     fn test_count_return_type() -> Result<()> {
         let fun = find_df_window_func("count").unwrap();
-        let observed = fun.return_type(&[DataType::Utf8])?;
+        let observed = fun.return_type(&[DataType::Utf8], &[])?;
         assert_eq!(DataType::Int64, observed);
 
-        let observed = fun.return_type(&[DataType::UInt64])?;
+        let observed = fun.return_type(&[DataType::UInt64], &[])?;
         assert_eq!(DataType::Int64, observed);
 
         Ok(())
@@ -298,10 +307,10 @@ mod tests {
     #[test]
     fn test_first_value_return_type() -> Result<()> {
         let fun = find_df_window_func("first_value").unwrap();
-        let observed = fun.return_type(&[DataType::Utf8])?;
+        let observed = fun.return_type(&[DataType::Utf8], &[])?;
         assert_eq!(DataType::Utf8, observed);
 
-        let observed = fun.return_type(&[DataType::UInt64])?;
+        let observed = fun.return_type(&[DataType::UInt64], &[])?;
         assert_eq!(DataType::UInt64, observed);
 
         Ok(())
@@ -310,10 +319,10 @@ mod tests {
     #[test]
     fn test_last_value_return_type() -> Result<()> {
         let fun = find_df_window_func("last_value").unwrap();
-        let observed = fun.return_type(&[DataType::Utf8])?;
+        let observed = fun.return_type(&[DataType::Utf8], &[])?;
         assert_eq!(DataType::Utf8, observed);
 
-        let observed = fun.return_type(&[DataType::Float64])?;
+        let observed = fun.return_type(&[DataType::Float64], &[])?;
         assert_eq!(DataType::Float64, observed);
 
         Ok(())
@@ -322,10 +331,10 @@ mod tests {
     #[test]
     fn test_lead_return_type() -> Result<()> {
         let fun = find_df_window_func("lead").unwrap();
-        let observed = fun.return_type(&[DataType::Utf8])?;
+        let observed = fun.return_type(&[DataType::Utf8], &[])?;
         assert_eq!(DataType::Utf8, observed);
 
-        let observed = fun.return_type(&[DataType::Float64])?;
+        let observed = fun.return_type(&[DataType::Float64], &[])?;
         assert_eq!(DataType::Float64, observed);
 
         Ok(())
@@ -334,10 +343,10 @@ mod tests {
     #[test]
     fn test_lag_return_type() -> Result<()> {
         let fun = find_df_window_func("lag").unwrap();
-        let observed = fun.return_type(&[DataType::Utf8])?;
+        let observed = fun.return_type(&[DataType::Utf8], &[])?;
         assert_eq!(DataType::Utf8, observed);
 
-        let observed = fun.return_type(&[DataType::Float64])?;
+        let observed = fun.return_type(&[DataType::Float64], &[])?;
         assert_eq!(DataType::Float64, observed);
 
         Ok(())
@@ -346,10 +355,10 @@ mod tests {
     #[test]
     fn test_nth_value_return_type() -> Result<()> {
         let fun = find_df_window_func("nth_value").unwrap();
-        let observed = fun.return_type(&[DataType::Utf8, DataType::UInt64])?;
+        let observed = fun.return_type(&[DataType::Utf8, DataType::UInt64], &[])?;
         assert_eq!(DataType::Utf8, observed);
 
-        let observed = fun.return_type(&[DataType::Float64, DataType::UInt64])?;
+        let observed = fun.return_type(&[DataType::Float64, DataType::UInt64], &[])?;
         assert_eq!(DataType::Float64, observed);
 
         Ok(())
@@ -358,7 +367,7 @@ mod tests {
     #[test]
     fn test_percent_rank_return_type() -> Result<()> {
         let fun = find_df_window_func("percent_rank").unwrap();
-        let observed = fun.return_type(&[])?;
+        let observed = fun.return_type(&[], &[])?;
         assert_eq!(DataType::Float64, observed);
 
         Ok(())
@@ -367,7 +376,7 @@ mod tests {
     #[test]
     fn test_cume_dist_return_type() -> Result<()> {
         let fun = find_df_window_func("cume_dist").unwrap();
-        let observed = fun.return_type(&[])?;
+        let observed = fun.return_type(&[], &[])?;
         assert_eq!(DataType::Float64, observed);
 
         Ok(())

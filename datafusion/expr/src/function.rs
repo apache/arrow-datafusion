@@ -21,7 +21,7 @@ use crate::{Accumulator, BuiltinScalarFunction, PartitionEvaluator, Signature};
 use crate::{AggregateFunction, BuiltInWindowFunction, ColumnarValue};
 use arrow::datatypes::DataType;
 use datafusion_common::utils::datafusion_strsim;
-use datafusion_common::Result;
+use datafusion_common::{Result, ScalarValue};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -36,9 +36,31 @@ use strum::IntoEnumIterator;
 pub type ScalarFunctionImplementation =
     Arc<dyn Fn(&[ColumnarValue]) -> Result<ColumnarValue> + Send + Sync>;
 
+/// Constant argument, (arg index, constant value).
+pub type ConstantArg = (usize, ScalarValue);
+
+/// Factory that returns the functions's return type given the input argument types and constant arguments
+pub trait ReturnTypeFactory: Send + Sync {
+    fn infer(
+        &self,
+        input_types: &[DataType],
+        constant_args: &[ConstantArg],
+    ) -> Result<Arc<DataType>>;
+}
+
 /// Factory that returns the functions's return type given the input argument types
 pub type ReturnTypeFunction =
     Arc<dyn Fn(&[DataType]) -> Result<Arc<DataType>> + Send + Sync>;
+
+impl ReturnTypeFactory for ReturnTypeFunction {
+    fn infer(
+        &self,
+        input_types: &[DataType],
+        _constant_args: &[ConstantArg],
+    ) -> Result<Arc<DataType>> {
+        self(input_types)
+    }
+}
 
 /// Factory that returns an accumulator for the given aggregate, given
 /// its return datatype.

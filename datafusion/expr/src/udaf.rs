@@ -17,6 +17,7 @@
 
 //! Udaf module contains functions and structs supporting user-defined aggregate functions.
 
+use crate::function::ReturnTypeFactory;
 use crate::Expr;
 use crate::{
     AccumulatorFactoryFunction, ReturnTypeFunction, Signature, StateTypeFunction,
@@ -50,7 +51,7 @@ pub struct AggregateUDF {
     /// Signature (input arguments)
     pub signature: Signature,
     /// Return type
-    pub return_type: ReturnTypeFunction,
+    pub return_type: Arc<dyn ReturnTypeFactory>,
     /// actual implementation
     pub accumulator: AccumulatorFactoryFunction,
     /// the accumulator's state's description as a function of the return type
@@ -94,7 +95,7 @@ impl AggregateUDF {
         Self {
             name: name.to_owned(),
             signature: signature.clone(),
-            return_type: return_type.clone(),
+            return_type: Arc::new(return_type.clone()),
             accumulator: accumulator.clone(),
             state_type: state_type.clone(),
         }

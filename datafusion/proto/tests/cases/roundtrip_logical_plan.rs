@@ -45,8 +45,9 @@ use datafusion_expr::logical_plan::{Extension, UserDefinedLogicalNodeCore};
 use datafusion_expr::{
     col, create_udaf, lit, Accumulator, AggregateFunction,
     BuiltinScalarFunction::{Sqrt, Substr},
-    Expr, LogicalPlan, Operator, PartitionEvaluator, Signature, TryCast, Volatility,
-    WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunction, WindowUDF,
+    Expr, LogicalPlan, Operator, PartitionEvaluator, ReturnTypeFunction, Signature,
+    TryCast, Volatility, WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunction,
+    WindowUDF,
 };
 use datafusion_proto::bytes::{
     logical_plan_from_bytes, logical_plan_from_bytes_with_extension_codec,
@@ -1554,6 +1555,8 @@ fn roundtrip_window() {
         }
         Ok(Arc::new(arg_types[0].clone()))
     }
+
+    let return_type: ReturnTypeFunction = Arc::new(return_type);
 
     fn make_partition_evaluator() -> Result<Box<dyn PartitionEvaluator>> {
         Ok(Box::new(DummyWindow {}))
