@@ -50,7 +50,8 @@ use datafusion_physical_expr::{
 
 use bytes::Bytes;
 use futures::future::BoxFuture;
-use futures::{StreamExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryStreamExt};
+use hashbrown::HashMap;
 use log::debug;
 use object_store::path::Path;
 use object_store::ObjectStore;
@@ -99,6 +100,8 @@ pub struct ParquetExec {
     page_pruning_predicate: Option<Arc<PagePruningPredicate>>,
     /// Optional hint for the size of the parquet metadata
     metadata_size_hint: Option<usize>,
+    /// Metadata cache
+    metadata_cache: MetadataCache,
     /// Optional user defined parquet file reader factory
     parquet_file_reader_factory: Option<Arc<dyn ParquetFileReaderFactory>>,
 }
@@ -163,6 +166,7 @@ impl ParquetExec {
             pruning_predicate,
             page_pruning_predicate,
             metadata_size_hint,
+            metadata_cache: Default::default(),
             parquet_file_reader_factory: None,
         }
     }
@@ -367,8 +371,10 @@ impl ExecutionPlan for ParquetExec {
                 ctx.runtime_env()
                     .object_store(&self.base_config.object_store_url)
                     .map(|store| {
-                        Arc::new(DefaultParquetFileReaderFactory::new(store))
-                            as Arc<dyn ParquetFileReaderFactory>
+                        Arc::new(DefaultParquetFileReaderFactory {
+                            store,
+                            metadata_cache: Arc::clone(&self.metadata_cache),
+                        }) as Arc<dyn ParquetFileReaderFactory>
                     })
             })?;
 
@@ -592,19 +598,35 @@ pub trait ParquetFileReaderFactory: Debug + Send + Sync + 'static {
 #[derive(Debug)]
 pub struct DefaultParquetFileReaderFactory {
     store: Arc<dyn ObjectStore>,
+    /// An cache of [`SharedMetaData`] used to avoid fetching the metadata of a file
+    /// multiple times, as might occur if a file is repartitioned into multiple groups
+    metadata_cache: MetadataCache,
 }
 
 impl DefaultParquetFileReaderFactory {
     /// Create a factory.
     pub fn new(store: Arc<dyn ObjectStore>) -> Self {
-        Self { store }
+        Self {
+            store,
+            metadata_cache: Default::default(),
+        }
     }
 }
+
+/// A shared cache of [`SharedMetaData`]
+type MetadataCache = Arc<parking_lot::Mutex<HashMap<Path, SharedMetaData>>>;
+
+/// A shared [`ParquetMetaData`] used to only fetch metadata once
+type SharedMetaData = Arc<futures::lock::Mutex<Option<Arc<ParquetMetaData>>>>;
 
 /// Implements [`AsyncFileReader`] for a parquet file in object storage
 pub(crate) struct ParquetFileReader {
     file_metrics: ParquetFileMetrics,
     inner: ParquetObjectReader,
+    /// The [`SharedMetaData`] for this object
+    ///
+    /// This avoids looking up metadata multiple times for the same file
+    metadata: SharedMetaData,
 }
 
 impl AsyncFileReader for ParquetFileReader {
@@ -631,7 +653,18 @@ impl AsyncFileReader for ParquetFileReader {
     fn get_metadata(
         &mut self,
     ) -> BoxFuture<'_, parquet::errors::Result<Arc<ParquetMetaData>>> {
-        self.inner.get_metadata()
+        async move {
+            let mut cached = self.metadata.lock().await;
+            match cached.as_ref() {
+                Some(meta) => Ok(Arc::clone(meta)),
+                None => {
+                    let meta = self.inner.get_metadata().await?;
+                    *cached = Some(Arc::clone(&meta));
+                    Ok(meta)
+                }
+            }
+        }
+        .boxed()
     }
 }
 
@@ -648,6 +681,17 @@ impl ParquetFileReaderFactory for DefaultParquetFileReaderFactory {
             file_meta.location().as_ref(),
             metrics,
         );
+
+        let metadata = {
+            let path = &file_meta.object_meta.location;
+            let mut cache = self.metadata_cache.lock();
+            let (_, meta) = cache
+                .raw_entry_mut()
+                .from_key(path)
+                .or_insert_with(|| (path.clone(), Default::default()));
+            Arc::clone(meta)
+        };
+
         let store = Arc::clone(&self.store);
         let mut inner = ParquetObjectReader::new(store, file_meta.object_meta);
 
@@ -658,6 +702,7 @@ impl ParquetFileReaderFactory for DefaultParquetFileReaderFactory {
         Ok(Box::new(ParquetFileReader {
             inner,
             file_metrics,
+            metadata,
         }))
     }
 }
