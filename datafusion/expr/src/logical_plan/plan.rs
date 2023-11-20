@@ -108,6 +108,8 @@ pub enum LogicalPlan {
     /// produces 0 or 1 row. This is used to implement SQL `SELECT`
     /// that has no values in the `FROM` clause.
     EmptyRelation(EmptyRelation),
+    /// A named temporary relation with a schema.
+    NamedRelation(NamedRelation),
     /// Produces the output of running another query.  This is used to
     /// implement SQL subqueries
     Subquery(Subquery),
@@ -150,6 +152,8 @@ pub enum LogicalPlan {
     /// Unnest a column that contains a nested list type such as an
     /// ARRAY. This is used to implement SQL `UNNEST`
     Unnest(Unnest),
+    /// A variadic query (e.g. "Recursive CTEs")
+    RecursiveQuery(RecursiveQuery),
 }
 
 impl LogicalPlan {
@@ -187,6 +191,11 @@ impl LogicalPlan {
             LogicalPlan::Copy(CopyTo { input, .. }) => input.schema(),
             LogicalPlan::Ddl(ddl) => ddl.schema(),
             LogicalPlan::Unnest(Unnest { schema, .. }) => schema,
+            LogicalPlan::NamedRelation(NamedRelation { schema, .. }) => schema,
+            LogicalPlan::RecursiveQuery(RecursiveQuery { static_term, .. }) => {
+                // we take the schema of the static term as the schema of the entire recursive query
+                static_term.schema()
+            }
         }
     }
 
@@ -229,6 +238,7 @@ impl LogicalPlan {
             LogicalPlan::Explain(_)
             | LogicalPlan::Analyze(_)
             | LogicalPlan::EmptyRelation(_)
+            | LogicalPlan::NamedRelation(_)
             | LogicalPlan::Ddl(_)
             | LogicalPlan::Dml(_)
             | LogicalPlan::Copy(_)
@@ -238,6 +248,10 @@ impl LogicalPlan {
             | LogicalPlan::Extension(_)
             | LogicalPlan::TableScan(_) => {
                 vec![self.schema()]
+            }
+            LogicalPlan::RecursiveQuery(RecursiveQuery { static_term, .. }) => {
+                // return only the schema of the static term
+                static_term.all_schemas()
             }
             // return children schemas
             LogicalPlan::Limit(_)
@@ -380,6 +394,9 @@ impl LogicalPlan {
                 .try_for_each(f),
             // plans without expressions
             LogicalPlan::EmptyRelation(_)
+            | LogicalPlan::NamedRelation(_)
+            // TODO: not sure if this should go here
+            | LogicalPlan::RecursiveQuery(_)
             | LogicalPlan::Subquery(_)
             | LogicalPlan::SubqueryAlias(_)
             | LogicalPlan::Limit(_)
@@ -426,8 +443,14 @@ impl LogicalPlan {
             LogicalPlan::Ddl(ddl) => ddl.inputs(),
             LogicalPlan::Unnest(Unnest { input, .. }) => vec![input],
             LogicalPlan::Prepare(Prepare { input, .. }) => vec![input],
+            LogicalPlan::RecursiveQuery(RecursiveQuery {
+                static_term,
+                recursive_term,
+                ..
+            }) => vec![static_term, recursive_term],
             // plans without inputs
             LogicalPlan::TableScan { .. }
+            | LogicalPlan::NamedRelation(_)
             | LogicalPlan::Statement { .. }
             | LogicalPlan::EmptyRelation { .. }
             | LogicalPlan::Values { .. }
@@ -506,6 +529,9 @@ impl LogicalPlan {
                     cross.left.head_output_expr()
                 }
             }
+            LogicalPlan::RecursiveQuery(RecursiveQuery { static_term, .. }) => {
+                static_term.head_output_expr()
+            }
             LogicalPlan::Union(union) => Ok(Some(Expr::Column(
                 union.schema.fields()[0].qualified_column(),
             ))),
@@ -525,6 +551,7 @@ impl LogicalPlan {
             }
             LogicalPlan::Subquery(_) => Ok(None),
             LogicalPlan::EmptyRelation(_)
+            | LogicalPlan::NamedRelation(_)
             | LogicalPlan::Prepare(_)
             | LogicalPlan::Statement(_)
             | LogicalPlan::Values(_)
@@ -863,6 +890,14 @@ impl LogicalPlan {
                 };
                 Ok(LogicalPlan::Distinct(distinct))
             }
+            LogicalPlan::RecursiveQuery(RecursiveQuery {
+                name, is_distinct, ..
+            }) => Ok(LogicalPlan::RecursiveQuery(RecursiveQuery {
+                name: name.clone(),
+                static_term: Arc::new(inputs[0].clone()),
+                recursive_term: Arc::new(inputs[1].clone()),
+                is_distinct: *is_distinct,
+            })),
             LogicalPlan::Analyze(a) => {
                 assert!(expr.is_empty());
                 assert_eq!(inputs.len(), 1);
@@ -901,6 +936,7 @@ impl LogicalPlan {
                 }))
             }
             LogicalPlan::EmptyRelation(_)
+            | LogicalPlan::NamedRelation(_)
             | LogicalPlan::Ddl(_)
             | LogicalPlan::Statement(_) => {
                 // All of these plan types have no inputs / exprs so should not be called
@@ -1096,6 +1132,9 @@ impl LogicalPlan {
                 }),
             LogicalPlan::TableScan(TableScan { fetch, .. }) => *fetch,
             LogicalPlan::EmptyRelation(_) => Some(0),
+            // TODO: not sure if this is correct
+            LogicalPlan::NamedRelation(_) => None,
+            LogicalPlan::RecursiveQuery(_) => None,
             LogicalPlan::Subquery(_) => None,
             LogicalPlan::SubqueryAlias(SubqueryAlias { input, .. }) => input.max_rows(),
             LogicalPlan::Limit(Limit { fetch, .. }) => *fetch,
@@ -1452,6 +1491,14 @@ impl LogicalPlan {
             fn fmt(&self, f: &mut Formatter) -> fmt::Result {
                 match self.0 {
                     LogicalPlan::EmptyRelation(_) => write!(f, "EmptyRelation"),
+                    LogicalPlan::NamedRelation(NamedRelation { name, .. }) => {
+                        write!(f, "NamedRelation: {}", name)
+                    }
+                    LogicalPlan::RecursiveQuery(RecursiveQuery {
+                        is_distinct, ..
+                    }) => {
+                        write!(f, "RecursiveQuery: is_distinct={}", is_distinct)
+                    }
                     LogicalPlan::Values(Values { ref values, .. }) => {
                         let str_values: Vec<_> = values
                             .iter()
@@ -1760,6 +1807,28 @@ pub struct EmptyRelation {
     pub produce_one_row: bool,
     /// The schema description of the output
     pub schema: DFSchemaRef,
+}
+
+/// A named temporary relation with a known schema.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct NamedRelation {
+    /// The relation name
+    pub name: String,
+    /// The schema description
+    pub schema: DFSchemaRef,
+}
+
+/// A variadic query operation
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct RecursiveQuery {
+    /// Name of the query
+    pub name: String,
+    /// The static term
+    pub static_term: Arc<LogicalPlan>,
+    /// The recursive term
+    pub recursive_term: Arc<LogicalPlan>,
+    /// Distinction
+    pub is_distinct: bool,
 }
 
 /// Values expression. See

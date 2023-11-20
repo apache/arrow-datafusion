@@ -47,6 +47,7 @@ use crate::physical_expr::create_physical_expr;
 use crate::physical_optimizer::optimizer::PhysicalOptimizerRule;
 use crate::physical_plan::aggregates::{AggregateExec, AggregateMode, PhysicalGroupBy};
 use crate::physical_plan::analyze::AnalyzeExec;
+use crate::physical_plan::continuance::ContinuanceExec;
 use crate::physical_plan::empty::EmptyExec;
 use crate::physical_plan::explain::ExplainExec;
 use crate::physical_plan::expressions::{Column, PhysicalSortExpr};
@@ -58,6 +59,7 @@ use crate::physical_plan::joins::{
 use crate::physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
 use crate::physical_plan::memory::MemoryExec;
 use crate::physical_plan::projection::ProjectionExec;
+use crate::physical_plan::recursive_query::RecursiveQueryExec;
 use crate::physical_plan::repartition::RepartitionExec;
 use crate::physical_plan::sorts::sort::SortExec;
 use crate::physical_plan::union::UnionExec;
@@ -89,7 +91,8 @@ use datafusion_expr::expr::{
 use datafusion_expr::expr_rewriter::{unalias, unnormalize_cols};
 use datafusion_expr::logical_plan::builder::wrap_projection_for_join_if_necessary;
 use datafusion_expr::{
-    DescribeTable, DmlStatement, StringifiedPlan, WindowFrame, WindowFrameBound, WriteOp,
+    DescribeTable, DmlStatement, NamedRelation, RecursiveQuery, StringifiedPlan,
+    WindowFrame, WindowFrameBound, WriteOp,
 };
 use datafusion_physical_expr::expressions::Literal;
 use datafusion_sql::utils::window_expr_common_partition_keys;
@@ -1311,6 +1314,29 @@ impl DefaultPhysicalPlanner {
                         Ok(plan)
                     }
                 }
+                LogicalPlan::RecursiveQuery(RecursiveQuery { name, static_term, recursive_term, is_distinct }) => {
+                    let static_term = self.create_initial_plan(static_term, session_state).await?;
+                    let recursive_term = self.create_initial_plan(recursive_term, session_state).await?;
+
+                    Ok(Arc::new(RecursiveQueryExec::new(name.clone(), static_term, recursive_term, *is_distinct)))
+                }
+                LogicalPlan::NamedRelation(NamedRelation {name, schema}) => {
+                    // Named relations is how we represent access to any sort of dynamic data provider. They
+                    // differ from tables in the sense that they can start existing dynamically during the
+                    // execution of a query and then disappear before it even finishes.
+                    //
+                    // This system allows us to replicate the tricky behavior of classical databases where a
+                    // temporary "working table" (as it is called in Postgres) can be used when dealing with
+                    // complex operations (such as recursive CTEs) and then can be dropped. Since DataFusion
+                    // at its core is heavily stream-based and vectorized, we try to avoid using 'real' tables
+                    // and let the streams take care of the data flow in this as well.
+
+                    // Since the actual "input"'s will be only available to us at runtime (through task context)
+                    // we can't really do any sort of meaningful validation here.
+                    let schema = SchemaRef::new(schema.as_ref().to_owned().into());
+                    Ok(Arc::new(ContinuanceExec::new(name.clone(), schema)))
+                }
+
             };
             exec_plan
         }.boxed()

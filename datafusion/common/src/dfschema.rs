@@ -897,6 +897,11 @@ impl DFField {
         self.field = f.into();
         self
     }
+
+    pub fn with_qualifier(mut self, qualifier: impl Into<OwnedTableReference>) -> Self {
+        self.qualifier = Some(qualifier.into());
+        self
+    }
 }
 
 impl From<FieldRef> for DFField {

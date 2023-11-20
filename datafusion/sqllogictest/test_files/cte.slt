@@ -19,3 +19,115 @@ query II
 select * from (WITH source AS (select 1 as e) SELECT * FROM source) t1,   (WITH source AS (select 1 as e) SELECT * FROM source) t2
 ----
 1 1
+
+# trivial recursive CTE works
+query I rowsort
+WITH RECURSIVE nodes AS ( 
+    SELECT 1 as id
+    UNION ALL 
+    SELECT id + 1 as id 
+    FROM nodes
+    WHERE id < 10
+)
+SELECT * FROM nodes
+----
+1
+10
+2
+3
+4
+5
+6
+7
+8
+9
+
+# setup
+statement ok
+CREATE EXTERNAL TABLE beg_account_balance STORED as CSV WITH HEADER ROW LOCATION '../../testing/data/csv/recursive_query_account_beg_2.csv'
+
+# setup
+statement ok
+CREATE EXTERNAL TABLE account_balance_growth STORED as CSV WITH HEADER ROW LOCATION '../../testing/data/csv/recursive_query_account_growth_3.csv'
+
+# recursive CTE with static term derived from table works
+query ITI rowsort
+WITH RECURSIVE balances AS (
+    SELECT * from beg_account_balance
+    UNION ALL 
+    SELECT time + 1 as time, name, account_balance + 10 as account_balance
+    FROM balances
+    WHERE time < 10
+)
+SELECT * FROM balances
+----
+1 John 100
+1 Tim 200
+10 John 190
+10 Tim 290
+2 John 110
+2 Tim 210
+3 John 120
+3 Tim 220
+4 John 130
+4 Tim 230
+5 John 140
+5 Tim 240
+6 John 150
+6 Tim 250
+7 John 160
+7 Tim 260
+8 John 170
+8 Tim 270
+9 John 180
+9 Tim 280
+
+
+# recursive CTE with recursive join works
+query ITI
+WITH RECURSIVE balances AS (
+    SELECT time as time, name as name, account_balance as account_balance
+    FROM beg_account_balance
+    UNION ALL 
+    SELECT time + 1 as time, balances.name, account_balance + account_balance_growth.account_growth as account_balance
+    FROM balances
+    JOIN account_balance_growth
+    ON balances.name = account_balance_growth.name
+    WHERE time < 10
+)
+SELECT * FROM balances
+ORDER BY time, name
+----
+1 John 100
+1 Tim 200
+2 John 103
+2 Tim 220
+3 John 106
+3 Tim 240
+4 John 109
+4 Tim 260
+5 John 112
+5 Tim 280
+6 John 115
+6 Tim 300
+7 John 118
+7 Tim 320
+8 John 121
+8 Tim 340
+9 John 124
+9 Tim 360
+10 John 127
+10 Tim 380
+
+# recursive CTE with aggregations works
+query I rowsort
+WITH RECURSIVE nodes AS ( 
+    SELECT 1 as id
+    UNION ALL 
+    SELECT id + 1 as id 
+    FROM nodes
+    WHERE id < 10
+)
+SELECT sum(id) FROM nodes
+----
+55

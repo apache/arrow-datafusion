@@ -33,6 +33,15 @@ use crate::{
     runtime_env::{RuntimeConfig, RuntimeEnv},
 };
 
+use arrow::record_batch::RecordBatch;
+// use futures::channel::mpsc::Receiver as SingleChannelReceiver;
+use tokio::sync::mpsc::Receiver as SingleChannelReceiver;
+// use futures::lock::Mutex;
+use parking_lot::Mutex;
+// use futures::
+
+type RelationHandler = SingleChannelReceiver<Result<RecordBatch>>;
+
 /// Task Execution Context
 ///
 /// A [`TaskContext`] contains the state available during a single
@@ -56,6 +65,8 @@ pub struct TaskContext {
     window_functions: HashMap<String, Arc<WindowUDF>>,
     /// Runtime environment associated with this task context
     runtime: Arc<RuntimeEnv>,
+    /// Registered relation handlers
+    relation_handlers: Mutex<HashMap<String, RelationHandler>>,
 }
 
 impl Default for TaskContext {
@@ -72,6 +83,7 @@ impl Default for TaskContext {
             aggregate_functions: HashMap::new(),
             window_functions: HashMap::new(),
             runtime: Arc::new(runtime),
+            relation_handlers: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -99,6 +111,7 @@ impl TaskContext {
             aggregate_functions,
             window_functions,
             runtime,
+            relation_handlers: Mutex::new(HashMap::new()),
         }
     }
 
@@ -170,6 +183,34 @@ impl TaskContext {
     pub fn with_runtime(mut self, runtime: Arc<RuntimeEnv>) -> Self {
         self.runtime = runtime;
         self
+    }
+
+    /// Register a new relation handler. If a handler with the same name already exists
+    /// this function will return an error.
+    pub fn push_relation_handler(
+        &self,
+        name: String,
+        handler: RelationHandler,
+    ) -> Result<()> {
+        let mut handlers = self.relation_handlers.lock();
+        if handlers.contains_key(&name) {
+            return Err(DataFusionError::Internal(format!(
+                "Relation handler {} already registered",
+                name
+            )));
+        }
+        handlers.insert(name, handler);
+        Ok(())
+    }
+
+    /// Retrieve the relation handler for the given name. It will remove the handler from
+    /// the storage if it exists, and return it as is.
+    pub fn pop_relation_handler(&self, name: String) -> Result<RelationHandler> {
+        let mut handlers = self.relation_handlers.lock();
+
+        handlers.remove(name.as_str()).ok_or_else(|| {
+            DataFusionError::Internal(format!("Relation handler {} not registered", name))
+        })
     }
 }
 

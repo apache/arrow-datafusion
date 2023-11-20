@@ -362,6 +362,8 @@ impl OptimizerRule for CommonSubexprEliminate {
             | LogicalPlan::Dml(_)
             | LogicalPlan::Copy(_)
             | LogicalPlan::Unnest(_)
+            | LogicalPlan::NamedRelation(_)
+            | LogicalPlan::RecursiveQuery(_)
             | LogicalPlan::Prepare(_) => {
                 // apply the optimization to all inputs of the plan
                 utils::optimize_children(self, plan, config)?

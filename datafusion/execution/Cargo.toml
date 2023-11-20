@@ -46,3 +46,11 @@ parking_lot = { workspace = true }
 rand = { workspace = true }
 tempfile = { workspace = true }
 url = { workspace = true }
+tokio = { version = "1.28", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "fs",
+    "parking_lot",
+] }

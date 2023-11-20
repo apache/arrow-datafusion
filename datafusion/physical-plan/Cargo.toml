@@ -33,7 +33,9 @@ name = "datafusion_physical_plan"
 path = "src/lib.rs"
 
 [dependencies]
-ahash = { version = "0.8", default-features = false, features = ["runtime-rng"] }
+ahash = { version = "0.8", default-features = false, features = [
+    "runtime-rng",
+] }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
@@ -56,8 +58,16 @@ pin-project-lite = "^0.2.7"
 rand = { workspace = true }
 tokio = { version = "1.28", features = ["sync", "fs", "parking_lot"] }
 uuid = { version = "^1.2", features = ["v4"] }
+tokio-stream = { version = "0.1.14" }
 
 [dev-dependencies]
 rstest = { workspace = true }
 termtree = "0.4.1"
-tokio = { version = "1.28", features = ["macros", "rt", "rt-multi-thread", "sync", "fs", "parking_lot"] }
+tokio = { version = "1.28", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "fs",
+    "parking_lot",
+] }

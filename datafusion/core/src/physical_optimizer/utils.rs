@@ -17,6 +17,11 @@
 
 //! Collection of utility functions that are leveraged by the query optimizer rules
 
+use datafusion_expr::RecursiveQuery;
+use datafusion_physical_plan::recursive_query::RecursiveQueryExec;
+use itertools::concat;
+use std::borrow::Borrow;
+use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Formatter;
 use std::sync::Arc;
@@ -153,6 +158,10 @@ pub fn is_union(plan: &Arc<dyn ExecutionPlan>) -> bool {
 /// Checks whether the given operator is a [`RepartitionExec`].
 pub fn is_repartition(plan: &Arc<dyn ExecutionPlan>) -> bool {
     plan.as_any().is::<RepartitionExec>()
+}
+
+pub fn is_recursive_query(plan: &Arc<dyn ExecutionPlan>) -> bool {
+    plan.as_any().is::<RecursiveQueryExec>()
 }
 
 /// Utility function yielding a string representation of the given [`ExecutionPlan`].
