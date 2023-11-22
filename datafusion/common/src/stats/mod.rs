@@ -15,16 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! This module provides data structures to represent statistics
-
-use std::fmt::{self, Debug, Display};
+//! [`Statistics`], [`ColumnStatistics`], and [`Precision`] for representing statistics
 
 use crate::ScalarValue;
-
 use arrow_schema::Schema;
+use std::fmt::{self, Debug, Display};
+
+mod aggregator;
+pub use aggregator::StatisticsAggregator;
 
 /// Represents a value with a degree of certainty. `Precision` is used to
 /// propagate information the precision of statistical values.
+///
+/// # Example of creating precisions:
+/// Known exact value:
+/// ```
 #[derive(Clone, PartialEq, Eq, Default)]
 pub enum Precision<T: Debug + Clone + PartialEq + Eq + PartialOrd> {
     /// The exact value is known
@@ -37,6 +42,11 @@ pub enum Precision<T: Debug + Clone + PartialEq + Eq + PartialOrd> {
 }
 
 impl<T: Debug + Clone + PartialEq + Eq + PartialOrd> Precision<T> {
+    /// Create `Precision::Exact` from Some(T), and `Precision::Inexact(T) from None
+    pub fn from_option(value: Option<T>) -> Self {
+        value.map(Precision::Exact).unwrap_or(Precision::Absent)
+    }
+
     /// If we have some value (exact or inexact), it returns that value.
     /// Otherwise, it returns `None`.
     pub fn get_value(&self) -> Option<&T> {
@@ -70,8 +80,11 @@ impl<T: Debug + Clone + PartialEq + Eq + PartialOrd> Precision<T> {
     }
 
     /// Returns the maximum of two (possibly inexact) values, conservatively
-    /// propagating exactness information. If one of the input values is
-    /// [`Precision::Absent`], the result is `Absent` too.
+    /// propagating exactness information.
+    /// If both of the input
+    /// values are [`Precision::Absent`], the result is `Absent` too. If only
+    /// one of the input values is [`Precision::Absent`], the result will be
+    /// [`Precision::Inexact`].
     pub fn max(&self, other: &Precision<T>) -> Precision<T> {
         match (self, other) {
             (Precision::Exact(a), Precision::Exact(b)) => {
@@ -82,13 +95,22 @@ impl<T: Debug + Clone + PartialEq + Eq + PartialOrd> Precision<T> {
             | (Precision::Inexact(a), Precision::Inexact(b)) => {
                 Precision::Inexact(if a >= b { a.clone() } else { b.clone() })
             }
-            (_, _) => Precision::Absent,
+            // Absent demotes to Inexact
+            (Precision::Exact(a) | Precision::Inexact(a), Precision::Absent) => {
+                Precision::Inexact(a.clone())
+            }
+            (Precision::Absent, Precision::Exact(b) | Precision::Inexact(b)) => {
+                Precision::Inexact(b.clone())
+            }
+            (Precision::Absent, Precision::Absent) => Precision::Absent,
         }
     }
 
     /// Returns the minimum of two (possibly inexact) values, conservatively
-    /// propagating exactness information. If one of the input values is
-    /// [`Precision::Absent`], the result is `Absent` too.
+    /// propagating exactness information.  If both of the input
+    /// values are [`Precision::Absent`], the result is `Absent` too. If only
+    /// one of the input values is [`Precision::Absent`], the result will be
+    /// [`Precision::Inexact`].
     pub fn min(&self, other: &Precision<T>) -> Precision<T> {
         match (self, other) {
             (Precision::Exact(a), Precision::Exact(b)) => {
@@ -99,30 +121,54 @@ impl<T: Debug + Clone + PartialEq + Eq + PartialOrd> Precision<T> {
             | (Precision::Inexact(a), Precision::Inexact(b)) => {
                 Precision::Inexact(if a >= b { b.clone() } else { a.clone() })
             }
-            (_, _) => Precision::Absent,
+            // Absent demotes to Inexact
+            (Precision::Exact(a) | Precision::Inexact(a), Precision::Absent) => {
+                Precision::Inexact(a.clone())
+            }
+            (Precision::Absent, Precision::Exact(b) | Precision::Inexact(b)) => {
+                Precision::Inexact(b.clone())
+            }
+            (Precision::Absent, Precision::Absent) => Precision::Absent,
         }
     }
 
+    /// Demotes the precision state from exact to inexact (if present),
+    /// consuming self.
+    pub fn to_inexact(mut self) -> Self {
+        self.make_inexact();
+        self
+    }
+
     /// Demotes the precision state from exact to inexact (if present).
-    pub fn to_inexact(self) -> Self {
-        match self {
+    pub fn make_inexact(&mut self) {
+        let t = std::mem::take(self);
+        *self = match t {
             Precision::Exact(value) => Precision::Inexact(value),
-            _ => self,
+            _ => t,
         }
     }
 }
 
 impl Precision<usize> {
     /// Calculates the sum of two (possibly inexact) [`usize`] values,
-    /// conservatively propagating exactness information. If one of the input
-    /// values is [`Precision::Absent`], the result is `Absent` too.
+    /// conservatively propagating exactness information. If both of the input
+    /// values are [`Precision::Absent`], the result is `Absent` too. If only
+    /// one of the input values is [`Precision::Absent`], the result will be
+    /// [`Precision::Inexact`].
     pub fn add(&self, other: &Precision<usize>) -> Precision<usize> {
         match (self, other) {
             (Precision::Exact(a), Precision::Exact(b)) => Precision::Exact(a + b),
             (Precision::Inexact(a), Precision::Exact(b))
             | (Precision::Exact(a), Precision::Inexact(b))
             | (Precision::Inexact(a), Precision::Inexact(b)) => Precision::Inexact(a + b),
-            (_, _) => Precision::Absent,
+            // Adding Absent demotes to Inexact
+            (Precision::Exact(a) | Precision::Inexact(a), Precision::Absent) => {
+                Precision::Inexact(*a)
+            }
+            (Precision::Absent, Precision::Exact(b) | Precision::Inexact(b)) => {
+                Precision::Inexact(*b)
+            }
+            (Precision::Absent, Precision::Absent) => Precision::Absent,
         }
     }
 

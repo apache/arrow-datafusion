@@ -36,44 +36,38 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::{JoinHandle, JoinSet};
 
 use crate::datasource::file_format::file_compression_type::FileCompressionType;
-use crate::datasource::statistics::{create_max_min_accs, get_col_stats};
 use arrow::datatypes::SchemaRef;
 use arrow::datatypes::{Fields, Schema};
+use arrow_schema::Field;
 use bytes::{BufMut, BytesMut};
-use datafusion_common::{exec_err, not_impl_err, DataFusionError, FileType};
+use datafusion_common::{
+    exec_err, not_impl_err, ColumnStatistics, DataFusionError, FileType,
+};
 use datafusion_execution::TaskContext;
 use datafusion_physical_expr::{PhysicalExpr, PhysicalSortRequirement};
 use futures::{StreamExt, TryStreamExt};
-use hashbrown::HashMap;
+use log::debug;
 use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStore};
 use parquet::arrow::{
     arrow_to_parquet_schema, parquet_to_arrow_schema, AsyncArrowWriter,
 };
 use parquet::file::footer::{decode_footer, decode_metadata};
-use parquet::file::metadata::ParquetMetaData;
+use parquet::file::metadata::{ParquetMetaData, RowGroupMetaData};
 use parquet::file::properties::WriterProperties;
-use parquet::file::statistics::Statistics as ParquetStatistics;
 
 use super::write::demux::start_demuxer_task;
 use super::write::{create_writer, AbortableWrite};
 use super::{FileFormat, FileScanConfig};
-use crate::arrow::array::{
-    BooleanArray, Float32Array, Float64Array, Int32Array, Int64Array,
-};
-use crate::arrow::datatypes::DataType;
 use crate::config::ConfigOptions;
 
-use crate::datasource::physical_plan::{
-    FileGroupDisplay, FileSinkConfig, ParquetExec, SchemaAdapter,
-};
+use crate::datasource::physical_plan::{FileGroupDisplay, FileSinkConfig, ParquetExec};
+use crate::datasource::physical_plan::parquet::statistics::RowGroupStatisticsConverter;
 use crate::error::Result;
 use crate::execution::context::SessionState;
-use crate::physical_plan::expressions::{MaxAccumulator, MinAccumulator};
 use crate::physical_plan::insert::{DataSink, FileSinkExec};
 use crate::physical_plan::{
-    Accumulator, DisplayAs, DisplayFormatType, ExecutionPlan, SendableRecordBatchStream,
-    Statistics,
+    DisplayAs, DisplayFormatType, ExecutionPlan, SendableRecordBatchStream, Statistics,
 };
 
 /// The Apache Parquet `FileFormat` implementation
@@ -257,170 +251,6 @@ impl FileFormat for ParquetFormat {
     }
 }
 
-fn summarize_min_max(
-    max_values: &mut [Option<MaxAccumulator>],
-    min_values: &mut [Option<MinAccumulator>],
-    fields: &Fields,
-    i: usize,
-    stat: &ParquetStatistics,
-) {
-    match stat {
-        ParquetStatistics::Boolean(s) => {
-            if let DataType::Boolean = fields[i].data_type() {
-                if s.has_min_max_set() {
-                    if let Some(max_value) = &mut max_values[i] {
-                        match max_value.update_batch(&[Arc::new(BooleanArray::from(
-                            vec![Some(*s.max())],
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                max_values[i] = None;
-                            }
-                        }
-                    }
-                    if let Some(min_value) = &mut min_values[i] {
-                        match min_value.update_batch(&[Arc::new(BooleanArray::from(
-                            vec![Some(*s.min())],
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                min_values[i] = None;
-                            }
-                        }
-                    }
-                    return;
-                }
-            }
-            max_values[i] = None;
-            min_values[i] = None;
-        }
-        ParquetStatistics::Int32(s) => {
-            if let DataType::Int32 = fields[i].data_type() {
-                if s.has_min_max_set() {
-                    if let Some(max_value) = &mut max_values[i] {
-                        match max_value.update_batch(&[Arc::new(Int32Array::from_value(
-                            *s.max(),
-                            1,
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                max_values[i] = None;
-                            }
-                        }
-                    }
-                    if let Some(min_value) = &mut min_values[i] {
-                        match min_value.update_batch(&[Arc::new(Int32Array::from_value(
-                            *s.min(),
-                            1,
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                min_values[i] = None;
-                            }
-                        }
-                    }
-                    return;
-                }
-            }
-            max_values[i] = None;
-            min_values[i] = None;
-        }
-        ParquetStatistics::Int64(s) => {
-            if let DataType::Int64 = fields[i].data_type() {
-                if s.has_min_max_set() {
-                    if let Some(max_value) = &mut max_values[i] {
-                        match max_value.update_batch(&[Arc::new(Int64Array::from_value(
-                            *s.max(),
-                            1,
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                max_values[i] = None;
-                            }
-                        }
-                    }
-                    if let Some(min_value) = &mut min_values[i] {
-                        match min_value.update_batch(&[Arc::new(Int64Array::from_value(
-                            *s.min(),
-                            1,
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                min_values[i] = None;
-                            }
-                        }
-                    }
-                    return;
-                }
-            }
-            max_values[i] = None;
-            min_values[i] = None;
-        }
-        ParquetStatistics::Float(s) => {
-            if let DataType::Float32 = fields[i].data_type() {
-                if s.has_min_max_set() {
-                    if let Some(max_value) = &mut max_values[i] {
-                        match max_value.update_batch(&[Arc::new(Float32Array::from(
-                            vec![Some(*s.max())],
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                max_values[i] = None;
-                            }
-                        }
-                    }
-                    if let Some(min_value) = &mut min_values[i] {
-                        match min_value.update_batch(&[Arc::new(Float32Array::from(
-                            vec![Some(*s.min())],
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                min_values[i] = None;
-                            }
-                        }
-                    }
-                    return;
-                }
-            }
-            max_values[i] = None;
-            min_values[i] = None;
-        }
-        ParquetStatistics::Double(s) => {
-            if let DataType::Float64 = fields[i].data_type() {
-                if s.has_min_max_set() {
-                    if let Some(max_value) = &mut max_values[i] {
-                        match max_value.update_batch(&[Arc::new(Float64Array::from(
-                            vec![Some(*s.max())],
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                max_values[i] = None;
-                            }
-                        }
-                    }
-                    if let Some(min_value) = &mut min_values[i] {
-                        match min_value.update_batch(&[Arc::new(Float64Array::from(
-                            vec![Some(*s.min())],
-                        ))]) {
-                            Ok(_) => {}
-                            Err(_) => {
-                                min_values[i] = None;
-                            }
-                        }
-                    }
-                    return;
-                }
-            }
-            max_values[i] = None;
-            min_values[i] = None;
-        }
-        _ => {
-            max_values[i] = None;
-            min_values[i] = None;
-        }
-    }
-}
-
 /// Fetches parquet metadata from ObjectStore for given object
 ///
 /// This component is a subject to **change** in near future and is exposed for low level integrations
@@ -515,70 +345,40 @@ async fn fetch_statistics(
         file_metadata.key_value_metadata(),
     )?;
 
-    let num_fields = table_schema.fields().len();
-    let fields = table_schema.fields();
-
-    let mut num_rows = 0;
-    let mut total_byte_size = 0;
-    let mut null_counts = vec![Precision::Exact(0); num_fields];
-    let mut has_statistics = false;
-
-    let schema_adapter = SchemaAdapter::new(table_schema.clone());
-
-    let (mut max_values, mut min_values) = create_max_min_accs(&table_schema);
-
-    for row_group_meta in metadata.row_groups() {
-        num_rows += row_group_meta.num_rows();
-        total_byte_size += row_group_meta.total_byte_size();
-
-        let mut column_stats: HashMap<usize, (u64, &ParquetStatistics)> = HashMap::new();
-
-        for (i, column) in row_group_meta.columns().iter().enumerate() {
-            if let Some(stat) = column.statistics() {
-                has_statistics = true;
-                column_stats.insert(i, (stat.null_count(), stat));
-            }
-        }
-
-        if has_statistics {
-            for (table_idx, null_cnt) in null_counts.iter_mut().enumerate() {
-                if let Some(file_idx) =
-                    schema_adapter.map_column_index(table_idx, &file_schema)
-                {
-                    if let Some((null_count, stats)) = column_stats.get(&file_idx) {
-                        *null_cnt = null_cnt.add(&Precision::Exact(*null_count as usize));
-                        summarize_min_max(
-                            &mut max_values,
-                            &mut min_values,
-                            fields,
-                            table_idx,
-                            stats,
-                        )
-                    } else {
-                        // If none statistics of current column exists, set the Max/Min Accumulator to None.
-                        max_values[table_idx] = None;
-                        min_values[table_idx] = None;
-                    }
-                } else {
-                    *null_cnt = null_cnt.add(&Precision::Exact(num_rows as usize));
+    // Fetch the statistics for each column
+    let row_groups = metadata.row_groups();
+    let column_statistics = table_schema
+        .fields()
+        .iter()
+        .map(|field| {
+            /// TODO need to add the type
+            match compute_column_stats(field, row_groups) {
+                Ok(stats) => stats,
+                Err(e) => {
+                    debug!(
+                    "Ignoring error reading statistics for column {field:?} in {}: '{e}'",
+                    file.location
+                );
+                    ColumnStatistics::new_unknown()
                 }
             }
-        }
-    }
+        })
+        .collect::<Vec<_>>();
+    Ok(Statistics {
+        num_rows: Precision::Exact(file_metadata.num_rows() as usize),
+        total_byte_size: Precision::Exact(file.size),
+        column_statistics,
+    })
+}
 
-    let column_stats = if has_statistics {
-        get_col_stats(&table_schema, null_counts, &mut max_values, &mut min_values)
-    } else {
-        Statistics::unknown_column(&table_schema)
-    };
-
-    let statistics = Statistics {
-        num_rows: Precision::Exact(num_rows as usize),
-        total_byte_size: Precision::Exact(total_byte_size as usize),
-        column_statistics: column_stats,
-    };
-
-    Ok(statistics)
+//  Compute column statistics for the specified column.
+fn compute_column_stats(
+    field: &Field,
+    row_groups: &[RowGroupMetaData],
+) -> Result<ColumnStatistics> {
+    let converter = RowGroupStatisticsConverter::new(field);
+    let mins = converter.min(row_groups)?;
+    todo!()
 }
 
 /// Implements [`DataSink`] for writing to a parquet file.
@@ -1187,6 +987,8 @@ mod tests {
     use crate::prelude::{SessionConfig, SessionContext};
     use arrow::array::{Array, ArrayRef, StringArray};
     use arrow::record_batch::RecordBatch;
+    use arrow_array::Int64Array;
+    use arrow_schema::DataType;
     use async_trait::async_trait;
     use bytes::Bytes;
     use datafusion_common::cast::{
@@ -1390,6 +1192,8 @@ mod tests {
         let stats =
             fetch_statistics(store.upcast().as_ref(), schema.clone(), &meta[0], Some(9))
                 .await?;
+
+        println!("AAL fetched statistics: {:#?}", stats);
 
         assert_eq!(stats.num_rows, Precision::Exact(3));
         let c1_stats = &stats.column_statistics[0];

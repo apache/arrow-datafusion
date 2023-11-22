@@ -66,6 +66,7 @@ mod metrics;
 pub mod page_filter;
 mod row_filter;
 mod row_groups;
+pub(crate) mod statistics;
 
 pub use metrics::ParquetFileMetrics;
 
@@ -716,28 +717,6 @@ pub async fn plan_to_parquet(
     }
 
     Ok(())
-}
-
-// Copy from the arrow-rs
-// https://github.com/apache/arrow-rs/blob/733b7e7fd1e8c43a404c3ce40ecf741d493c21b4/parquet/src/arrow/buffer/bit_util.rs#L55
-// Convert the byte slice to fixed length byte array with the length of 16
-fn sign_extend_be(b: &[u8]) -> [u8; 16] {
-    assert!(b.len() <= 16, "Array too large, expected less than 16");
-    let is_negative = (b[0] & 128u8) == 128u8;
-    let mut result = if is_negative { [255u8; 16] } else { [0u8; 16] };
-    for (d, s) in result.iter_mut().skip(16 - b.len()).zip(b) {
-        *d = *s;
-    }
-    result
-}
-
-// Convert the bytes array to i128.
-// The endian of the input bytes array must be big-endian.
-pub(crate) fn from_bytes_to_i128(b: &[u8]) -> i128 {
-    // The bytes array are from parquet file and must be the big-endian.
-    // The endian is defined by parquet format, and the reference document
-    // https://github.com/apache/parquet-format/blob/54e53e5d7794d383529dd30746378f19a12afd58/src/main/thrift/parquet.thrift#L66
-    i128::from_be_bytes(sign_extend_be(b))
 }
 
 // Convert parquet column schema to arrow data type, and just consider the

@@ -39,9 +39,8 @@ use parquet::{
 };
 use std::sync::Arc;
 
-use crate::datasource::physical_plan::parquet::{
-    from_bytes_to_i128, parquet_to_arrow_decimal_type,
-};
+use crate::datasource::physical_plan::parquet::parquet_to_arrow_decimal_type;
+use crate::datasource::physical_plan::parquet::statistics::from_bytes_to_i128;
 use crate::physical_optimizer::pruning::{PruningPredicate, PruningStatistics};
 
 use super::metrics::ParquetFileMetrics;

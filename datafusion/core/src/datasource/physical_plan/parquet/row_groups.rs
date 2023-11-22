@@ -15,31 +15,26 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::{
-    array::ArrayRef,
-    datatypes::{DataType, Schema},
-};
+use arrow::{array::ArrayRef, datatypes::Schema};
 use datafusion_common::tree_node::{TreeNode, VisitRecursion};
 use datafusion_common::{Column, DataFusionError, Result, ScalarValue};
 use parquet::{
     arrow::{async_reader::AsyncFileReader, ParquetRecordBatchStreamBuilder},
     bloom_filter::Sbbf,
-    file::{metadata::RowGroupMetaData, statistics::Statistics as ParquetStatistics},
+    file::metadata::RowGroupMetaData,
 };
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
-use crate::datasource::{
-    listing::FileRange,
-    physical_plan::parquet::{from_bytes_to_i128, parquet_to_arrow_decimal_type},
-};
+use crate::datasource::listing::FileRange;
 use crate::logical_expr::Operator;
 use crate::physical_expr::expressions as phys_expr;
 use crate::physical_optimizer::pruning::{PruningPredicate, PruningStatistics};
 use crate::physical_plan::PhysicalExpr;
 
+use super::statistics::RowGroupStatisticsConverter;
 use super::ParquetFileMetrics;
 
 /// Prune row groups based on statistics
@@ -303,112 +298,6 @@ struct RowGroupPruningStatistics<'a> {
     parquet_schema: &'a Schema,
 }
 
-/// Extract the min/max statistics from a `ParquetStatistics` object
-macro_rules! get_statistic {
-    ($column_statistics:expr, $func:ident, $bytes_func:ident, $target_arrow_type:expr) => {{
-        if !$column_statistics.has_min_max_set() {
-            return None;
-        }
-        match $column_statistics {
-            ParquetStatistics::Boolean(s) => Some(ScalarValue::Boolean(Some(*s.$func()))),
-            ParquetStatistics::Int32(s) => {
-                match $target_arrow_type {
-                    // int32 to decimal with the precision and scale
-                    Some(DataType::Decimal128(precision, scale)) => {
-                        Some(ScalarValue::Decimal128(
-                            Some(*s.$func() as i128),
-                            precision,
-                            scale,
-                        ))
-                    }
-                    _ => Some(ScalarValue::Int32(Some(*s.$func()))),
-                }
-            }
-            ParquetStatistics::Int64(s) => {
-                match $target_arrow_type {
-                    // int64 to decimal with the precision and scale
-                    Some(DataType::Decimal128(precision, scale)) => {
-                        Some(ScalarValue::Decimal128(
-                            Some(*s.$func() as i128),
-                            precision,
-                            scale,
-                        ))
-                    }
-                    _ => Some(ScalarValue::Int64(Some(*s.$func()))),
-                }
-            }
-            // 96 bit ints not supported
-            ParquetStatistics::Int96(_) => None,
-            ParquetStatistics::Float(s) => Some(ScalarValue::Float32(Some(*s.$func()))),
-            ParquetStatistics::Double(s) => Some(ScalarValue::Float64(Some(*s.$func()))),
-            ParquetStatistics::ByteArray(s) => {
-                match $target_arrow_type {
-                    // decimal data type
-                    Some(DataType::Decimal128(precision, scale)) => {
-                        Some(ScalarValue::Decimal128(
-                            Some(from_bytes_to_i128(s.$bytes_func())),
-                            precision,
-                            scale,
-                        ))
-                    }
-                    _ => {
-                        let s = std::str::from_utf8(s.$bytes_func())
-                            .map(|s| s.to_string())
-                            .ok();
-                        Some(ScalarValue::Utf8(s))
-                    }
-                }
-            }
-            // type not supported yet
-            ParquetStatistics::FixedLenByteArray(s) => {
-                match $target_arrow_type {
-                    // just support the decimal data type
-                    Some(DataType::Decimal128(precision, scale)) => {
-                        Some(ScalarValue::Decimal128(
-                            Some(from_bytes_to_i128(s.$bytes_func())),
-                            precision,
-                            scale,
-                        ))
-                    }
-                    _ => None,
-                }
-            }
-        }
-    }};
-}
-
-// Extract the min or max value calling `func` or `bytes_func` on the ParquetStatistics as appropriate
-macro_rules! get_min_max_values {
-    ($self:expr, $column:expr, $func:ident, $bytes_func:ident) => {{
-        let (_column_index, field) =
-            if let Some((v, f)) = $self.parquet_schema.column_with_name(&$column.name) {
-                (v, f)
-            } else {
-                // Named column was not present
-                return None;
-            };
-
-        let data_type = field.data_type();
-        // The result may be None, because DataFusion doesn't have support for ScalarValues of the column type
-        let null_scalar: ScalarValue = data_type.try_into().ok()?;
-
-        $self.row_group_metadata
-            .columns()
-            .iter()
-            .find(|c| c.column_descr().name() == &$column.name)
-            .and_then(|c| if c.statistics().is_some() {Some((c.statistics().unwrap(), c.column_descr()))} else {None})
-            .map(|(stats, column_descr)|
-                {
-                    let target_data_type = parquet_to_arrow_decimal_type(column_descr);
-                    get_statistic!(stats, $func, $bytes_func, target_data_type)
-                })
-            .flatten()
-            // column either didn't have statistics at all or didn't have min/max values
-            .or_else(|| Some(null_scalar.clone()))
-            .and_then(|s| s.to_array().ok())
-    }}
-}
-
 // Extract the null count value on the ParquetStatistics
 macro_rules! get_null_count_values {
     ($self:expr, $column:expr) => {{
@@ -431,11 +320,29 @@ macro_rules! get_null_count_values {
 
 impl<'a> PruningStatistics for RowGroupPruningStatistics<'a> {
     fn min_values(&self, column: &Column) -> Option<ArrayRef> {
-        get_min_max_values!(self, column, min, min_bytes)
+        let field = self
+            .parquet_schema
+            .fields()
+            .find(&column.name)
+            .map(|(_idx, field)| field)?;
+
+        RowGroupStatisticsConverter::new(field)
+            .min([self.row_group_metadata])
+            // ignore errors during conversion, and just use no statistics
+            .ok()
     }
 
     fn max_values(&self, column: &Column) -> Option<ArrayRef> {
-        get_min_max_values!(self, column, max, max_bytes)
+        let field = self
+            .parquet_schema
+            .fields()
+            .find(&column.name)
+            .map(|(_idx, field)| field)?;
+
+        RowGroupStatisticsConverter::new(field)
+            .max([self.row_group_metadata])
+            // ignore errors during conversion, and just use no statistics
+            .ok()
     }
 
     fn num_containers(&self) -> usize {
