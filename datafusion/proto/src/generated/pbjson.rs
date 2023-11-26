@@ -20863,6 +20863,7 @@ impl serde::Serialize for ScalarFunction {
             Self::ArrayExcept => "ArrayExcept",
             Self::ArrayPopFront => "ArrayPopFront",
             Self::Levenshtein => "Levenshtein",
+            Self::ArrayAggregate => "ArrayAggregate",
         };
         serializer.serialize_str(variant)
     }
@@ -21000,6 +21001,7 @@ impl<'de> serde::Deserialize<'de> for ScalarFunction {
             "ArrayExcept",
             "ArrayPopFront",
             "Levenshtein",
+            "ArrayAggregate",
         ];
 
         struct GeneratedVisitor;
@@ -21166,6 +21168,7 @@ impl<'de> serde::Deserialize<'de> for ScalarFunction {
                     "ArrayExcept" => Ok(ScalarFunction::ArrayExcept),
                     "ArrayPopFront" => Ok(ScalarFunction::ArrayPopFront),
                     "Levenshtein" => Ok(ScalarFunction::Levenshtein),
+                    "ArrayAggregate" => Ok(ScalarFunction::ArrayAggregate),
                     _ => Err(serde::de::Error::unknown_variant(value, FIELDS)),
                 }
             }

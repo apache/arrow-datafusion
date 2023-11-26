@@ -641,6 +641,7 @@ enum ScalarFunction {
   ArrayExcept = 123;
   ArrayPopFront = 124;
   Levenshtein = 125;
+  ArrayAggregate = 126;
 }
 
 message ScalarFunctionNode {

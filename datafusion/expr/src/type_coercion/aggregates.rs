@@ -16,12 +16,12 @@
 // under the License.
 
 use arrow::datatypes::{
-    DataType, TimeUnit, DECIMAL128_MAX_PRECISION, DECIMAL128_MAX_SCALE,
+    DataType, Field, TimeUnit, DECIMAL128_MAX_PRECISION, DECIMAL128_MAX_SCALE,
     DECIMAL256_MAX_PRECISION, DECIMAL256_MAX_SCALE,
 };
 
 use datafusion_common::{internal_err, plan_err, DataFusionError, Result};
-use std::ops::Deref;
+use std::{ops::Deref, sync::Arc};
 
 use crate::{AggregateFunction, Signature, TypeSignature};
 
@@ -117,6 +117,16 @@ pub fn coerce_types(
                 d if d.is_floating() => Float64,
                 Dictionary(_, v) => {
                     return coerce_types(agg_fun, &[v.as_ref().clone()], signature)
+                }
+                List(field) => {
+                    let coerced_types =
+                        coerce_types(agg_fun, &[field.data_type().clone()], signature)?;
+                    let data_type = coerced_types[0].clone();
+                    List(Arc::new(Field::new(
+                        field.name(),
+                        data_type,
+                        field.is_nullable(),
+                    )))
                 }
                 _ => {
                     return plan_err!(
@@ -411,6 +421,7 @@ pub fn sum_return_type(arg_type: &DataType) -> Result<DataType> {
             let new_precision = DECIMAL256_MAX_PRECISION.min(*precision + 10);
             Ok(DataType::Decimal256(new_precision, *scale))
         }
+        DataType::List(field) => sum_return_type(field.data_type()),
         other => plan_err!("SUM does not support type \"{other:?}\""),
     }
 }
@@ -503,19 +514,6 @@ pub fn is_bit_and_or_xor_support_arg_type(arg_type: &DataType) -> bool {
 
 pub fn is_bool_and_or_support_arg_type(arg_type: &DataType) -> bool {
     matches!(arg_type, DataType::Boolean)
-}
-
-pub fn is_sum_support_arg_type(arg_type: &DataType) -> bool {
-    match arg_type {
-        DataType::Dictionary(_, dict_value_type) => {
-            is_sum_support_arg_type(dict_value_type.as_ref())
-        }
-        _ => matches!(
-            arg_type,
-            arg_type if NUMERICS.contains(arg_type)
-            || matches!(arg_type, DataType::Decimal128(_, _) | DataType::Decimal256(_, _))
-        ),
-    }
 }
 
 pub fn is_avg_support_arg_type(arg_type: &DataType) -> bool {

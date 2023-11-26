@@ -1518,6 +1518,7 @@ from_unixtime(expression)
 
 ## Array Functions
 
+- [array_aggregate](#array_aggregate)
 - [array_append](#array_append)
 - [array_cat](#array_cat)
 - [array_concat](#array_concat)
@@ -1577,6 +1578,26 @@ from_unixtime(expression)
 - [string_to_list](#string_to_list)
 - [trim_array](#trim_array)
 - [range](#range)
+
+### `array_aggregate`
+
+Allows the execution of arbitrary existing aggregate function `name` on the elements of a list.
+
+```
+array_aggregate(array, name)
+```
+
+#### Arguments
+
+- **array**: Array expression.
+  Can be a constant, column, or function, and any combination of array operators.
+- **name**: Aggregate function name.
+
+#### Aliases
+
+- list_aggregate
+- array_aggr
+- list_aggr
 
 ### `array_append`
 

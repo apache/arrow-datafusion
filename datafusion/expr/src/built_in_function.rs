@@ -128,6 +128,8 @@ pub enum BuiltinScalarFunction {
     Cot,
 
     // array functions
+    /// array_aggregate
+    ArrayAggregate,
     /// array_append
     ArrayAppend,
     /// array_concat
@@ -389,6 +391,7 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Tanh => Volatility::Immutable,
             BuiltinScalarFunction::Trunc => Volatility::Immutable,
             BuiltinScalarFunction::ArrayAppend => Volatility::Immutable,
+            BuiltinScalarFunction::ArrayAggregate => Volatility::Immutable,
             BuiltinScalarFunction::ArrayConcat => Volatility::Immutable,
             BuiltinScalarFunction::ArrayEmpty => Volatility::Immutable,
             BuiltinScalarFunction::ArrayHasAll => Volatility::Immutable,
@@ -534,6 +537,7 @@ impl BuiltinScalarFunction {
                 Ok(data_type)
             }
             BuiltinScalarFunction::ArrayAppend => Ok(input_expr_types[0].clone()),
+            BuiltinScalarFunction::ArrayAggregate => unimplemented!("ArrayAggregate is based on Aggreation function, so no return value for it."),
             BuiltinScalarFunction::ArrayConcat => {
                 let mut expr_type = Null;
                 let mut max_dims = 0;
@@ -894,7 +898,8 @@ impl BuiltinScalarFunction {
 
         // for now, the list is small, as we do not have many built-in functions.
         match self {
-            BuiltinScalarFunction::ArrayAppend => Signature::any(2, self.volatility()),
+            BuiltinScalarFunction::ArrayAggregate
+            | BuiltinScalarFunction::ArrayAppend => Signature::any(2, self.volatility()),
             BuiltinScalarFunction::ArrayPopFront => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayPopBack => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayConcat => {
@@ -1521,6 +1526,12 @@ fn aliases(func: &BuiltinScalarFunction) -> &'static [&'static str] {
         BuiltinScalarFunction::ArrowTypeof => &["arrow_typeof"],
 
         // array functions
+        BuiltinScalarFunction::ArrayAggregate => &[
+            "array_aggregate",
+            "list_aggregate",
+            "array_aggr",
+            "list_aggr",
+        ],
         BuiltinScalarFunction::ArrayAppend => &[
             "array_append",
             "list_append",

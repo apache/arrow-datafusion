@@ -462,6 +462,7 @@ impl From<&protobuf::ScalarFunction> for BuiltinScalarFunction {
             ScalarFunction::Ltrim => Self::Ltrim,
             ScalarFunction::Rtrim => Self::Rtrim,
             ScalarFunction::ToTimestamp => Self::ToTimestamp,
+            ScalarFunction::ArrayAggregate => Self::ArrayAggregate,
             ScalarFunction::ArrayAppend => Self::ArrayAppend,
             ScalarFunction::ArrayConcat => Self::ArrayConcat,
             ScalarFunction::ArrayEmpty => Self::ArrayEmpty,
@@ -1337,6 +1338,7 @@ pub fn parse_expr(
                         .map(|expr| parse_expr(expr, registry))
                         .collect::<Result<Vec<_>, _>>()?,
                 )),
+                ScalarFunction::ArrayAggregate => unimplemented!("ArrayAggregate"),
                 ScalarFunction::ArrayAppend => Ok(array_append(
                     parse_expr(&args[0], registry)?,
                     parse_expr(&args[1], registry)?,

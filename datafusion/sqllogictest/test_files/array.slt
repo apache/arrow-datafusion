@@ -234,10 +234,10 @@ AS VALUES
 statement ok
 CREATE TABLE arrays_values_without_nulls
 AS VALUES
-  (make_array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 1, 1, ',', [2,3]),
-  (make_array(11, 12, 13, 14, 15, 16, 17, 18, 19, 20), 12, 2, '.', [4,5]),
-  (make_array(21, 22, 23, 24, 25, 26, 27, 28, 29, 30), 23, 3, '-', [6,7]),
-  (make_array(31, 32, 33, 34, 35, 26, 37, 38, 39, 40), 34, 4, 'ok', [8,9])
+  (make_array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), 1, 1, ',', [2,3], make_array(1.1, 2.2)),
+  (make_array(11, 12, 13, 14, 15, 16, 17, 18, 19, 20), 12, 2, '.', [4,5], make_array(3.1, -3.1)),
+  (make_array(21, 22, 23, 24, 25, 26, 27, 28, 29, 30), 23, 3, '-', [6,7], make_array(3.1, -1.1)),
+  (make_array(31, 32, 33, 34, 35, 26, 37, 38, 39, 40), 34, 4, 'ok', [8,9], make_array(-1.2, -1.3))
 ;
 
 statement ok
@@ -3124,6 +3124,44 @@ select string_to_list(e, 'm') from values;
 [consectetur]
 [adipiscing]
 NULL
+
+# array aggregate function
+## array aggregate
+
+### sum
+statement ok
+set datafusion.execution.target_partitions = 1;
+
+query IRI
+select 
+array_aggregate([1, 3, 5, 7], 'sum'),
+array_aggregate([1.1, 2.2, 3.3], 'sum'),
+array_aggregate([1, -1, 0, 23], 'sum');
+----
+16 6.6 23
+
+# TODO: Support nulls in array.
+# query error DataFusion error: This feature is not implemented: Arrays with different types are not supported: \{Null, Int64\}
+# select array_aggregate([1, null, 3, null], 'sum');
+
+query ??
+select column1, column6 from arrays_values_without_nulls;
+----
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10] [1.1, 2.2]
+[11, 12, 13, 14, 15, 16, 17, 18, 19, 20] [3.1, -3.1]
+[21, 22, 23, 24, 25, 26, 27, 28, 29, 30] [3.1, -1.1]
+[31, 32, 33, 34, 35, 26, 37, 38, 39, 40] [-1.2, -1.3]
+
+# I need to set target partition to 1, otherwise the we will get NullArray for some of partition executions.
+query IR
+select array_aggregate(column1, 'sum'),
+       array_aggregate(column6, 'sum')
+from arrays_values_without_nulls;
+----
+55 3.3
+155 0
+255 2
+345 -2.5
 
 ### Delete tables
 

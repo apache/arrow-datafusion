@@ -597,6 +597,13 @@ scalar_expr!(
     "returns the array without the first element."
 );
 
+scalar_expr!(
+    ArrayAggregate,
+    array_aggregate,
+    array name,
+    "allows the execution of arbitrary existing aggregate functions `name` on the elements of a list"
+);
+
 nary_scalar_expr!(ArrayConcat, array_concat, "concatenates arrays.");
 scalar_expr!(
     ArrayHas,

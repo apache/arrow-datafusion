@@ -326,6 +326,9 @@ pub fn create_physical_fun(
         }
 
         // array functions
+        BuiltinScalarFunction::ArrayAggregate => {
+            unimplemented!("ArrayAggregate reused the same function as AggregateExpr")
+        }
         BuiltinScalarFunction::ArrayAppend => {
             Arc::new(|args| make_scalar_function(array_expressions::array_append)(args))
         }

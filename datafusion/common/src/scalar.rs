@@ -718,6 +718,37 @@ impl ScalarValue {
         }
     }
 
+    /// Return a new `ScalarValue::List` given a `Vec` of primitive values
+    pub fn new_primitives<T: ArrowPrimitiveType>(
+        values: Vec<Option<T::Native>>,
+        d: &DataType,
+    ) -> Result<Self> {
+        if values.is_empty() {
+            return d.try_into();
+        }
+
+        let mut array = Vec::with_capacity(values.len());
+        let mut nulls = Vec::with_capacity(values.len());
+
+        for a in values {
+            match a {
+                Some(v) => {
+                    array.push(v);
+                    nulls.push(true);
+                }
+                None => {
+                    array.push(T::Native::default());
+                    nulls.push(false);
+                }
+            }
+        }
+
+        let arr = PrimitiveArray::<T>::new(array.into(), Some(NullBuffer::from(nulls)))
+            .with_data_type(d.clone());
+
+        Ok(ScalarValue::List(Arc::new(arr)))
+    }
+
     /// Create a decimal Scalar from value/precision and scale.
     pub fn try_new_decimal128(value: i128, precision: u8, scale: i8) -> Result<Self> {
         // make sure the precision and scale is valid

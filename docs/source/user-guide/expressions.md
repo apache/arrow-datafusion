@@ -209,6 +209,7 @@ Unlike to some databases the math functions in Datafusion works the same way as 
 
 | Syntax                                | Description                                                                                                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| array_aggregate(array, name)          | Allows the execution of arbitrary existing aggregate functions on the elements of a list. `array_aggregate([1, 2, 3], 'sum') -> 6`                                       |
 | array_append(array, element)          | Appends an element to the end of an array. `array_append([1, 2, 3], 4) -> [1, 2, 3, 4]`                                                                                  |
 | array_concat(array[, ..., array_n])   | Concatenates arrays. `array_concat([1, 2, 3], [4, 5, 6]) -> [1, 2, 3, 4, 5, 6]`                                                                                          |
 | array_has(array, element)             | Returns true if the array contains the element `array_has([1,2,3], 1) -> true`                                                                                           |

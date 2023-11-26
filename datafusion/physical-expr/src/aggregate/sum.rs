@@ -24,16 +24,21 @@ use super::groups_accumulator::prim_op::PrimitiveGroupsAccumulator;
 use crate::aggregate::utils::down_cast_any_ref;
 use crate::expressions::format_state_name;
 use crate::{AggregateExpr, GroupsAccumulator, PhysicalExpr};
+use arrow::array::ArrayRef;
 use arrow::compute::sum;
 use arrow::datatypes::DataType;
-use arrow::{array::ArrayRef, datatypes::Field};
+use arrow::datatypes::Field;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
     Decimal128Type, Decimal256Type, Float64Type, Int64Type, UInt64Type,
 };
 use arrow_array::{Array, ArrowNativeTypeOp, ArrowNumericType};
 use arrow_buffer::ArrowNativeType;
-use datafusion_common::{not_impl_err, DataFusionError, Result, ScalarValue};
+use datafusion_common::cast::as_primitive_array;
+use datafusion_common::utils::array_into_list_array;
+use datafusion_common::{
+    internal_err, not_impl_err, DataFusionError, Result, ScalarValue,
+};
 use datafusion_expr::type_coercion::aggregates::sum_return_type;
 use datafusion_expr::Accumulator;
 
@@ -101,6 +106,43 @@ impl AggregateExpr for Sum {
     }
 
     fn create_accumulator(&self) -> Result<Box<dyn Accumulator>> {
+        if let DataType::List(field) = &self.data_type {
+            match field.data_type() {
+                DataType::Int64 => {
+                    return Ok(Box::new(ArraySumAccumulator::<Int64Type>::new(
+                        self.return_type.clone(),
+                    )))
+                }
+                DataType::UInt64 => {
+                    return Ok(Box::new(ArraySumAccumulator::<UInt64Type>::new(
+                        self.return_type.clone(),
+                    )))
+                }
+                DataType::Float64 => {
+                    return Ok(Box::new(ArraySumAccumulator::<Float64Type>::new(
+                        self.return_type.clone(),
+                    )))
+                }
+                DataType::Decimal128(_, _) => {
+                    return Ok(Box::new(ArraySumAccumulator::<Decimal128Type>::new(
+                        self.return_type.clone(),
+                    )))
+                }
+                DataType::Decimal256(_, _) => {
+                    return Ok(Box::new(ArraySumAccumulator::<Decimal256Type>::new(
+                        self.return_type.clone(),
+                    )))
+                }
+                _ => {
+                    return internal_err!(
+                        "Sum not supported for {}: {}",
+                        self.name,
+                        self.data_type
+                    )
+                }
+            }
+        }
+
         macro_rules! helper {
             ($t:ty, $dt:expr) => {
                 Ok(Box::new(SumAccumulator::<$t>::new($dt.clone())))
@@ -210,6 +252,82 @@ impl<T: ArrowNumericType> Accumulator for SumAccumulator<T> {
 
     fn evaluate(&self) -> Result<ScalarValue> {
         ScalarValue::new_primitive::<T>(self.sum, &self.data_type)
+    }
+
+    fn size(&self) -> usize {
+        std::mem::size_of_val(self)
+    }
+}
+
+/// This accumulator is specialized for `array_sum` or `array_aggregate('sum')`
+struct ArraySumAccumulator<T: ArrowNumericType> {
+    // Each element in `Vec` represents the partial sum of respective row
+    sum: Vec<Option<T::Native>>,
+    data_type: DataType,
+}
+
+impl<T: ArrowNumericType> std::fmt::Debug for ArraySumAccumulator<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ArraySumAccumulator({})", self.data_type)
+    }
+}
+
+impl<T: ArrowNumericType> ArraySumAccumulator<T> {
+    fn new(data_type: DataType) -> Self {
+        Self {
+            // Row number is unknown at the beginning, so we use an empty vector
+            sum: vec![],
+            data_type,
+        }
+    }
+}
+
+impl<T: ArrowNumericType> Accumulator for ArraySumAccumulator<T> {
+    fn state(&self) -> Result<Vec<ScalarValue>> {
+        Ok(vec![self.evaluate()?])
+    }
+
+    // There are two kinds of input, PrimitiveArray and ListArray
+    // ListArray is for multiple-rows input, and PrimitiveArray is for single-row input
+    fn update_batch(&mut self, values: &[ArrayRef]) -> Result<()> {
+        // Wrap single-row input into multiple-rows input and use the same logic as multiple-rows input
+        let list_values = if let Some(list_arr) = values[0].as_list_opt::<i32>() {
+            list_arr.to_owned()
+        } else {
+            array_into_list_array(values[0].clone())
+        };
+
+        let row_number = list_values.len();
+
+        if self.sum.is_empty() {
+            self.sum.resize(row_number, None);
+        } else if self.sum.len() < row_number {
+            return internal_err!("ArraySumAccumulator::update_batch only support consistent row number, got {} and {}", self.sum.len(), row_number);
+        }
+
+        for (i, values) in list_values.iter().enumerate() {
+            if let Some(values) = values {
+                let values = as_primitive_array::<T>(&values)?;
+                if let Some(x) = sum(values) {
+                    let v = self.sum[i].get_or_insert(T::Native::usize_as(0));
+                    *v = v.add_wrapping(x);
+                }
+            } else {
+                return internal_err!(
+                    "ArraySumAccumulator::update_batch got null values"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn merge_batch(&mut self, states: &[ArrayRef]) -> Result<()> {
+        self.update_batch(states)
+    }
+
+    fn evaluate(&self) -> Result<ScalarValue> {
+        ScalarValue::new_primitives::<T>(self.sum.clone(), &self.data_type)
     }
 
     fn size(&self) -> usize {
