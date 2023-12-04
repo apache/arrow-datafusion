@@ -159,7 +159,7 @@ impl AsExecutionPlan for PhysicalPlanNode {
                                 .to_owned(),
                         )
                     })?;
-                Ok(Arc::new(FilterExec::try_new(predicate, input)?))
+                Ok(Arc::new(FilterExec::try_new(predicate, None, input)?))
             }
             PhysicalPlanType::CsvScan(scan) => Ok(Arc::new(CsvExec::new(
                 parse_protobuf_file_scan_config(

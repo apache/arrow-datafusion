@@ -344,7 +344,7 @@ impl LogicalPlanBuilder {
     /// Apply a filter
     pub fn filter(self, expr: impl Into<Expr>) -> Result<Self> {
         let expr = normalize_col(expr.into(), &self.plan)?;
-        Filter::try_new(expr, Arc::new(self.plan))
+        Filter::try_new(expr, Arc::new(self.plan), None)
             .map(LogicalPlan::Filter)
             .map(Self::from)
     }

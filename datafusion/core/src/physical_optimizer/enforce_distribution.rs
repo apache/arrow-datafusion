@@ -1973,7 +1973,7 @@ pub(crate) mod tests {
             Operator::Eq,
             Arc::new(Literal::new(ScalarValue::Int64(Some(0)))),
         ));
-        Arc::new(FilterExec::try_new(predicate, input).unwrap())
+        Arc::new(FilterExec::try_new(predicate, None, input).unwrap())
     }
 
     fn sort_exec(
@@ -2615,7 +2615,7 @@ pub(crate) mod tests {
         )?;
 
         let filter_top_join: Arc<dyn ExecutionPlan> =
-            Arc::new(FilterExec::try_new(predicate, top_join)?);
+            Arc::new(FilterExec::try_new(predicate, None, top_join)?);
 
         // The bottom joins' join key ordering is adjusted based on the top join. And the top join should not introduce additional RepartitionExec
         let expected = &[

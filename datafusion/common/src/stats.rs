@@ -262,6 +262,35 @@ impl Statistics {
                 .collect::<Vec<_>>(),
         }
     }
+    pub fn project(&self, projection: &[usize], schema: &Schema) -> Self {
+        let mut primitive_row_size_possible = true;
+        let mut primitive_row_size = 0;
+
+        for i in projection {
+            let size = schema.field(*i).data_type().primitive_width();
+            if let Some(size) = size {
+                primitive_row_size += size;
+            } else {
+                primitive_row_size_possible = false;
+            }
+        }
+
+        let total_byte_size = if primitive_row_size_possible {
+            Precision::Exact(primitive_row_size).multiply(&self.num_rows)
+        } else {
+            // TODO: estimate from missing column
+            Precision::Absent
+        };
+
+        Statistics {
+            num_rows: self.num_rows.clone().to_inexact(),
+            total_byte_size: total_byte_size,
+            column_statistics: projection
+                .iter()
+                .map(|i| self.column_statistics[*i].clone())
+                .collect(),
+        }
+    }
 }
 
 impl Display for Statistics {

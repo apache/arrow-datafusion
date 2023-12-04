@@ -60,7 +60,7 @@ let table_scan = LogicalPlan::TableScan(TableScan::try_new(
 
 // create a Filter plan that evaluates `id > 500` that wraps the TableScan
 let filter_expr = col("id").gt(lit(500));
-let plan = LogicalPlan::Filter(Filter::try_new(filter_expr, Arc::new(table_scan))?);
+let plan = LogicalPlan::Filter(Filter::try_new(filter_expr, Arc::new(table_scan), None)?);
 
 // print the plan
 println!("{}", plan.display_indent_schema());

@@ -306,6 +306,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 Ok(LogicalPlan::Filter(Filter::try_new(
                     filter_expr,
                     Arc::new(plan),
+                    None,
                 )?))
             }
             None => Ok(plan),

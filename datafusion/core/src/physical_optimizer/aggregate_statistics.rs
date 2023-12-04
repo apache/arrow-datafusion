@@ -531,6 +531,7 @@ pub(crate) mod tests {
                 cast(expressions::lit(1u32), &schema, DataType::Int32)?,
                 &schema,
             )?,
+            None,
             source,
         )?);
 
@@ -578,6 +579,7 @@ pub(crate) mod tests {
                 cast(expressions::lit(1u32), &schema, DataType::Int32)?,
                 &schema,
             )?,
+            None,
             source,
         )?);
 

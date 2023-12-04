@@ -1175,6 +1175,7 @@ pub fn add_filter(plan: LogicalPlan, predicates: &[&Expr]) -> Result<LogicalPlan
     Ok(LogicalPlan::Filter(Filter::try_new(
         predicate,
         Arc::new(plan),
+        None,
     )?))
 }
 

@@ -1065,7 +1065,7 @@ mod test {
                 + lit(ScalarValue::new_interval_ym(0, 1)),
         );
         let empty = empty_with_type(DataType::Utf8);
-        let plan = LogicalPlan::Filter(Filter::try_new(expr, empty)?);
+        let plan = LogicalPlan::Filter(Filter::try_new(expr, empty, None)?);
         let expected =
             "Filter: a BETWEEN Utf8(\"2002-05-08\") AND CAST(CAST(Utf8(\"2002-05-08\") AS Date32) + IntervalYearMonth(\"1\") AS Utf8)\
             \n  EmptyRelation";
@@ -1081,7 +1081,7 @@ mod test {
             lit("2002-12-08"),
         );
         let empty = empty_with_type(DataType::Utf8);
-        let plan = LogicalPlan::Filter(Filter::try_new(expr, empty)?);
+        let plan = LogicalPlan::Filter(Filter::try_new(expr, empty, None)?);
         // TODO: we should cast col(a).
         let expected =
             "Filter: CAST(a AS Date32) BETWEEN CAST(Utf8(\"2002-05-08\") AS Date32) + IntervalYearMonth(\"1\") AND CAST(Utf8(\"2002-12-08\") AS Date32)\
@@ -1550,7 +1550,8 @@ mod test {
             },
             false,
         ));
-        let plan = LogicalPlan::Filter(Filter::try_new(in_subquery_expr, empty_int64)?);
+        let plan =
+            LogicalPlan::Filter(Filter::try_new(in_subquery_expr, empty_int64, None)?);
         // add cast for subquery
         let expected = "\
         Filter: a IN (<subquery>)\
@@ -1575,7 +1576,8 @@ mod test {
             },
             false,
         ));
-        let plan = LogicalPlan::Filter(Filter::try_new(in_subquery_expr, empty_int32)?);
+        let plan =
+            LogicalPlan::Filter(Filter::try_new(in_subquery_expr, empty_int32, None)?);
         // add cast for subquery
         let expected = "\
         Filter: CAST(a AS Int64) IN (<subquery>)\
@@ -1599,7 +1601,8 @@ mod test {
             },
             false,
         ));
-        let plan = LogicalPlan::Filter(Filter::try_new(in_subquery_expr, empty_outside)?);
+        let plan =
+            LogicalPlan::Filter(Filter::try_new(in_subquery_expr, empty_outside, None)?);
         // add cast for subquery
         let expected = "Filter: CAST(a AS Decimal128(13, 8)) IN (<subquery>)\
         \n  Subquery:\

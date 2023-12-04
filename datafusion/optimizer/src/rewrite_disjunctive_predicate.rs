@@ -137,6 +137,7 @@ impl OptimizerRule for RewriteDisjunctivePredicate {
                 Ok(Some(LogicalPlan::Filter(Filter::try_new(
                     rewritten_expr,
                     filter.input.clone(),
+                    filter.projected_schema.clone(),
                 )?)))
             }
             _ => Ok(None),

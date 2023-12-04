@@ -403,6 +403,7 @@ fn roundtrip_filter_with_not_and_in_list() -> Result<()> {
     let and = binary(not, Operator::And, in_list, &schema)?;
     roundtrip_test(Arc::new(FilterExec::try_new(
         and,
+        None,
         Arc::new(EmptyExec::new(false, schema.clone())),
     )?))
 }

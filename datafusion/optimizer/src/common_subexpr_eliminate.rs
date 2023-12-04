@@ -152,6 +152,7 @@ impl CommonSubexprEliminate {
             Ok(LogicalPlan::Filter(Filter::try_new(
                 predicate,
                 Arc::new(new_input),
+                filter.projected_schema.clone(),
             )?))
         } else {
             internal_err!("Failed to pop predicate expr")

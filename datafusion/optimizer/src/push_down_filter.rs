@@ -496,14 +496,16 @@ fn push_down_all_join(
 
     let left = match conjunction(left_push) {
         Some(predicate) => {
-            LogicalPlan::Filter(Filter::try_new(predicate, Arc::new(left.clone()))?)
+            LogicalPlan::Filter(Filter::try_new(predicate, Arc::new(left.clone()), None)?)
         }
         None => left.clone(),
     };
     let right = match conjunction(right_push) {
-        Some(predicate) => {
-            LogicalPlan::Filter(Filter::try_new(predicate, Arc::new(right.clone()))?)
-        }
+        Some(predicate) => LogicalPlan::Filter(Filter::try_new(
+            predicate,
+            Arc::new(right.clone()),
+            None,
+        )?),
         None => right.clone(),
     };
     // Create a new Join with the new `left` and `right`
@@ -533,6 +535,7 @@ fn push_down_all_join(
             Some(predicate) => Ok(LogicalPlan::Filter(Filter::try_new(
                 predicate,
                 Arc::new(plan),
+                None,
             )?)),
             None => Ok(plan),
         }
@@ -680,6 +683,7 @@ impl OptimizerRule for PushDownFilter {
                 let new_filter = LogicalPlan::Filter(Filter::try_new(
                     new_predicate,
                     child_filter.input.clone(),
+                    child_filter.projected_schema.clone(),
                 )?);
                 self.try_optimize(&new_filter, _config)?
                     .unwrap_or(new_filter)
@@ -712,6 +716,7 @@ impl OptimizerRule for PushDownFilter {
                 let new_filter = LogicalPlan::Filter(Filter::try_new(
                     new_predicate,
                     subquery_alias.input.clone(),
+                    None,
                 )?);
                 child_plan.with_new_inputs(&[new_filter])?
             }
@@ -754,6 +759,7 @@ impl OptimizerRule for PushDownFilter {
                         let new_filter = LogicalPlan::Filter(Filter::try_new(
                             replace_cols_by_name(expr, &non_volatile_map)?,
                             projection.input.clone(),
+                            None,
                         )?);
 
                         match conjunction(keep_predicates) {
@@ -764,6 +770,7 @@ impl OptimizerRule for PushDownFilter {
                                 LogicalPlan::Filter(Filter::try_new(
                                     keep_predicate,
                                     Arc::new(child_plan),
+                                    None,
                                 )?)
                             }
                         }
@@ -787,6 +794,7 @@ impl OptimizerRule for PushDownFilter {
                     inputs.push(Arc::new(LogicalPlan::Filter(Filter::try_new(
                         push_predicate,
                         input.clone(),
+                        None,
                     )?)))
                 }
                 LogicalPlan::Union(Union {
@@ -831,6 +839,7 @@ impl OptimizerRule for PushDownFilter {
                     Some(predicate) => LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         Arc::new((*agg.input).clone()),
+                        None,
                     )?),
                     None => (*agg.input).clone(),
                 };
@@ -839,6 +848,7 @@ impl OptimizerRule for PushDownFilter {
                     Some(predicate) => LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         Arc::new(new_agg),
+                        None,
                     )?),
                     None => new_agg,
                 }
@@ -897,6 +907,7 @@ impl OptimizerRule for PushDownFilter {
                     Some(predicate) => LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         Arc::new(new_scan),
+                        None,
                     )?),
                     None => new_scan,
                 }
@@ -927,6 +938,7 @@ impl OptimizerRule for PushDownFilter {
                             Ok(LogicalPlan::Filter(Filter::try_new(
                                 predicate.clone(),
                                 Arc::new(child.clone()),
+                                None,
                             )?))
                         })
                         .collect::<Result<Vec<_>>>()?,
@@ -939,6 +951,7 @@ impl OptimizerRule for PushDownFilter {
                     Some(predicate) => LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         Arc::new(new_extension),
+                        None,
                     )?),
                     None => new_extension,
                 }

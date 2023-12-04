@@ -162,7 +162,11 @@ impl LogicalPlan {
                 projected_schema, ..
             }) => projected_schema,
             LogicalPlan::Projection(Projection { schema, .. }) => schema,
-            LogicalPlan::Filter(Filter { input, .. }) => input.schema(),
+            LogicalPlan::Filter(Filter {
+                projected_schema,
+                input,
+                ..
+            }) => projected_schema.as_ref().unwrap_or(input.schema()),
             LogicalPlan::Distinct(Distinct::All(input)) => input.schema(),
             LogicalPlan::Distinct(Distinct::On(DistinctOn { schema, .. })) => schema,
             LogicalPlan::Window(Window { schema, .. }) => schema,
@@ -639,7 +643,9 @@ impl LogicalPlan {
                         .collect::<Vec<_>>(),
                 }))
             }
-            LogicalPlan::Filter { .. } => {
+            LogicalPlan::Filter(Filter {
+                projected_schema, ..
+            }) => {
                 assert_eq!(1, expr.len());
                 let predicate = expr.pop().unwrap();
 
@@ -681,8 +687,12 @@ impl LogicalPlan {
                 let mut remove_aliases = RemoveAliases {};
                 let predicate = predicate.rewrite(&mut remove_aliases)?;
 
-                Filter::try_new(predicate, Arc::new(inputs[0].clone()))
-                    .map(LogicalPlan::Filter)
+                Filter::try_new(
+                    predicate,
+                    Arc::new(inputs[0].clone()),
+                    projected_schema.clone(),
+                )
+                .map(LogicalPlan::Filter)
             }
             LogicalPlan::Repartition(Repartition {
                 partitioning_scheme,
@@ -1589,8 +1599,21 @@ impl LogicalPlan {
                     }
                     LogicalPlan::Filter(Filter {
                         predicate: ref expr,
+                        projected_schema,
                         ..
-                    }) => write!(f, "Filter: {expr}"),
+                    }) => {
+                        if let Some(projected_schema) = projected_schema {
+                            let names: Vec<&str> = projected_schema
+                                .fields()
+                                .iter()
+                                .map(|i| i.name().as_str())
+                                .collect();
+
+                            write!(f, "Filter: {expr}, projection=[{}]", names.join(", "))
+                        } else {
+                            write!(f, "Filter: {expr}")
+                        }
+                    }
                     LogicalPlan::Window(Window {
                         ref window_expr, ..
                     }) => {
@@ -1907,11 +1930,17 @@ pub struct Filter {
     pub predicate: Expr,
     /// The incoming logical plan
     pub input: Arc<LogicalPlan>,
+    /// Schema representing the data after the optional projection is applied
+    pub projected_schema: Option<DFSchemaRef>,
 }
 
 impl Filter {
     /// Create a new filter operator.
-    pub fn try_new(predicate: Expr, input: Arc<LogicalPlan>) -> Result<Self> {
+    pub fn try_new(
+        predicate: Expr,
+        input: Arc<LogicalPlan>,
+        projected_schema: Option<DFSchemaRef>,
+    ) -> Result<Self> {
         // Filter predicates must return a boolean value so we try and validate that here.
         // Note that it is not always possible to resolve the predicate expression during plan
         // construction (such as with correlated subqueries) so we make a best effort here and
@@ -1933,7 +1962,35 @@ impl Filter {
             );
         }
 
-        Ok(Self { predicate, input })
+        let func_dependencies = input.schema().functional_dependencies();
+
+        let projected_schema = projected_schema
+            .as_ref()
+            .map(|p| -> Result<_> {
+                let indices: Vec<usize> = p
+                    .fields()
+                    .iter()
+                    .filter_map(|x| {
+                        input
+                            .schema()
+                            .index_of_column_by_name(x.qualifier(), x.name())
+                            .transpose()
+                    })
+                    .collect::<Result<_>>()?;
+                let projected_func_dependencies = func_dependencies
+                    .project_functional_dependencies(&indices, indices.len());
+                let schema = p.as_ref().clone();
+                Result::Ok(Arc::new(
+                    schema.with_functional_dependencies(projected_func_dependencies),
+                ))
+            })
+            .transpose()?;
+
+        Ok(Self {
+            predicate,
+            input,
+            projected_schema,
+        })
     }
 }
 

@@ -883,7 +883,7 @@ mod tests {
             &input_schema,
         )
         .unwrap();
-        Arc::new(FilterExec::try_new(predicate, input).unwrap())
+        Arc::new(FilterExec::try_new(predicate, None, input).unwrap())
     }
 
     fn coalesce_batches_exec(input: Arc<dyn ExecutionPlan>) -> Arc<dyn ExecutionPlan> {

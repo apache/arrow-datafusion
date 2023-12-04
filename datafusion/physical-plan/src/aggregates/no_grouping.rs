@@ -211,7 +211,7 @@ fn aggregate_batch(
         .try_for_each(|((accum, expr), filter)| {
             // 1.2
             let batch = match filter {
-                Some(filter) => Cow::Owned(batch_filter(&batch, filter)?),
+                Some(filter) => Cow::Owned(batch_filter(&batch, filter, &None)?),
                 None => Cow::Borrowed(&batch),
             };
             // 1.3

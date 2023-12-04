@@ -74,6 +74,7 @@ impl OptimizerRule for FilterNullJoinKeys {
                     join.left = Arc::new(LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         join.left.clone(),
+                        None,
                     )?));
                 }
                 if !right_filters.is_empty() {
@@ -81,6 +82,7 @@ impl OptimizerRule for FilterNullJoinKeys {
                     join.right = Arc::new(LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         join.right.clone(),
+                        None,
                     )?));
                 }
                 Ok(Some(LogicalPlan::Join(join)))

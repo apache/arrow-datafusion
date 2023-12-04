@@ -94,9 +94,8 @@ mod tests {
             .build()?;
 
         let expected = "Aggregate: groupBy=[[]], aggr=[[MAX(test.b)]]\
-        \n  Projection: test.b\
-        \n    Filter: test.c > Int32(1)\
-        \n      TableScan: test projection=[b, c]";
+        \n  Filter: test.c > Int32(1), projection=[b]\
+        \n    TableScan: test projection=[b, c]";
 
         assert_optimized_plan_eq(&plan, expected)
     }

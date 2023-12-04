@@ -917,7 +917,9 @@ impl DefaultPhysicalPlanner {
                         &input_schema,
                         session_state,
                     )?;
-                    Ok(Arc::new(FilterExec::try_new(runtime_expr, physical_input)?))
+                    let projection: Option<Vec<usize>> = filter.projected_schema
+                    .as_ref().map(|x|x.fields().iter().map(|x|input_dfschema.index_of_column_by_name(x.qualifier(), x.name()).unwrap().unwrap()).collect());
+                    Ok(Arc::new(FilterExec::try_new(runtime_expr, projection, physical_input)?))
                 }
                 LogicalPlan::Union(Union { inputs, schema }) => {
                     let physical_plans = self.create_initial_plan_multi(inputs.iter().map(|lp| lp.as_ref()), session_state).await?;
