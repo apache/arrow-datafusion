@@ -17,24 +17,7 @@
 
 [workspace]
 exclude = ["datafusion-cli"]
-members = [
-    "datafusion/common",
-    "datafusion/core",
-    "datafusion/expr",
-    "datafusion/execution",
-    "datafusion/optimizer",
-    "datafusion/physical-expr",
-    "datafusion/physical-plan",
-    "datafusion/proto",
-    "datafusion/proto/gen",
-    "datafusion/sql",
-    "datafusion/sqllogictest",
-    "datafusion/substrait",
-    "datafusion/wasmtest",
-    "datafusion-examples",
-    "docs",
-    "test-utils",
-    "benchmarks",
+members = ["datafusion/common", "datafusion/core", "datafusion/expr", "datafusion/execution", "datafusion/optimizer", "datafusion/physical-expr", "datafusion/physical-plan", "datafusion/proto", "datafusion/proto/gen", "datafusion/sql", "datafusion/sqllogictest", "datafusion/substrait", "datafusion/wasmtest", "datafusion-examples", "docs", "test-utils", "benchmarks",
 ]
 resolver = "2"
 
@@ -58,19 +41,20 @@ arrow-schema = { version = "49.0.0", default-features = false }
 async-trait = "0.1.73"
 bigdecimal = "0.4.1"
 bytes = "1.4"
+chrono = { version = "0.4.31", default-features = false }
 ctor = "0.2.0"
+dashmap = "5.4.0"
 datafusion = { path = "datafusion/core", version = "33.0.0" }
 datafusion-common = { path = "datafusion/common", version = "33.0.0" }
+datafusion-execution = { path = "datafusion/execution", version = "33.0.0" }
 datafusion-expr = { path = "datafusion/expr", version = "33.0.0" }
-datafusion-sql = { path = "datafusion/sql", version = "33.0.0" }
 datafusion-optimizer = { path = "datafusion/optimizer", version = "33.0.0" }
 datafusion-physical-expr = { path = "datafusion/physical-expr", version = "33.0.0" }
 datafusion-physical-plan = { path = "datafusion/physical-plan", version = "33.0.0" }
-datafusion-execution = { path = "datafusion/execution", version = "33.0.0" }
 datafusion-proto = { path = "datafusion/proto", version = "33.0.0" }
+datafusion-sql = { path = "datafusion/sql", version = "33.0.0" }
 datafusion-sqllogictest = { path = "datafusion/sqllogictest", version = "33.0.0" }
 datafusion-substrait = { path = "datafusion/substrait", version = "33.0.0" }
-dashmap = "5.4.0"
 doc-comment = "0.3"
 env_logger = "0.10"
 futures = "0.3"
@@ -83,12 +67,12 @@ object_store = { version = "0.8.0", default-features = false }
 parking_lot = "0.12"
 parquet = { version = "49.0.0", default-features = false, features = ["arrow", "async", "object_store"] }
 rand = "0.8"
+roaring = { version = "0.10" }
 rstest = "0.18.0"
 serde_json = "1"
 sqlparser = { version = "0.40.0", features = ["visitor"] }
 tempfile = "3"
 thiserror = "1.0.44"
-chrono = { version = "0.4.31", default-features = false }
 url = "2.2"
 
 [profile.release]
