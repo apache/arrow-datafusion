@@ -20,7 +20,7 @@
 use std::sync::Arc;
 
 use crate::analyzer::AnalyzerRule;
-use datafusion_common::config::ConfigOptions;
+
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::Result;
 use datafusion_expr::expr::Exists;
@@ -28,6 +28,8 @@ use datafusion_expr::expr::InSubquery;
 use datafusion_expr::{
     logical_plan::LogicalPlan, Expr, Filter, LogicalPlanBuilder, TableScan,
 };
+
+use crate::analyzer::AnalyzerConfig;
 
 /// Analyzed rule that inlines TableScan that provide a [`LogicalPlan`]
 /// (DataFrame / ViewTable)
@@ -41,7 +43,7 @@ impl InlineTableScan {
 }
 
 impl AnalyzerRule for InlineTableScan {
-    fn analyze(&self, plan: LogicalPlan, _: &ConfigOptions) -> Result<LogicalPlan> {
+    fn analyze(&self, plan: LogicalPlan, _: &dyn AnalyzerConfig) -> Result<LogicalPlan> {
         plan.transform_up(&analyze_internal)
     }
 

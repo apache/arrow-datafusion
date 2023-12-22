@@ -43,6 +43,7 @@ arrow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 datafusion-common = { workspace = true }
+datafusion-execution = { workspace = true }
 datafusion-expr = { workspace = true }
 datafusion-physical-expr = { path = "../physical-expr", version = "34.0.0", default-features = false }
 hashbrown = { version = "0.14", features = ["raw"] }

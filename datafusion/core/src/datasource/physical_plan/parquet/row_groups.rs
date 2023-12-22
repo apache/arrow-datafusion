@@ -350,12 +350,15 @@ mod tests {
     use arrow::datatypes::DataType::Decimal128;
     use arrow::datatypes::Schema;
     use arrow::datatypes::{DataType, Field};
+    use datafusion_common::internal_err;
     use datafusion_common::{config::ConfigOptions, TableReference, ToDFSchema};
     use datafusion_common::{DataFusionError, Result};
+    use datafusion_execution::FunctionRegistry;
     use datafusion_expr::{
         builder::LogicalTableSource, cast, col, lit, AggregateUDF, Expr, ScalarUDF,
         TableSource, WindowUDF,
     };
+    use datafusion_optimizer::analyzer::AnalyzerConfig;
     use datafusion_physical_expr::execution_props::ExecutionProps;
     use datafusion_physical_expr::{create_physical_expr, PhysicalExpr};
     use datafusion_sql::planner::ContextProvider;
@@ -370,6 +373,38 @@ mod tests {
     };
     use std::ops::Rem;
     use std::sync::Arc;
+
+    struct TestAnalyzerConfig<'a> {
+        config_options: &'a ConfigOptions,
+    }
+
+    impl<'a> FunctionRegistry for TestAnalyzerConfig<'a> {
+        fn udfs(&self) -> HashSet<String> {
+            HashSet::new()
+        }
+
+        fn udf(&self, _name: &str) -> Result<Arc<ScalarUDF>> {
+            internal_err!("mock function registry")
+        }
+
+        fn udaf(&self, _name: &str) -> Result<Arc<AggregateUDF>> {
+            internal_err!("mock function registry")
+        }
+
+        fn udwf(&self, _name: &str) -> Result<Arc<WindowUDF>> {
+            internal_err!("mock function registry")
+        }
+    }
+
+    impl<'a> AnalyzerConfig for TestAnalyzerConfig<'a> {
+        fn function_registry(&self) -> &dyn datafusion_execution::FunctionRegistry {
+            self
+        }
+
+        fn options(&self) -> &ConfigOptions {
+            self.config_options
+        }
+    }
 
     struct PrimitiveTypeField {
         name: &'static str,
@@ -1394,7 +1429,10 @@ mod tests {
         let analyzer = Analyzer::new();
         let optimizer = Optimizer::new();
         // analyze and optimize the logical plan
-        let plan = analyzer.execute_and_check(&plan, config.options(), |_, _| {})?;
+        let analyzer_config = TestAnalyzerConfig {
+            config_options: config.options(),
+        };
+        let plan = analyzer.execute_and_check(&plan, &analyzer_config, |_, _| {})?;
         let plan = optimizer.optimize(&plan, &config, |_, _| {})?;
         // convert the logical plan into a physical plan
         let exprs = plan.expressions();

@@ -16,7 +16,7 @@
 // under the License.
 
 use crate::analyzer::AnalyzerRule;
-use datafusion_common::config::ConfigOptions;
+
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
 use datafusion_common::Result;
 use datafusion_expr::expr::{AggregateFunction, AggregateFunctionDefinition, InSubquery};
@@ -28,6 +28,8 @@ use datafusion_expr::{
     LogicalPlanBuilder, Projection, Sort, Subquery,
 };
 use std::sync::Arc;
+
+use super::AnalyzerConfig;
 
 /// Rewrite `Count(Expr:Wildcard)` to `Count(Expr:Literal)`.
 ///
@@ -42,7 +44,7 @@ impl CountWildcardRule {
 }
 
 impl AnalyzerRule for CountWildcardRule {
-    fn analyze(&self, plan: LogicalPlan, _: &ConfigOptions) -> Result<LogicalPlan> {
+    fn analyze(&self, plan: LogicalPlan, _: &dyn AnalyzerConfig) -> Result<LogicalPlan> {
         plan.transform_down(&analyze_internal)
     }
 

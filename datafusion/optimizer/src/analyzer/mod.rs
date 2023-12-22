@@ -16,11 +16,13 @@
 // under the License.
 
 pub mod count_wildcard_rule;
+pub mod function_name_resolver;
 pub mod inline_table_scan;
 pub mod subquery;
 pub mod type_coercion;
 
 use crate::analyzer::count_wildcard_rule::CountWildcardRule;
+use crate::analyzer::function_name_resolver::ResolveFunctionByName;
 use crate::analyzer::inline_table_scan::InlineTableScan;
 
 use crate::analyzer::subquery::check_subquery_expr;
@@ -29,6 +31,7 @@ use crate::utils::log_plan;
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::{TreeNode, VisitRecursion};
 use datafusion_common::{DataFusionError, Result};
+use datafusion_execution::FunctionRegistry;
 use datafusion_expr::expr::Exists;
 use datafusion_expr::expr::InSubquery;
 use datafusion_expr::utils::inspect_expr_pre;
@@ -36,6 +39,14 @@ use datafusion_expr::{Expr, LogicalPlan};
 use log::debug;
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Options to control  DataFusion Analyzer Passes.
+pub trait AnalyzerConfig {
+    /// Return a function registry for resolving names
+    fn function_registry(&self) -> &dyn FunctionRegistry;
+    /// return datafusion configuration options
+    fn options(&self) -> &ConfigOptions;
+}
 
 /// [`AnalyzerRule`]s transform [`LogicalPlan`]s in some way to make
 /// the plan valid prior to the rest of the DataFusion optimization process.
@@ -49,7 +60,11 @@ use std::time::Instant;
 /// it the same result in some more optimal way.
 pub trait AnalyzerRule {
     /// Rewrite `plan`
-    fn analyze(&self, plan: LogicalPlan, config: &ConfigOptions) -> Result<LogicalPlan>;
+    fn analyze(
+        &self,
+        plan: LogicalPlan,
+        config: &dyn AnalyzerConfig,
+    ) -> Result<LogicalPlan>;
 
     /// A human readable name for this analyzer rule
     fn name(&self) -> &str;
@@ -74,6 +89,7 @@ impl Analyzer {
             Arc::new(InlineTableScan::new()),
             Arc::new(TypeCoercion::new()),
             Arc::new(CountWildcardRule::new()),
+            Arc::new(ResolveFunctionByName::new()),
         ];
         Self::with_rules(rules)
     }
@@ -88,7 +104,7 @@ impl Analyzer {
     pub fn execute_and_check<F>(
         &self,
         plan: &LogicalPlan,
-        config: &ConfigOptions,
+        config: &dyn AnalyzerConfig,
         mut observer: F,
     ) -> Result<LogicalPlan>
     where

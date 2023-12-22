@@ -21,7 +21,6 @@ use std::sync::Arc;
 
 use arrow::datatypes::{DataType, IntervalUnit};
 
-use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::{RewriteRecursion, TreeNodeRewriter};
 use datafusion_common::{
     exec_err, internal_err, plan_datafusion_err, plan_err, DFSchema, DFSchemaRef,
@@ -52,6 +51,8 @@ use datafusion_expr::{
 
 use crate::analyzer::AnalyzerRule;
 
+use crate::analyzer::AnalyzerConfig;
+
 #[derive(Default)]
 pub struct TypeCoercion {}
 
@@ -66,7 +67,7 @@ impl AnalyzerRule for TypeCoercion {
         "type_coercion"
     }
 
-    fn analyze(&self, plan: LogicalPlan, _: &ConfigOptions) -> Result<LogicalPlan> {
+    fn analyze(&self, plan: LogicalPlan, _: &dyn AnalyzerConfig) -> Result<LogicalPlan> {
         analyze_internal(&DFSchema::empty(), &plan)
     }
 }

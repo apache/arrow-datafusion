@@ -104,7 +104,7 @@ use crate::catalog::information_schema::{InformationSchemaProvider, INFORMATION_
 use crate::catalog::listing_schema::ListingSchemaProvider;
 use crate::datasource::object_store::ObjectStoreUrl;
 use datafusion_optimizer::{
-    analyzer::{Analyzer, AnalyzerRule},
+    analyzer::{Analyzer, AnalyzerConfig, AnalyzerRule},
     OptimizerConfig,
 };
 use datafusion_sql::planner::object_name_to_table_reference;
@@ -1724,7 +1724,7 @@ impl SessionState {
             // analyze & capture output of each rule
             let analyzed_plan = match self.analyzer.execute_and_check(
                 e.plan.as_ref(),
-                self.options(),
+                self,
                 |analyzed_plan, analyzer| {
                     let analyzer_name = analyzer.name().to_string();
                     let plan_type = PlanType::AnalyzedLogicalPlan { analyzer_name };
@@ -1780,9 +1780,7 @@ impl SessionState {
                 logical_optimization_succeeded,
             }))
         } else {
-            let analyzed_plan =
-                self.analyzer
-                    .execute_and_check(plan, self.options(), |_, _| {})?;
+            let analyzed_plan = self.analyzer.execute_and_check(plan, self, |_, _| {})?;
             self.optimizer.optimize(&analyzed_plan, self, |_, _| {})
         }
     }
@@ -1867,6 +1865,16 @@ impl SessionState {
     /// Return version of the cargo package that produced this query
     pub fn version(&self) -> &str {
         env!("CARGO_PKG_VERSION")
+    }
+}
+
+impl AnalyzerConfig for SessionState {
+    fn function_registry(&self) -> &dyn FunctionRegistry {
+        self
+    }
+
+    fn options(&self) -> &ConfigOptions {
+        self.config_options()
     }
 }
 

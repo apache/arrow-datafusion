@@ -27,7 +27,8 @@ use crate::{
     aggregate_function, built_in_function, conditional_expressions::CaseBuilder,
     logical_plan::Subquery, AccumulatorFactoryFunction, AggregateUDF,
     BuiltinScalarFunction, Expr, LogicalPlan, Operator, ReturnTypeFunction,
-    ScalarFunctionImplementation, ScalarUDF, Signature, StateTypeFunction, Volatility,
+    ScalarFunctionDefinition, ScalarFunctionImplementation, ScalarUDF, Signature,
+    StateTypeFunction, Volatility,
 };
 use arrow::datatypes::DataType;
 use datafusion_common::{Column, Result};
@@ -1007,7 +1008,7 @@ pub fn create_udwf(
     )
 }
 
-/// Calls a named built in function
+/// Calls a named function
 /// ```
 /// use datafusion_expr::{col, lit, call_fn};
 ///
@@ -1015,10 +1016,10 @@ pub fn create_udwf(
 /// let expr = call_fn("sin", vec![col("x")]).unwrap().lt(lit(0.2));
 /// ```
 pub fn call_fn(name: impl AsRef<str>, args: Vec<Expr>) -> Result<Expr> {
-    match name.as_ref().parse::<BuiltinScalarFunction>() {
-        Ok(fun) => Ok(Expr::ScalarFunction(ScalarFunction::new(fun, args))),
-        Err(e) => Err(e),
-    }
+    Ok(Expr::ScalarFunction(ScalarFunction {
+        func_def: ScalarFunctionDefinition::Name(Arc::from(name.as_ref())),
+        args,
+    }))
 }
 
 #[cfg(test)]
