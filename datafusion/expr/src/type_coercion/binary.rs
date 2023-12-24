@@ -87,9 +87,15 @@ fn signature(lhs: &DataType, op: &Operator, rhs: &DataType) -> Result<Signature>
         }
         And | Or => if matches!((lhs, rhs), (Boolean | Null, Boolean | Null)) {
             // Logical binary boolean operators can only be evaluated for
-            // boolean or null arguments.                   
+            // boolean or null arguments.
             Ok(Signature::uniform(DataType::Boolean))
-        } else {
+        } else if matches!((lhs, rhs), (List(_), List(_))) {
+            array_coercion(lhs, rhs).map(Signature::uniform).ok_or_else(|| {
+                plan_datafusion_err!(
+                    "Cannot infer common array type for arrow operation {lhs} {op} {rhs}"
+                )
+            })
+        } else  {
             plan_err!(
                 "Cannot infer common argument type for logical boolean operation {lhs} {op} {rhs}"
             )

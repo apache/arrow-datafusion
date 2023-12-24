@@ -21,7 +21,7 @@ use std::hash::{Hash, Hasher};
 use std::{any::Any, sync::Arc};
 
 use crate::array_expressions::{
-    array_append, array_concat, array_has_all, array_prepend,
+    array_append, array_concat, array_has_all, array_intersect, array_prepend,
 };
 use crate::expressions::datum::{apply, apply_cmp};
 use crate::intervals::cp_solver::{propagate_arithmetic, propagate_comparison};
@@ -557,18 +557,16 @@ impl BinaryExpr {
         match &self.op {
             IsDistinctFrom | IsNotDistinctFrom | Lt | LtEq | Gt | GtEq | Eq | NotEq
             | Plus | Minus | Multiply | Divide | Modulo => unreachable!(),
-            And => {
-                if left_data_type == &DataType::Boolean {
-                    boolean_op!(&left, &right, and_kleene)
-                } else {
-                    internal_err!(
-                        "Cannot evaluate binary expression {:?} with types {:?} and {:?}",
-                        self.op,
-                        left.data_type(),
-                        right.data_type()
-                    )
-                }
-            }
+            And => match left_data_type {
+                DataType::Boolean => boolean_op!(&left, &right, and_kleene),
+                DataType::List(_field) => array_intersect(&[left, right]),
+                _ => internal_err!(
+                    "Cannot evaluate binary expression {:?} with types {:?} and {:?}",
+                    self.op,
+                    left_data_type,
+                    right_data_type
+                ),
+            },
             Or => {
                 if left_data_type == &DataType::Boolean {
                     boolean_op!(&left, &right, or_kleene)
