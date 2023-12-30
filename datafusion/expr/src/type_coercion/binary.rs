@@ -29,7 +29,8 @@ use arrow::datatypes::{
 };
 
 use datafusion_common::{
-    exec_datafusion_err, plan_datafusion_err, plan_err, DataFusionError, Result,
+    exec_datafusion_err, internal_err, plan_datafusion_err, plan_err, DataFusionError,
+    Result,
 };
 
 /// The type signature of an instantiation of binary operator expression such as
@@ -298,6 +299,21 @@ pub fn comparison_coercion(lhs_type: &DataType, rhs_type: &DataType) -> Option<D
         .or_else(|| string_numeric_coercion(lhs_type, rhs_type))
         .or_else(|| string_temporal_coercion(lhs_type, rhs_type))
         .or_else(|| binary_coercion(lhs_type, rhs_type))
+}
+
+/// Coerce all the data types into one final coerced type with `comparison_coercion`
+pub fn comparison_coercion_for_iter(data_types: &[DataType]) -> Result<DataType> {
+    data_types.iter().skip(1).try_fold(
+        data_types.first().unwrap().clone(),
+        |current_type, other_type| {
+            let coerced_type = comparison_coercion(&current_type, other_type);
+            if let Some(coerced_type) = coerced_type {
+                Ok(coerced_type)
+            } else {
+                internal_err!("Coercion from {current_type:?} to {other_type:?} failed.")
+            }
+        },
+    )
 }
 
 /// Coerce `lhs_type` and `rhs_type` to a common type for the purposes of a comparison operation

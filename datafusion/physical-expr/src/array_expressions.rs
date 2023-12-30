@@ -34,7 +34,7 @@ use datafusion_common::cast::{
     as_generic_list_array, as_generic_string_array, as_int64_array, as_large_list_array,
     as_list_array, as_null_array, as_string_array,
 };
-use datafusion_common::utils::{array_into_list_array, list_ndims};
+use datafusion_common::utils::array_into_list_array;
 use datafusion_common::{
     exec_err, internal_err, not_impl_err, plan_err, DataFusionError, Result,
 };
@@ -1183,13 +1183,20 @@ pub fn array_concat(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     let mut new_args = vec![];
     for arg in args {
-        let ndim = list_ndims(arg.data_type());
-        let base_type = datafusion_common::utils::base_type(arg.data_type());
-        if ndim == 0 {
-            return not_impl_err!("Array is not type '{base_type:?}'.");
-        } else if !base_type.eq(&DataType::Null) {
+        let data_type = arg.data_type();
+        if let DataType::List(_) = data_type {
             new_args.push(arg.clone());
+        } else if data_type.eq(&DataType::Null) {
+            // Null type is valid.
+            continue;
+        } else {
+            return internal_err!("Expect Array type, found {:?}", data_type);
         }
+    }
+
+    // All the arguments are null, return null
+    if new_args.is_empty() {
+        return Ok(new_null_array(&DataType::Null, 0));
     }
 
     concat_internal(new_args.as_slice())

@@ -1797,22 +1797,25 @@ select array_concat(make_array(), make_array(2, 3));
 [2, 3]
 
 # array_concat scalar function #7 (with empty arrays)
+## DuckDB and ClickHouse both return '[[1, 2], [3, 4], []]'
 query ?
 select array_concat(make_array(make_array(1, 2), make_array(3, 4)), make_array(make_array()));
 ----
-[[1, 2], [3, 4]]
+[[1, 2], [3, 4], []]
 
 # array_concat scalar function #8 (with empty arrays)
+## DuckDB return error, ClickHouse return '[[1, 2], [3, 4], [], [], [], [5, 6], [7, 8]]'
 query ?
-select array_concat(make_array(make_array(1, 2), make_array(3, 4)), make_array(make_array()), make_array(make_array(), make_array()), make_array(make_array(5, 6), make_array(7, 8)));
+select array_concat([[1,2], [3,4]], [[]], [[],[]], [[5,6], [7,8]]);
 ----
-[[1, 2], [3, 4], [5, 6], [7, 8]]
+[[1, 2], [3, 4], [], [], [], [5, 6], [7, 8]]
 
 # array_concat scalar function #9 (with empty arrays)
+## DuckDB and ClickHouse both return '[[], [1, 2], [3, 4]]'
 query ?
 select array_concat(make_array(make_array()), make_array(make_array(1, 2), make_array(3, 4)));
 ----
-[[1, 2], [3, 4]]
+[[], [1, 2], [3, 4]]
 
 # array_cat scalar function #10 (function alias `array_concat`)
 query ??
@@ -2005,6 +2008,86 @@ select array_concat(make_array(column3), column1, column2) from arrays_values_v2
 [, , 1, , 21]
 [, 11, 12]
 []
+
+# array concat with nulls
+query ?
+select array_concat([1,2,3], null);
+----
+[1, 2, 3]
+
+query ?
+select array_concat(null, [1,2,3]);
+----
+[1, 2, 3]
+
+query ?
+select array_concat([1, null, 2], [3, 4, null]);
+----
+[1, , 2, 3, 4, ]
+
+query ?
+select array_concat([1,2], [null,3]);
+----
+[1, 2, , 3]
+
+query ?
+select array_concat([[1,2]], [[null,3]]);
+----
+[[1, 2], [, 3]]
+
+query ?
+select array_concat([1, null], [[null, 2]]);
+----
+[[1, ], [, 2]]
+
+query ?
+select array_concat([1, null], [null]);
+----
+[1, , ]
+
+query ?
+select array_concat(null, null);
+----
+NULL
+
+query ?
+select array_concat([], null);
+----
+[]
+
+query ?
+select array_concat([], []);
+----
+[]
+
+query ?
+select array_concat([null], [null]);
+----
+[, ]
+
+# 3D null + 1D + 2D empty
+query ?
+select array_concat([[[null]]], [1, 2], [[]]);
+----
+[[[]], [[1, 2]], [[]]]
+
+# 1D + 2D + 3D empty
+query ?
+select array_concat([], [[]], [[[]]]);
+----
+[[[]], [[]], [[]]]
+
+# 1D + 2D + 3D null
+query ?
+select array_concat([null], [[null]], [[[null]]]);
+----
+[[[]], [[]], [[]]]
+
+# 0D + 1D + 2D + 3D null
+query ?
+select array_concat(null, [null], [[null]], [[[null]]]);
+----
+[[[]], [[]], [[]]]
 
 ## array_position (aliases: `list_position`, `array_indexof`, `list_indexof`)
 

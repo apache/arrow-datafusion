@@ -24,7 +24,7 @@ use arrow::{
 use datafusion_common::utils::list_ndims;
 use datafusion_common::{internal_err, plan_err, DataFusionError, Result};
 
-use super::binary::comparison_coercion;
+use super::binary::{comparison_coercion, comparison_coercion_for_iter};
 
 /// Performs type coercion for function arguments.
 ///
@@ -89,18 +89,7 @@ fn get_valid_types(
             .map(|valid_type| (0..*number).map(|_| valid_type.clone()).collect())
             .collect(),
         TypeSignature::VariadicEqual => {
-            let new_type = current_types.iter().skip(1).try_fold(
-                current_types.first().unwrap().clone(),
-                |acc, x| {
-                    let coerced_type = comparison_coercion(&acc, x);
-                    if let Some(coerced_type) = coerced_type {
-                        Ok(coerced_type)
-                    } else {
-                        internal_err!("Coercion from {acc:?} to {x:?} failed.")
-                    }
-                },
-            );
-
+            let new_type = comparison_coercion_for_iter(current_types);
             match new_type {
                 Ok(new_type) => vec![vec![new_type; current_types.len()]],
                 Err(e) => return Err(e),
@@ -147,6 +136,33 @@ fn get_valid_types(
                 return Ok(vec![vec![array_type.clone(), elem_type.to_owned()]]);
             } else {
                 return Ok(vec![vec![]]);
+            }
+        }
+        TypeSignature::ArrayConcat => {
+            let base_types = current_types
+                .iter()
+                .map(datafusion_common::utils::base_type)
+                .collect::<Vec<_>>();
+
+            let new_base_type = comparison_coercion_for_iter(base_types.as_slice());
+            match new_base_type {
+                Ok(new_base_type) => {
+                    let array_types = current_types
+                        .iter()
+                        .map(|t| {
+                            if t.eq(&DataType::Null) {
+                                t.to_owned()
+                            } else {
+                                datafusion_common::utils::coerced_type_with_base_type_only(
+                                    t,
+                                    &new_base_type,
+                                )
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    return Ok(vec![array_types]);
+                }
+                Err(e) => return Err(e),
             }
         }
         TypeSignature::Any(number) => {

@@ -32,6 +32,7 @@ use crate::{
 };
 
 use arrow::datatypes::{DataType, Field, Fields, IntervalUnit, TimeUnit};
+use datafusion_common::utils::list_ndims;
 use datafusion_common::{internal_err, plan_err, DataFusionError, Result};
 
 use strum::IntoEnumIterator;
@@ -498,25 +499,6 @@ impl BuiltinScalarFunction {
         }
     }
 
-    /// Returns the dimension [`DataType`] of [`DataType::List`] if
-    /// treated as a N-dimensional array.
-    ///
-    /// ## Examples:
-    ///
-    /// * `Int64` has dimension 1
-    /// * `List(Int64)` has dimension 2
-    /// * `List(List(Int64))` has dimension 3
-    /// * etc.
-    fn return_dimension(self, input_expr_type: &DataType) -> u64 {
-        let mut result: u64 = 1;
-        let mut current_data_type = input_expr_type;
-        while let DataType::List(field) = current_data_type {
-            current_data_type = field.data_type();
-            result += 1;
-        }
-        result
-    }
-
     /// Returns the output [`DataType`] of this function
     ///
     /// This method should be invoked only after `input_expr_types` have been validated
@@ -552,25 +534,30 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::ArrayAppend => Ok(input_expr_types[0].clone()),
             BuiltinScalarFunction::ArraySort => Ok(input_expr_types[0].clone()),
             BuiltinScalarFunction::ArrayConcat => {
-                let mut expr_type = Null;
+                let mut expr_type: Option<DataType> = None;
                 let mut max_dims = 0;
                 for input_expr_type in input_expr_types {
                     match input_expr_type {
-                        List(field) => {
-                            if !field.data_type().equals_datatype(&Null) {
-                                let dims = self.return_dimension(input_expr_type);
-                                expr_type = match max_dims.cmp(&dims) {
-                                    Ordering::Greater => expr_type,
+                        List(_) => {
+                            let dims = list_ndims(input_expr_type);
+                            if let Some(data_type) = expr_type {
+                                let new_type = match max_dims.cmp(&dims) {
+                                    Ordering::Greater => data_type,
                                     Ordering::Equal => {
-                                        get_wider_type(&expr_type, input_expr_type)?
+                                        get_wider_type(&data_type, input_expr_type)?
                                     }
                                     Ordering::Less => {
                                         max_dims = dims;
                                         input_expr_type.clone()
                                     }
                                 };
+                                expr_type = Some(new_type)
+                            } else {
+                                expr_type = Some(input_expr_type.clone());
+                                max_dims = dims;
                             }
                         }
+                        DataType::Null => {}
                         _ => {
                             return plan_err!(
                                 "The {self} function can only accept list as the args."
@@ -579,7 +566,11 @@ impl BuiltinScalarFunction {
                     }
                 }
 
-                Ok(expr_type)
+                if let Some(expr_type) = expr_type {
+                    Ok(expr_type)
+                } else {
+                    Ok(DataType::Null)
+                }
             }
             BuiltinScalarFunction::ArrayHasAll
             | BuiltinScalarFunction::ArrayHasAny
@@ -940,9 +931,10 @@ impl BuiltinScalarFunction {
             }
             BuiltinScalarFunction::ArrayPopFront => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayPopBack => Signature::any(1, self.volatility()),
-            BuiltinScalarFunction::ArrayConcat => {
-                Signature::variadic_any(self.volatility())
-            }
+            BuiltinScalarFunction::ArrayConcat => Signature {
+                type_signature: ArrayConcat,
+                volatility: self.volatility(),
+            },
             BuiltinScalarFunction::ArrayDims => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayEmpty => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayElement => Signature::any(2, self.volatility()),
