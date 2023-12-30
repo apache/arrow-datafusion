@@ -2873,6 +2873,14 @@ impl TryFrom<&DataType> for ScalarValue {
                 ))),
                 1,
             )),
+            DataType::Map(field, _) => ScalarValue::List(new_null_array(
+                &DataType::List(Arc::new(Field::new(
+                    "entries",
+                    field.data_type().clone(),
+                    true,
+                ))),
+                1,
+            )),
             DataType::Struct(fields) => ScalarValue::Struct(None, fields.clone()),
             DataType::Null => ScalarValue::Null,
             _ => {
@@ -4329,6 +4337,19 @@ mod tests {
         assert_eq!(scalar, ScalarValue::Utf8(Some("foo".to_string())));
         let scalar = ScalarValue::from_str("foo").unwrap();
         assert_eq!(scalar, ScalarValue::Utf8(Some("foo".to_string())));
+    }
+
+    #[test]
+    fn test_scalar_map() {
+        let key = Field::new("key", DataType::Int64, false);
+        let value = Field::new("value", DataType::Int64, true);
+        let map_field =
+            Field::new("entries", DataType::Struct(vec![key, value].into()), false);
+
+        let scalar =
+            ScalarValue::try_from(DataType::Map(map_field.into(), false)).unwrap();
+
+        assert!(matches!(scalar, ScalarValue::List(_)));
     }
 
     #[test]
