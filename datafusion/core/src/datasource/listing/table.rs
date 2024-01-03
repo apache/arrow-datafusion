@@ -150,6 +150,9 @@ impl ListingTableConfig {
             ),
             #[cfg(feature = "parquet")]
             FileType::PARQUET => Arc::new(ParquetFormat::default()),
+            FileType::Extension(_) => {
+                unreachable!("FileType::from_str cannot return Extension variant!")
+            }
         };
 
         Ok((file_format, ext))
@@ -768,7 +771,7 @@ impl TableProvider for ListingTable {
         let file_type_writer_options = match &self.options().file_type_write_options {
             Some(opt) => opt.clone(),
             None => FileTypeWriterOptions::build_default(
-                &file_format.file_type(),
+                &mut file_format.file_type(),
                 state.config_options(),
             )?,
         };
@@ -1715,6 +1718,9 @@ mod tests {
                         ArrowReadOptions::default().schema(schema.as_ref()),
                     )
                     .await?;
+            }
+            FileType::Extension(_) => {
+                panic!("Extension file type not implemented in write path.")
             }
         }
 

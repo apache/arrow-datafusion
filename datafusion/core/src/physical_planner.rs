@@ -605,6 +605,7 @@ impl DefaultPhysicalPlanner {
                         FileType::JSON => Arc::new(JsonFormat::default()),
                         FileType::AVRO => Arc::new(AvroFormat {} ),
                         FileType::ARROW => Arc::new(ArrowFormat {}),
+                        FileType::Extension(_ext) => return not_impl_err!("Extension FileTypes not supported in Copy To statements.")
                     };
 
                     sink_format.create_writer_physical_plan(input_exec, session_state, config, None).await

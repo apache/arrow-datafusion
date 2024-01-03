@@ -97,7 +97,9 @@ pub struct FileSinkConfig {
     pub single_file_output: bool,
     /// Controls whether existing data should be overwritten by this sink
     pub overwrite: bool,
-    /// Contains settings specific to writing a given FileType, e.g. parquet max_row_group_size
+    /// Contains settings specific to writing a given FileType, e.g. parquet max_row_group_size.
+    /// Note that for externally defined FileTypes, FileTypeWriterOptions contains arbitrary
+    /// config tuples that must be handled within the physical plan.
     pub file_type_writer_options: FileTypeWriterOptions,
 }
 

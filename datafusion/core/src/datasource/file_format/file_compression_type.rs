@@ -250,6 +250,7 @@ impl FileTypeExt for FileType {
                     "FileCompressionType can be specified for CSV/JSON FileType.".into(),
                 )),
             },
+            FileType::Extension(ext) => ext.extension_with_compression(c.variant),
         }
     }
 }

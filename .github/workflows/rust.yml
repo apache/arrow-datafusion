@@ -98,7 +98,7 @@ jobs:
         with:
           rust-version: stable
       - name: Run tests (excluding doctests)
-        run: cargo test --lib --tests --bins --features avro,json,backtrace
+        run: RUST_MIN_STACK=504857600 cargo test --lib --tests --bins --features avro,json,backtrace
       - name: Verify Working Directory Clean
         run: git diff --exit-code
 

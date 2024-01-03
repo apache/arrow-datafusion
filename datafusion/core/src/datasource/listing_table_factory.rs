@@ -88,6 +88,9 @@ impl TableProviderFactory for ListingTableFactory {
                 JsonFormat::default().with_file_compression_type(file_compression_type),
             ),
             FileType::ARROW => Arc::new(ArrowFormat),
+            FileType::Extension(_) => {
+                unreachable!("FileType::from_str cannot return Extension variant!")
+            }
         };
 
         let (provided_schema, table_partition_cols) = if cmd.schema.fields().is_empty() {
@@ -181,6 +184,9 @@ impl TableProviderFactory for ListingTableFactory {
             FileType::PARQUET => file_type_writer_options,
             FileType::ARROW => file_type_writer_options,
             FileType::AVRO => file_type_writer_options,
+            FileType::Extension(_) => {
+                unreachable!("FileType::from_str cannot return Extension variant!")
+            }
         };
 
         let table_path = ListingTableUrl::parse(&cmd.location)?;
