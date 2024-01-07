@@ -193,6 +193,10 @@ pub enum BuiltinScalarFunction {
     Flatten,
     /// Range
     Range,
+    /// Aggregate
+    ArrayAggregate,
+    /// Sum
+    ArraySum,
 
     // struct functions
     /// struct
@@ -400,6 +404,7 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Tan => Volatility::Immutable,
             BuiltinScalarFunction::Tanh => Volatility::Immutable,
             BuiltinScalarFunction::Trunc => Volatility::Immutable,
+            BuiltinScalarFunction::ArrayAggregate => Volatility::Immutable,
             BuiltinScalarFunction::ArrayAppend => Volatility::Immutable,
             BuiltinScalarFunction::ArraySort => Volatility::Immutable,
             BuiltinScalarFunction::ArrayConcat => Volatility::Immutable,
@@ -427,6 +432,7 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::ArrayReplaceAll => Volatility::Immutable,
             BuiltinScalarFunction::Flatten => Volatility::Immutable,
             BuiltinScalarFunction::ArraySlice => Volatility::Immutable,
+            BuiltinScalarFunction::ArraySum => Volatility::Immutable,
             BuiltinScalarFunction::ArrayToString => Volatility::Immutable,
             BuiltinScalarFunction::ArrayIntersect => Volatility::Immutable,
             BuiltinScalarFunction::ArrayUnion => Volatility::Immutable,
@@ -549,6 +555,10 @@ impl BuiltinScalarFunction {
                 let data_type = get_base_type(&input_expr_types[0])?;
                 Ok(data_type)
             }
+
+            BuiltinScalarFunction::ArrayAggregate => {
+                internal_err!("ArrayAggregate should be rewritten to other function")
+            }
             BuiltinScalarFunction::ArrayAppend => Ok(input_expr_types[0].clone()),
             BuiltinScalarFunction::ArraySort => Ok(input_expr_types[0].clone()),
             BuiltinScalarFunction::ArrayConcat => {
@@ -617,6 +627,15 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::ArrayReplaceN => Ok(input_expr_types[0].clone()),
             BuiltinScalarFunction::ArrayReplaceAll => Ok(input_expr_types[0].clone()),
             BuiltinScalarFunction::ArraySlice => Ok(input_expr_types[0].clone()),
+            BuiltinScalarFunction::ArraySum => {
+                if let DataType::List(field) = &input_expr_types[0] {
+                    Ok(field.data_type().clone())
+                } else {
+                    plan_err!(
+                        "The {self} function can only accept list as the first argument"
+                    )
+                }
+            }
             BuiltinScalarFunction::ArrayToString => Ok(Utf8),
             BuiltinScalarFunction::ArrayIntersect => {
                 match (input_expr_types[0].clone(), input_expr_types[1].clone()) {
@@ -938,6 +957,9 @@ impl BuiltinScalarFunction {
                 // 0 or more arguments of arbitrary type
                 Signature::one_of(vec![VariadicEqual, Any(0)], self.volatility())
             }
+            BuiltinScalarFunction::ArrayAggregate => {
+                unreachable!("ArrayAggregate should be rewritten to other function")
+            }
             BuiltinScalarFunction::ArrayPopFront => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayPopBack => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayConcat => {
@@ -974,6 +996,7 @@ impl BuiltinScalarFunction {
                 Signature::any(3, self.volatility())
             }
             BuiltinScalarFunction::ArraySlice => Signature::any(3, self.volatility()),
+            BuiltinScalarFunction::ArraySum => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::ArrayToString => {
                 Signature::variadic_any(self.volatility())
             }
@@ -1578,6 +1601,12 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::ArrowTypeof => &["arrow_typeof"],
 
             // array functions
+            BuiltinScalarFunction::ArrayAggregate => &[
+                "array_aggregate",
+                "list_aggregate",
+                "array_aggr",
+                "list_aggr",
+            ],
             BuiltinScalarFunction::ArrayAppend => &[
                 "array_append",
                 "list_append",
@@ -1639,12 +1668,14 @@ impl BuiltinScalarFunction {
                 &["array_replace_all", "list_replace_all"]
             }
             BuiltinScalarFunction::ArraySlice => &["array_slice", "list_slice"],
+            BuiltinScalarFunction::ArraySum => &["array_sum", "list_sum"],
             BuiltinScalarFunction::ArrayToString => &[
                 "array_to_string",
                 "list_to_string",
                 "array_join",
                 "list_join",
             ],
+
             BuiltinScalarFunction::ArrayUnion => &["array_union", "list_union"],
             BuiltinScalarFunction::Cardinality => &["cardinality"],
             BuiltinScalarFunction::MakeArray => &["make_array", "make_list"],

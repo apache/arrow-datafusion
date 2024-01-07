@@ -1,0 +1,66 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+
+#   http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+#############
+## Array Aggregate Tests
+#############
+
+# sum
+
+query error DataFusion error: This feature is not implemented: Aggregate function SUM is not implemented
+select 
+array_aggregate([1, 3, 5, 7], 'sum'),
+array_aggregate([1, 3, 5, 7], 'SUM'),
+array_aggregate([1.1, 2.2, 3.3], 'sum'),
+array_aggregate([1, -1, 0, 23], 'sum'),
+array_aggregate([1, null, 9, null], 'sum'),
+array_sum([1, 3, 5]),
+array_sum([1.1, 2.2]),
+array_sum([1, -1, 0, 22]),
+array_sum([1, -1, 0, null, 22]);
+
+statement ok
+CREATE TABLE array_sum_table
+AS VALUES
+  ([1, -1, 2, -3], [-2.2, 3.3, 4.9]),
+  ([0, 1, -10, 20], [1.1, 2.2, 3.3])
+;
+
+query IR
+select array_sum(column1), array_sum(column2) from array_sum_table;
+----
+-1 6
+11 6.6
+
+query IR
+select array_aggregate(column1, 'sum'),
+       array_aggregate(column2, 'sum')
+from array_sum_table;
+----
+-1 6
+11 6.6
+
+# TODO: array_sum for nulls
+query error
+select array_aggregate([], 'sum')
+
+# TODO: array_sum for nulls
+query error
+select array_aggregate([null], 'sum')
+
+statement ok
+drop table array_sum_table;

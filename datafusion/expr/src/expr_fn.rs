@@ -579,6 +579,13 @@ scalar_expr!(Log, log, base x, "logarithm of a `x` for a particular `base`");
 
 // array functions
 scalar_expr!(
+    ArrayAggregate,
+    array_aggregate,
+    array name,
+    "allows the execution of arbitrary existing aggregate functions `name` on the elements of a list"
+);
+
+scalar_expr!(
     ArrayAppend,
     array_append,
     array element,
@@ -734,6 +741,7 @@ scalar_expr!(
     array offset length,
     "returns a slice of the array."
 );
+scalar_expr!(ArraySum, array_sum, array, "return sum of the array");
 scalar_expr!(
     ArrayToString,
     array_to_string,

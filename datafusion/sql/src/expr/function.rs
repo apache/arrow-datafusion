@@ -17,7 +17,8 @@
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
 use datafusion_common::{
-    not_impl_err, plan_datafusion_err, plan_err, DFSchema, DataFusionError, Result,
+    internal_err, not_impl_err, plan_datafusion_err, plan_err, DFSchema, DataFusionError,
+    Result, ScalarValue,
 };
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::function::suggest_valid_function;
@@ -72,6 +73,24 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         // next, scalar built-in
         if let Ok(fun) = BuiltinScalarFunction::from_str(&name) {
             let args = self.function_args_to_expr(args, schema, planner_context)?;
+
+            // Translate array_aggregate to aggregate function with array argument.
+            if fun == BuiltinScalarFunction::ArrayAggregate {
+                let fun = match &args[1] {
+                    Expr::Literal(ScalarValue::Utf8(Some(name))) => match name.as_str() {
+                        "sum" => BuiltinScalarFunction::ArraySum,
+                        _ => {
+                            return not_impl_err!(
+                                "Aggregate function {name} is not implemented"
+                            )
+                        }
+                    },
+                    _ => return internal_err!("Aggregate function name is not a string"),
+                };
+                let args = vec![args[0].to_owned()];
+                return Ok(Expr::ScalarFunction(ScalarFunction::new(fun, args)));
+            }
+
             return Ok(Expr::ScalarFunction(ScalarFunction::new(fun, args)));
         };
 

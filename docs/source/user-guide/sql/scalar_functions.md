@@ -1567,6 +1567,7 @@ from_unixtime(expression)
 
 ## Array Functions
 
+- [array_aggregate](#array_aggregate)
 - [array_append](#array_append)
 - [array_sort](#array_sort)
 - [array_cat](#array_cat)
@@ -1594,6 +1595,7 @@ from_unixtime(expression)
 - [array_replace_n](#array_replace_n)
 - [array_replace_all](#array_replace_all)
 - [array_slice](#array_slice)
+- [array_sum](#array_sum)
 - [array_to_string](#array_to_string)
 - [cardinality](#cardinality)
 - [empty](#empty)
@@ -1621,6 +1623,7 @@ from_unixtime(expression)
 - [list_replace_n](#list_replace_n)
 - [list_replace_all](#list_replace_all)
 - [list_slice](#list_slice)
+- [list_sum](#list_sum)
 - [list_to_string](#list_to_string)
 - [make_array](#make_array)
 - [make_list](#make_list)
@@ -1628,6 +1631,26 @@ from_unixtime(expression)
 - [string_to_list](#string_to_list)
 - [trim_array](#trim_array)
 - [range](#range)
+
+### `array_aggregate`
+
+Allows the execution of arbitrary existing aggregate function `name` on the elements of a list.
+
+```
+array_aggregate(array, name)
+```
+
+#### Arguments
+
+- **array**: Array expression.
+  Can be a constant, column, or function, and any combination of array operators.
+- **name**: Aggregate function name.
+
+#### Aliases
+
+- list_aggregate
+- array_aggr
+- list_aggr
 
 ### `array_append`
 
@@ -2296,6 +2319,28 @@ array_replace_all(array, from, to)
 
 - list_replace_all
 
+### `array_sum`
+
+Return the sum of the array.
+
+```
+array_sum(array)
+```
+
+#### Example
+
+```
++---------------------------------------------------+
+| array_sum(make_array(Int64(1),Int64(2),Int64(3))) |
++---------------------------------------------------+
+| 6                                                 |
++---------------------------------------------------+
+```
+
+#### Aliases
+
+- list_sum
+
 ### `array_slice`
 
 Returns a slice of the array.
@@ -2569,6 +2614,10 @@ _Alias of [array_replace_all](#array_replace_all)._
 ### `list_slice`
 
 _Alias of [array_slice](#array_slice)._
+
+### `list_sum`
+
+_Alias of [array_sum](#array_sum)._
 
 ### `list_to_string`
 

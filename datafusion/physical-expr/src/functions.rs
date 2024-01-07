@@ -33,7 +33,7 @@
 use crate::execution_props::ExecutionProps;
 use crate::sort_properties::SortProperties;
 use crate::{
-    array_expressions, conditional_expressions, datetime_expressions,
+    array_aggregate, array_expressions, conditional_expressions, datetime_expressions,
     expressions::nullif_func, math_expressions, string_expressions, struct_expressions,
     PhysicalExpr, ScalarFunctionExpr,
 };
@@ -326,6 +326,9 @@ pub fn create_physical_fun(
         }
 
         // array functions
+        BuiltinScalarFunction::ArrayAggregate => {
+            unreachable!("ArrayAggregate should be rewritten to other function")
+        }
         BuiltinScalarFunction::ArrayAppend => {
             Arc::new(|args| make_scalar_function(array_expressions::array_append)(args))
         }
@@ -406,6 +409,9 @@ pub fn create_physical_fun(
         }),
         BuiltinScalarFunction::ArraySlice => {
             Arc::new(|args| make_scalar_function(array_expressions::array_slice)(args))
+        }
+        BuiltinScalarFunction::ArraySum => {
+            Arc::new(|args| make_scalar_function(array_aggregate::array_sum)(args))
         }
         BuiltinScalarFunction::ArrayToString => Arc::new(|args| {
             make_scalar_function(array_expressions::array_to_string)(args)

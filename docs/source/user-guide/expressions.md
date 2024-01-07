@@ -209,6 +209,7 @@ Unlike to some databases the math functions in Datafusion works the same way as 
 
 | Syntax                                | Description                                                                                                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| array_aggregate(array, name)          | Allows the execution of arbitrary existing aggregate functions on the elements of a list.`array_aggregate([1, 2, 3], 'sum') -> 6`                                        |
 | array_append(array, element)          | Appends an element to the end of an array. `array_append([1, 2, 3], 4) -> [1, 2, 3, 4]`                                                                                  |
 | array_concat(array[, ..., array_n])   | Concatenates arrays. `array_concat([1, 2, 3], [4, 5, 6]) -> [1, 2, 3, 4, 5, 6]`                                                                                          |
 | array_has(array, element)             | Returns true if the array contains the element `array_has([1,2,3], 1) -> true`                                                                                           |
@@ -233,6 +234,7 @@ Unlike to some databases the math functions in Datafusion works the same way as 
 | array_replace_n(array, from, to, max) | Replaces the first `max` occurrences of the specified element with another specified element. `array_replace_n([1, 2, 2, 3, 2, 1, 4], 2, 5, 2) -> [1, 5, 5, 3, 2, 1, 4]` |
 | array_replace_all(array, from, to)    | Replaces all occurrences of the specified element with another specified element. `array_replace_all([1, 2, 2, 3, 2, 1, 4], 2, 5) -> [1, 5, 5, 3, 5, 1, 4]`              |
 | array_slice(array, index)             | Returns a slice of the array. `array_slice([1, 2, 3, 4, 5, 6, 7, 8], 3, 6) -> [3, 4, 5, 6]`                                                                              |
+| array_sum(array)                      | Returns the sum of the array. `array_sum([1, 2, 3]) -> 6`                                                                                                                |
 | array_to_string(array, delimiter)     | Converts each element to its text representation. `array_to_string([1, 2, 3, 4], ',') -> 1,2,3,4`                                                                        |
 | array_intersect(array1, array2)       | Returns an array of the elements in the intersection of array1 and array2. `array_intersect([1, 2, 3, 4], [5, 6, 3, 4]) -> [3, 4]`                                       |
 | array_union(array1, array2)           | Returns an array of the elements in the union of array1 and array2 without duplicates. `array_union([1, 2, 3, 4], [5, 6, 3, 4]) -> [1, 2, 3, 4, 5, 6]`                   |

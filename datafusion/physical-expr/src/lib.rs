@@ -17,6 +17,7 @@
 
 pub mod aggregate;
 pub mod analysis;
+pub mod array_aggregate;
 pub mod array_expressions;
 pub mod conditional_expressions;
 #[cfg(feature = "crypto_expressions")]
