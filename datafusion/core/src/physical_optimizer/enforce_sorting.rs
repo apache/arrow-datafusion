@@ -58,7 +58,9 @@ use crate::physical_plan::{
     with_new_children_if_necessary, Distribution, ExecutionPlan, InputOrderMode,
 };
 
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::{
+    Transformed, TreeNode, TreeNodeRecursion, VisitRecursionIterator,
+};
 use datafusion_common::{plan_err, DataFusionError};
 use datafusion_physical_expr::{PhysicalSortExpr, PhysicalSortRequirement};
 use datafusion_physical_plan::repartition::RepartitionExec;
@@ -168,6 +170,23 @@ impl TreeNode for PlanWithCorrespondingSort {
         }
         Ok(self)
     }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        if !self.children_nodes.is_empty() {
+            let tnr = self.children_nodes.iter_mut().for_each_till_continue(f)?;
+            self.plan = with_new_children_if_necessary(
+                self.plan.clone(),
+                self.children_nodes.iter().map(|c| c.plan.clone()).collect(),
+            )?
+            .into();
+            Ok(tnr)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
+    }
 }
 
 /// This object is used within the [`EnforceSorting`] rule to track the closest
@@ -249,6 +268,23 @@ impl TreeNode for PlanWithCorrespondingCoalescePartitions {
         }
         Ok(self)
     }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        if !self.children_nodes.is_empty() {
+            let tnr = self.children_nodes.iter_mut().for_each_till_continue(f)?;
+            self.plan = with_new_children_if_necessary(
+                self.plan.clone(),
+                self.children_nodes.iter().map(|c| c.plan.clone()).collect(),
+            )?
+            .into();
+            Ok(tnr)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
+    }
 }
 
 /// The boolean flag `repartition_sorts` defined in the config indicates
@@ -264,12 +300,12 @@ impl PhysicalOptimizerRule for EnforceSorting {
         let plan_requirements = PlanWithCorrespondingSort::new(plan);
         // Execute a bottom-up traversal to enforce sorting requirements,
         // remove unnecessary sorts, and optimize sort-sensitive operators:
-        let adjusted = plan_requirements.transform_up(&ensure_sorting)?;
+        let adjusted = plan_requirements.transform_up_old(&ensure_sorting)?;
         let new_plan = if config.optimizer.repartition_sorts {
             let plan_with_coalesce_partitions =
                 PlanWithCorrespondingCoalescePartitions::new(adjusted.plan);
             let parallel =
-                plan_with_coalesce_partitions.transform_up(&parallelize_sorts)?;
+                plan_with_coalesce_partitions.transform_up_old(&parallelize_sorts)?;
             parallel.plan
         } else {
             adjusted.plan
@@ -277,7 +313,7 @@ impl PhysicalOptimizerRule for EnforceSorting {
 
         let plan_with_pipeline_fixer = OrderPreservationContext::new(new_plan);
         let updated_plan =
-            plan_with_pipeline_fixer.transform_up(&|plan_with_pipeline_fixer| {
+            plan_with_pipeline_fixer.transform_up_old(&|plan_with_pipeline_fixer| {
                 replace_with_order_preserving_variants(
                     plan_with_pipeline_fixer,
                     false,
@@ -290,7 +326,7 @@ impl PhysicalOptimizerRule for EnforceSorting {
         // missed by the bottom-up traversal:
         let mut sort_pushdown = SortPushDown::new(updated_plan.plan);
         sort_pushdown.assign_initial_requirements();
-        let adjusted = sort_pushdown.transform_down(&pushdown_sorts)?;
+        let adjusted = sort_pushdown.transform_down_old(&pushdown_sorts)?;
         Ok(adjusted.plan)
     }
 

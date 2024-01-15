@@ -158,10 +158,11 @@ impl<S: SimplifyInfo> ExprSimplifier<S> {
     // rather than creating an DFSchemaRef coerces rather than doing
     // it manually.
     // https://github.com/apache/arrow-datafusion/issues/3793
-    pub fn coerce(&self, expr: Expr, schema: DFSchemaRef) -> Result<Expr> {
+    pub fn coerce(&self, mut expr: Expr, schema: DFSchemaRef) -> Result<Expr> {
         let mut expr_rewrite = TypeCoercionRewriter { schema };
 
-        expr.rewrite(&mut expr_rewrite)
+        expr.transform(&mut expr_rewrite)?;
+        Ok(expr)
     }
 
     /// Input guarantees about the values of columns.

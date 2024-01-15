@@ -29,7 +29,7 @@ use arrow::array::{make_array, Array, ArrayRef, BooleanArray, MutableArrayData};
 use arrow::compute::{and_kleene, is_not_null, SlicesIterator};
 use arrow::datatypes::SchemaRef;
 use datafusion_common::tree_node::{
-    Transformed, TreeNode, TreeNodeRewriter, VisitRecursion,
+    Transformed, TreeNode, TreeNodeRecursion, TreeNodeTransformer, VisitRecursionIterator,
 };
 use datafusion_common::Result;
 use datafusion_expr::Operator;
@@ -169,9 +169,16 @@ impl<T: Clone> TreeNode for ExprTreeNode<T> {
             .collect::<Result<Vec<_>>>()?;
         Ok(self)
     }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        self.child_nodes.iter_mut().for_each_till_continue(f)
+    }
 }
 
-/// This struct facilitates the [TreeNodeRewriter] mechanism to convert a
+/// This struct facilitates the [TreeNodeTransformer] mechanism to convert a
 /// [PhysicalExpr] tree into a DAEG (i.e. an expression DAG) by collecting
 /// identical expressions in one node. Caller specifies the node type in the
 /// DAEG via the `constructor` argument, which constructs nodes in the DAEG
@@ -185,16 +192,21 @@ struct PhysicalExprDAEGBuilder<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<
     constructor: &'a F,
 }
 
-impl<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>> TreeNodeRewriter
+impl<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>> TreeNodeTransformer
     for PhysicalExprDAEGBuilder<'a, T, F>
 {
-    type N = ExprTreeNode<NodeIndex>;
+    type Node = ExprTreeNode<NodeIndex>;
+
+    fn pre_transform(&mut self, _node: &mut Self::Node) -> Result<TreeNodeRecursion> {
+        Ok(TreeNodeRecursion::Continue)
+    }
+
     // This method mutates an expression node by transforming it to a physical expression
     // and adding it to the graph. The method returns the mutated expression node.
-    fn mutate(
+    fn post_transform(
         &mut self,
-        mut node: ExprTreeNode<NodeIndex>,
-    ) -> Result<ExprTreeNode<NodeIndex>> {
+        node: &mut ExprTreeNode<NodeIndex>,
+    ) -> Result<TreeNodeRecursion> {
         // Get the expression associated with the input expression node.
         let expr = &node.expr;
 
@@ -206,7 +218,7 @@ impl<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>> TreeNodeRewriter
             // add edges to its child nodes. Add the visited expression to the vector
             // of visited expressions and return the newly created node index.
             None => {
-                let node_idx = self.graph.add_node((self.constructor)(&node)?);
+                let node_idx = self.graph.add_node((self.constructor)(node)?);
                 for expr_node in node.child_nodes.iter() {
                     self.graph.add_edge(node_idx, expr_node.data.unwrap(), 0);
                 }
@@ -217,7 +229,7 @@ impl<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>> TreeNodeRewriter
         // Set the data field of the input expression node to the corresponding node index.
         node.data = Some(node_idx);
         // Return the mutated expression node.
-        Ok(node)
+        Ok(TreeNodeRecursion::Continue)
     }
 }
 
@@ -238,7 +250,8 @@ where
         constructor,
     };
     // Use the builder to transform the expression tree node into a DAG.
-    let root = init.rewrite(&mut builder)?;
+    let mut root = init;
+    root.transform(&mut builder)?;
     // Return a tuple containing the root node index and the DAG.
     Ok((root.data.unwrap(), builder.graph))
 }
@@ -246,13 +259,13 @@ where
 /// Recursively extract referenced [`Column`]s within a [`PhysicalExpr`].
 pub fn collect_columns(expr: &Arc<dyn PhysicalExpr>) -> HashSet<Column> {
     let mut columns = HashSet::<Column>::new();
-    expr.apply(&mut |expr| {
+    expr.visit_down(&mut |expr| {
         if let Some(column) = expr.as_any().downcast_ref::<Column>() {
             if !columns.iter().any(|c| c.eq(column)) {
                 columns.insert(column.clone());
             }
         }
-        Ok(VisitRecursion::Continue)
+        Ok(TreeNodeRecursion::Continue)
     })
     // pre_visit always returns OK, so this will always too
     .expect("no way to return error during recursion");
@@ -266,7 +279,7 @@ pub fn reassign_predicate_columns(
     schema: &SchemaRef,
     ignore_not_found: bool,
 ) -> Result<Arc<dyn PhysicalExpr>> {
-    pred.transform_down(&|expr| {
+    pred.transform_down_old(&|expr| {
         let expr_any = expr.as_any();
 
         if let Some(column) = expr_any.downcast_ref::<Column>() {

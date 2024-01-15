@@ -1240,9 +1240,10 @@ pub fn project_with_column_index(
     let alias_expr = expr
         .into_iter()
         .enumerate()
-        .map(|(i, e)| match e {
+        .map(|(i, mut e)| match e {
             Expr::Alias(Alias { ref name, .. }) if name != schema.field(i).name() => {
-                e.unalias().alias(schema.field(i).name())
+                e.unalias();
+                e.alias(schema.field(i).name())
             }
             Expr::Column(Column {
                 relation: _,

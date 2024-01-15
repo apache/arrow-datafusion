@@ -29,7 +29,9 @@ use crate::physical_plan::repartition::RepartitionExec;
 use crate::physical_plan::sorts::sort::SortExec;
 use crate::physical_plan::{with_new_children_if_necessary, ExecutionPlan};
 
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::{
+    Transformed, TreeNode, TreeNodeRecursion, VisitRecursionIterator,
+};
 use datafusion_common::{plan_err, DataFusionError, JoinSide, Result};
 use datafusion_expr::JoinType;
 use datafusion_physical_expr::expressions::Column;
@@ -93,6 +95,23 @@ impl TreeNode for SortPushDown {
             .into();
         }
         Ok(self)
+    }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        if !self.children_nodes.is_empty() {
+            let tnr = self.children_nodes.iter_mut().for_each_till_continue(f)?;
+            self.plan = with_new_children_if_necessary(
+                self.plan.clone(),
+                self.children_nodes.iter().map(|c| c.plan.clone()).collect(),
+            )?
+            .into();
+            Ok(tnr)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
     }
 }
 

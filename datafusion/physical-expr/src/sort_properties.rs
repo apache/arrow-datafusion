@@ -21,7 +21,8 @@ use std::{ops::Neg, sync::Arc};
 use arrow_schema::SortOptions;
 
 use crate::PhysicalExpr;
-use datafusion_common::tree_node::TreeNode;
+
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion, VisitRecursionIterator};
 use datafusion_common::Result;
 
 /// To propagate [`SortOptions`] across the [`PhysicalExpr`], it is insufficient
@@ -190,5 +191,12 @@ impl TreeNode for ExprOrdering {
                 .collect::<Result<_>>()?;
         }
         Ok(self)
+    }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        self.children.iter_mut().for_each_till_continue(f)
     }
 }

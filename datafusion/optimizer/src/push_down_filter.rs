@@ -21,7 +21,7 @@ use std::sync::Arc;
 use crate::optimizer::ApplyOrder;
 use crate::{OptimizerConfig, OptimizerRule};
 
-use datafusion_common::tree_node::{Transformed, TreeNode, VisitRecursion};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::{
     internal_err, plan_datafusion_err, Column, DFSchema, DFSchemaRef, DataFusionError,
     JoinConstraint, Result,
@@ -217,11 +217,11 @@ fn can_pushdown_join_predicate(predicate: &Expr, schema: &DFSchema) -> Result<bo
 // Determine whether the predicate can evaluate as the join conditions
 fn can_evaluate_as_join_condition(predicate: &Expr) -> Result<bool> {
     let mut is_evaluate = true;
-    predicate.apply(&mut |expr| match expr {
+    predicate.visit_down(&mut |expr| match expr {
         Expr::Column(_)
         | Expr::Literal(_)
         | Expr::Placeholder(_)
-        | Expr::ScalarVariable(_, _) => Ok(VisitRecursion::Skip),
+        | Expr::ScalarVariable(_, _) => Ok(TreeNodeRecursion::Prune),
         Expr::Exists { .. }
         | Expr::InSubquery(_)
         | Expr::ScalarSubquery(_)
@@ -231,7 +231,7 @@ fn can_evaluate_as_join_condition(predicate: &Expr) -> Result<bool> {
             ..
         }) => {
             is_evaluate = false;
-            Ok(VisitRecursion::Stop)
+            Ok(TreeNodeRecursion::Stop)
         }
         Expr::Alias(_)
         | Expr::BinaryExpr(_)
@@ -253,7 +253,7 @@ fn can_evaluate_as_join_condition(predicate: &Expr) -> Result<bool> {
         | Expr::Cast(_)
         | Expr::TryCast(_)
         | Expr::ScalarFunction(..)
-        | Expr::InList { .. } => Ok(VisitRecursion::Continue),
+        | Expr::InList { .. } => Ok(TreeNodeRecursion::Continue),
         Expr::Sort(_)
         | Expr::AggregateFunction(_)
         | Expr::WindowFunction(_)
@@ -1016,7 +1016,7 @@ pub fn replace_cols_by_name(
     e: Expr,
     replace_map: &HashMap<String, Expr>,
 ) -> Result<Expr> {
-    e.transform_up(&|expr| {
+    e.transform_up_old(&|expr| {
         Ok(if let Expr::Column(c) = &expr {
             match replace_map.get(&c.flat_name()) {
                 Some(new_c) => Transformed::Yes(new_c.clone()),
@@ -1031,29 +1031,29 @@ pub fn replace_cols_by_name(
 /// check whether the expression is volatile predicates
 fn is_volatile_expression(e: &Expr) -> bool {
     let mut is_volatile = false;
-    e.apply(&mut |expr| {
+    e.visit_down(&mut |expr| {
         Ok(match expr {
             Expr::ScalarFunction(f) => match &f.func_def {
                 ScalarFunctionDefinition::BuiltIn(fun)
                     if fun.volatility() == Volatility::Volatile =>
                 {
                     is_volatile = true;
-                    VisitRecursion::Stop
+                    TreeNodeRecursion::Stop
                 }
                 ScalarFunctionDefinition::UDF(fun)
                     if fun.signature().volatility == Volatility::Volatile =>
                 {
                     is_volatile = true;
-                    VisitRecursion::Stop
+                    TreeNodeRecursion::Stop
                 }
                 ScalarFunctionDefinition::Name(_) => {
                     return internal_err!(
                         "Function `Expr` with name should be resolved."
                     );
                 }
-                _ => VisitRecursion::Continue,
+                _ => TreeNodeRecursion::Continue,
             },
-            _ => VisitRecursion::Continue,
+            _ => TreeNodeRecursion::Continue,
         })
     })
     .unwrap();
@@ -1063,17 +1063,17 @@ fn is_volatile_expression(e: &Expr) -> bool {
 /// check whether the expression uses the columns in `check_map`.
 fn contain(e: &Expr, check_map: &HashMap<String, Expr>) -> bool {
     let mut is_contain = false;
-    e.apply(&mut |expr| {
+    e.visit_down(&mut |expr| {
         Ok(if let Expr::Column(c) = &expr {
             match check_map.get(&c.flat_name()) {
                 Some(_) => {
                     is_contain = true;
-                    VisitRecursion::Stop
+                    TreeNodeRecursion::Stop
                 }
-                None => VisitRecursion::Continue,
+                None => TreeNodeRecursion::Continue,
             }
         } else {
-            VisitRecursion::Continue
+            TreeNodeRecursion::Continue
         })
     })
     .unwrap();

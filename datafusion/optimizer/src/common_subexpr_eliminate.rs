@@ -24,7 +24,7 @@ use crate::{utils, OptimizerConfig, OptimizerRule};
 
 use arrow::datatypes::DataType;
 use datafusion_common::tree_node::{
-    RewriteRecursion, TreeNode, TreeNodeRewriter, TreeNodeVisitor, VisitRecursion,
+    RewriteRecursion, TreeNode, TreeNodeRecursion, TreeNodeRewriter, TreeNodeVisitor,
 };
 use datafusion_common::{
     internal_err, Column, DFField, DFSchema, DFSchemaRef, DataFusionError, Result,
@@ -612,18 +612,18 @@ impl ExprIdentifierVisitor<'_> {
 }
 
 impl TreeNodeVisitor for ExprIdentifierVisitor<'_> {
-    type N = Expr;
+    type Node = Expr;
 
-    fn pre_visit(&mut self, _expr: &Expr) -> Result<VisitRecursion> {
+    fn pre_visit(&mut self, _expr: &Expr) -> Result<TreeNodeRecursion> {
         self.visit_stack
             .push(VisitRecord::EnterMark(self.node_count));
         self.node_count += 1;
         // put placeholder
         self.id_array.push((0, "".to_string()));
-        Ok(VisitRecursion::Continue)
+        Ok(TreeNodeRecursion::Continue)
     }
 
-    fn post_visit(&mut self, expr: &Expr) -> Result<VisitRecursion> {
+    fn post_visit(&mut self, expr: &Expr) -> Result<TreeNodeRecursion> {
         self.series_number += 1;
 
         let (idx, sub_expr_desc) = self.pop_enter_mark();
@@ -632,7 +632,7 @@ impl TreeNodeVisitor for ExprIdentifierVisitor<'_> {
             self.id_array[idx].0 = self.series_number;
             let desc = Self::desc_expr(expr);
             self.visit_stack.push(VisitRecord::ExprItem(desc));
-            return Ok(VisitRecursion::Continue);
+            return Ok(TreeNodeRecursion::Continue);
         }
         let mut desc = Self::desc_expr(expr);
         desc.push_str(&sub_expr_desc);
@@ -646,7 +646,7 @@ impl TreeNodeVisitor for ExprIdentifierVisitor<'_> {
             .entry(desc)
             .or_insert_with(|| (expr.clone(), 0, data_type))
             .1 += 1;
-        Ok(VisitRecursion::Continue)
+        Ok(TreeNodeRecursion::Continue)
     }
 }
 

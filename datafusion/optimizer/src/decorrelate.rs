@@ -370,7 +370,7 @@ fn agg_exprs_evaluation_result_on_empty_batch(
     expr_result_map_for_count_bug: &mut ExprResultMap,
 ) -> Result<()> {
     for e in agg_expr.iter() {
-        let result_expr = e.clone().transform_up(&|expr| {
+        let mut result_expr = e.clone().transform_up_old(&|expr| {
             let new_expr = match expr {
                 Expr::AggregateFunction(expr::AggregateFunction { func_def, .. }) => {
                     match func_def {
@@ -396,7 +396,7 @@ fn agg_exprs_evaluation_result_on_empty_batch(
             Ok(new_expr)
         })?;
 
-        let result_expr = result_expr.unalias();
+        result_expr.unalias();
         let props = ExecutionProps::new();
         let info = SimplifyContext::new(&props).with_schema(schema.clone());
         let simplifier = ExprSimplifier::new(info);
@@ -415,7 +415,7 @@ fn proj_exprs_evaluation_result_on_empty_batch(
     expr_result_map_for_count_bug: &mut ExprResultMap,
 ) -> Result<()> {
     for expr in proj_expr.iter() {
-        let result_expr = expr.clone().transform_up(&|expr| {
+        let result_expr = expr.clone().transform_up_old(&|expr| {
             if let Expr::Column(Column { name, .. }) = &expr {
                 if let Some(result_expr) = input_expr_result_map_for_count_bug.get(name) {
                     Ok(Transformed::Yes(result_expr.clone()))
@@ -448,7 +448,7 @@ fn filter_exprs_evaluation_result_on_empty_batch(
     input_expr_result_map_for_count_bug: &ExprResultMap,
     expr_result_map_for_count_bug: &mut ExprResultMap,
 ) -> Result<Option<Expr>> {
-    let result_expr = filter_expr.clone().transform_up(&|expr| {
+    let result_expr = filter_expr.clone().transform_up_old(&|expr| {
         if let Expr::Column(Column { name, .. }) = &expr {
             if let Some(result_expr) = input_expr_result_map_for_count_bug.get(name) {
                 Ok(Transformed::Yes(result_expr.clone()))

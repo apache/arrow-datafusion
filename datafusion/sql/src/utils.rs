@@ -33,7 +33,7 @@ use std::collections::HashMap;
 
 /// Make a best-effort attempt at resolving all columns in the expression tree
 pub(crate) fn resolve_columns(expr: &Expr, plan: &LogicalPlan) -> Result<Expr> {
-    expr.clone().transform_up(&|nested_expr| {
+    expr.clone().transform_up_old(&|nested_expr| {
         match nested_expr {
             Expr::Column(col) => {
                 let field = plan.schema().field_from_column(&col)?;
@@ -66,7 +66,7 @@ pub(crate) fn rebase_expr(
     base_exprs: &[Expr],
     plan: &LogicalPlan,
 ) -> Result<Expr> {
-    expr.clone().transform_up(&|nested_expr| {
+    expr.clone().transform_up_old(&|nested_expr| {
         if base_exprs.contains(&nested_expr) {
             Ok(Transformed::Yes(expr_as_column_expr(&nested_expr, plan)?))
         } else {
@@ -170,16 +170,17 @@ pub(crate) fn resolve_aliases_to_exprs(
     expr: &Expr,
     aliases: &HashMap<String, Expr>,
 ) -> Result<Expr> {
-    expr.clone().transform_up(&|nested_expr| match nested_expr {
-        Expr::Column(c) if c.relation.is_none() => {
-            if let Some(aliased_expr) = aliases.get(&c.name) {
-                Ok(Transformed::Yes(aliased_expr.clone()))
-            } else {
-                Ok(Transformed::No(Expr::Column(c)))
+    expr.clone()
+        .transform_up_old(&|nested_expr| match nested_expr {
+            Expr::Column(c) if c.relation.is_none() => {
+                if let Some(aliased_expr) = aliases.get(&c.name) {
+                    Ok(Transformed::Yes(aliased_expr.clone()))
+                } else {
+                    Ok(Transformed::No(Expr::Column(c)))
+                }
             }
-        }
-        _ => Ok(Transformed::No(nested_expr)),
-    })
+            _ => Ok(Transformed::No(nested_expr)),
+        })
 }
 
 /// given a slice of window expressions sharing the same sort key, find their common partition

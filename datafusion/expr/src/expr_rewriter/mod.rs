@@ -20,7 +20,7 @@
 use crate::expr::Alias;
 use crate::logical_plan::Projection;
 use crate::{Expr, ExprSchemable, LogicalPlan, LogicalPlanBuilder};
-use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeTransformer};
 use datafusion_common::Result;
 use datafusion_common::{Column, DFSchema};
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ pub use order_by::rewrite_sort_cols_by_aggs;
 /// Recursively call [`Column::normalize_with_schemas`] on all [`Column`] expressions
 /// in the `expr` expression tree.
 pub fn normalize_col(expr: Expr, plan: &LogicalPlan) -> Result<Expr> {
-    expr.transform(&|expr| {
+    expr.transform_up_old(&|expr| {
         Ok({
             if let Expr::Column(c) = expr {
                 let col = LogicalPlanBuilder::normalize(plan, c)?;
@@ -57,7 +57,7 @@ pub fn normalize_col_with_schemas(
     schemas: &[&Arc<DFSchema>],
     using_columns: &[HashSet<Column>],
 ) -> Result<Expr> {
-    expr.transform(&|expr| {
+    expr.transform_up_old(&|expr| {
         Ok({
             if let Expr::Column(c) = expr {
                 let col = c.normalize_with_schemas(schemas, using_columns)?;
@@ -75,7 +75,7 @@ pub fn normalize_col_with_schemas_and_ambiguity_check(
     schemas: &[&[&DFSchema]],
     using_columns: &[HashSet<Column>],
 ) -> Result<Expr> {
-    expr.transform(&|expr| {
+    expr.transform_up_old(&|expr| {
         Ok({
             if let Expr::Column(c) = expr {
                 let col =
@@ -102,7 +102,7 @@ pub fn normalize_cols(
 /// Recursively replace all [`Column`] expressions in a given expression tree with
 /// `Column` expressions provided by the hash map argument.
 pub fn replace_col(expr: Expr, replace_map: &HashMap<&Column, &Column>) -> Result<Expr> {
-    expr.transform(&|expr| {
+    expr.transform_up_old(&|expr| {
         Ok({
             if let Expr::Column(c) = &expr {
                 match replace_map.get(c) {
@@ -122,7 +122,7 @@ pub fn replace_col(expr: Expr, replace_map: &HashMap<&Column, &Column>) -> Resul
 /// For example, if there were expressions like `foo.bar` this would
 /// rewrite it to just `bar`.
 pub fn unnormalize_col(expr: Expr) -> Expr {
-    expr.transform(&|expr| {
+    expr.transform_up_old(&|expr| {
         Ok({
             if let Expr::Column(c) = expr {
                 let col = Column {
@@ -164,7 +164,7 @@ pub fn unnormalize_cols(exprs: impl IntoIterator<Item = Expr>) -> Vec<Expr> {
 /// Recursively remove all the ['OuterReferenceColumn'] and return the inside Column
 /// in the expression tree.
 pub fn strip_outer_reference(expr: Expr) -> Expr {
-    expr.transform(&|expr| {
+    expr.transform_up_old(&|expr| {
         Ok({
             if let Expr::OuterReferenceColumn(_, col) = expr {
                 Transformed::Yes(Expr::Column(col))
@@ -248,12 +248,12 @@ pub fn unalias(expr: Expr) -> Expr {
 ///
 /// This is important when optimizing plans to ensure the output
 /// schema of plan nodes don't change after optimization
-pub fn rewrite_preserving_name<R>(expr: Expr, rewriter: &mut R) -> Result<Expr>
+pub fn rewrite_preserving_name<R>(mut expr: Expr, transformer: &mut R) -> Result<Expr>
 where
-    R: TreeNodeRewriter<N = Expr>,
+    R: TreeNodeTransformer<Node = Expr>,
 {
     let original_name = expr.name_for_alias()?;
-    let expr = expr.rewrite(rewriter)?;
+    expr.transform(transformer)?;
     expr.alias_if_changed(original_name)
 }
 
@@ -263,7 +263,7 @@ mod test {
     use crate::expr::Sort;
     use crate::{col, lit, Cast};
     use arrow::datatypes::DataType;
-    use datafusion_common::tree_node::{RewriteRecursion, TreeNode, TreeNodeRewriter};
+    use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
     use datafusion_common::{DFField, DFSchema, ScalarValue};
     use std::ops::Add;
 
@@ -272,17 +272,17 @@ mod test {
         v: Vec<String>,
     }
 
-    impl TreeNodeRewriter for RecordingRewriter {
-        type N = Expr;
+    impl TreeNodeTransformer for RecordingRewriter {
+        type Node = Expr;
 
-        fn pre_visit(&mut self, expr: &Expr) -> Result<RewriteRecursion> {
+        fn pre_transform(&mut self, expr: &mut Expr) -> Result<TreeNodeRecursion> {
             self.v.push(format!("Previsited {expr}"));
-            Ok(RewriteRecursion::Continue)
+            Ok(TreeNodeRecursion::Continue)
         }
 
-        fn mutate(&mut self, expr: Expr) -> Result<Expr> {
+        fn post_transform(&mut self, expr: &mut Expr) -> Result<TreeNodeRecursion> {
             self.v.push(format!("Mutated {expr}"));
-            Ok(expr)
+            Ok(TreeNodeRecursion::Continue)
         }
     }
 
@@ -305,11 +305,17 @@ mod test {
         };
 
         // rewrites "foo" --> "bar"
-        let rewritten = col("state").eq(lit("foo")).transform(&transformer).unwrap();
+        let rewritten = col("state")
+            .eq(lit("foo"))
+            .transform_up_old(&transformer)
+            .unwrap();
         assert_eq!(rewritten, col("state").eq(lit("bar")));
 
         // doesn't rewrite
-        let rewritten = col("state").eq(lit("baz")).transform(&transformer).unwrap();
+        let rewritten = col("state")
+            .eq(lit("baz"))
+            .transform_up_old(&transformer)
+            .unwrap();
         assert_eq!(rewritten, col("state").eq(lit("baz")));
     }
 
@@ -399,7 +405,8 @@ mod test {
     #[test]
     fn rewriter_visit() {
         let mut rewriter = RecordingRewriter::default();
-        col("state").eq(lit("CO")).rewrite(&mut rewriter).unwrap();
+        let mut expr = col("state").eq(lit("CO"));
+        expr.transform(&mut rewriter).unwrap();
 
         assert_eq!(
             rewriter.v,
@@ -439,22 +446,28 @@ mod test {
     /// rewrites `expr_from` to `rewrite_to` using
     /// `rewrite_preserving_name` verifying the result is `expected_expr`
     fn test_rewrite(expr_from: Expr, rewrite_to: Expr) {
-        struct TestRewriter {
-            rewrite_to: Expr,
-        }
+        struct TestTransformer {}
 
-        impl TreeNodeRewriter for TestRewriter {
-            type N = Expr;
+        impl TreeNodeTransformer for TestTransformer {
+            type Node = Expr;
 
-            fn mutate(&mut self, _: Expr) -> Result<Expr> {
-                Ok(self.rewrite_to.clone())
+            fn pre_transform(
+                &mut self,
+                _node: &mut Self::Node,
+            ) -> Result<TreeNodeRecursion> {
+                Ok(TreeNodeRecursion::Continue)
+            }
+
+            fn post_transform(
+                &mut self,
+                _node: &mut Self::Node,
+            ) -> Result<TreeNodeRecursion> {
+                Ok(TreeNodeRecursion::Continue)
             }
         }
 
-        let mut rewriter = TestRewriter {
-            rewrite_to: rewrite_to.clone(),
-        };
-        let expr = rewrite_preserving_name(expr_from.clone(), &mut rewriter).unwrap();
+        let mut transformer = TestTransformer {};
+        let expr = rewrite_preserving_name(expr_from.clone(), &mut transformer).unwrap();
 
         let original_name = match &expr_from {
             Expr::Sort(Sort { expr, .. }) => expr.display_name(),

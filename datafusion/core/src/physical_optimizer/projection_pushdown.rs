@@ -43,7 +43,7 @@ use crate::physical_plan::{Distribution, ExecutionPlan};
 
 use arrow_schema::SchemaRef;
 use datafusion_common::config::ConfigOptions;
-use datafusion_common::tree_node::{Transformed, TreeNode, VisitRecursion};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_common::JoinSide;
 use datafusion_physical_expr::expressions::{Column, Literal};
 use datafusion_physical_expr::{
@@ -72,7 +72,7 @@ impl PhysicalOptimizerRule for ProjectionPushdown {
         plan: Arc<dyn ExecutionPlan>,
         _config: &ConfigOptions,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        plan.transform_down(&remove_unnecessary_projections)
+        plan.transform_down_old(&remove_unnecessary_projections)
     }
 
     fn name(&self) -> &str {
@@ -255,12 +255,12 @@ fn try_unifying_projections(
 
     // Collect the column references usage in the outer projection.
     projection.expr().iter().for_each(|(expr, _)| {
-        expr.apply(&mut |expr| {
+        expr.visit_down(&mut |expr| {
             Ok({
                 if let Some(column) = expr.as_any().downcast_ref::<Column>() {
                     *column_ref_map.entry(column.clone()).or_default() += 1;
                 }
-                VisitRecursion::Continue
+                TreeNodeRecursion::Continue
             })
         })
         .unwrap();

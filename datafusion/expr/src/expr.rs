@@ -31,11 +31,11 @@ use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{internal_err, DFSchema, OwnedTableReference};
 use datafusion_common::{plan_err, Column, DataFusionError, Result, ScalarValue};
 use std::collections::HashSet;
-use std::fmt;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::{fmt, mem};
 
 use crate::Signature;
 
@@ -180,6 +180,12 @@ pub enum Expr {
     /// A place holder which hold a reference to a qualified field
     /// in the outer query, used for correlated sub queries.
     OuterReferenceColumn(DataType, Column),
+}
+
+impl Default for Expr {
+    fn default() -> Self {
+        Expr::Literal(ScalarValue::Null)
+    }
 }
 
 /// Alias expression
@@ -1054,11 +1060,11 @@ impl Expr {
     }
 
     /// Remove an alias from an expression if one exists.
-    pub fn unalias(self) -> Expr {
-        match self {
-            Expr::Alias(alias) => *alias.expr,
-            _ => self,
+    pub fn unalias(&mut self) -> &mut Self {
+        if let Expr::Alias(alias) = self {
+            *self = mem::take(alias.expr.as_mut());
         }
+        self
     }
 
     /// Return `self IN <list>` if `negated` is false, otherwise
@@ -1247,7 +1253,7 @@ impl Expr {
     /// For example, gicen an expression like `<int32> = $0` will infer `$0` to
     /// have type `int32`.
     pub fn infer_placeholder_types(self, schema: &DFSchema) -> Result<Expr> {
-        self.transform(&|mut expr| {
+        self.transform_up_old(&|mut expr| {
             // Default to assuming the arguments are the same type
             if let Expr::BinaryExpr(BinaryExpr { left, op: _, right }) = &mut expr {
                 rewrite_placeholder(left.as_mut(), right.as_ref(), schema)?;

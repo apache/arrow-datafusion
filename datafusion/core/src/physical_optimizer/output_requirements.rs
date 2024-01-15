@@ -196,7 +196,7 @@ impl PhysicalOptimizerRule for OutputRequirements {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         match self.mode {
             RuleMode::Add => require_top_ordering(plan),
-            RuleMode::Remove => plan.transform_up(&|plan| {
+            RuleMode::Remove => plan.transform_up_old(&|plan| {
                 if let Some(sort_req) =
                     plan.as_any().downcast_ref::<OutputRequirementExec>()
                 {

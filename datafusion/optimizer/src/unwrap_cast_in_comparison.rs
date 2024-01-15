@@ -24,17 +24,16 @@ use arrow::datatypes::{
     DataType, TimeUnit, MAX_DECIMAL_FOR_EACH_PRECISION, MIN_DECIMAL_FOR_EACH_PRECISION,
 };
 use arrow::temporal_conversions::{MICROSECONDS, MILLISECONDS, NANOSECONDS};
-use datafusion_common::tree_node::{RewriteRecursion, TreeNodeRewriter};
+use datafusion_common::tree_node::{TreeNodeRecursion, TreeNodeTransformer};
 use datafusion_common::{
     internal_err, DFSchema, DFSchemaRef, DataFusionError, Result, ScalarValue,
 };
 use datafusion_expr::expr::{BinaryExpr, Cast, InList, TryCast};
 use datafusion_expr::expr_rewriter::rewrite_preserving_name;
 use datafusion_expr::utils::merge_schema;
-use datafusion_expr::{
-    binary_expr, in_list, lit, Expr, ExprSchemable, LogicalPlan, Operator,
-};
+use datafusion_expr::{lit, Expr, ExprSchemable, LogicalPlan, Operator};
 use std::cmp::Ordering;
+use std::mem;
 use std::sync::Arc;
 
 /// [`UnwrapCastInComparison`] attempts to remove casts from
@@ -126,21 +125,19 @@ struct UnwrapCastExprRewriter {
     schema: DFSchemaRef,
 }
 
-impl TreeNodeRewriter for UnwrapCastExprRewriter {
-    type N = Expr;
+impl TreeNodeTransformer for UnwrapCastExprRewriter {
+    type Node = Expr;
 
-    fn pre_visit(&mut self, _expr: &Expr) -> Result<RewriteRecursion> {
-        Ok(RewriteRecursion::Continue)
+    fn pre_transform(&mut self, _expr: &mut Expr) -> Result<TreeNodeRecursion> {
+        Ok(TreeNodeRecursion::Continue)
     }
 
-    fn mutate(&mut self, expr: Expr) -> Result<Expr> {
-        match &expr {
+    fn post_transform(&mut self, expr: &mut Expr) -> Result<TreeNodeRecursion> {
+        match expr {
             // For case:
             // try_cast/cast(expr as data_type) op literal
             // literal op try_cast/cast(expr as data_type)
             Expr::BinaryExpr(BinaryExpr { left, op, right }) => {
-                let left = left.as_ref().clone();
-                let right = right.as_ref().clone();
                 let left_type = left.get_type(&self.schema)?;
                 let right_type = right.get_type(&self.schema)?;
                 // Because the plan has been done the type coercion, the left and right must be equal
@@ -148,7 +145,7 @@ impl TreeNodeRewriter for UnwrapCastExprRewriter {
                     && is_support_data_type(&right_type)
                     && is_comparison_op(op)
                 {
-                    match (&left, &right) {
+                    match (left.as_mut(), right.as_mut()) {
                         (
                             Expr::Literal(left_lit_value),
                             Expr::TryCast(TryCast { expr, .. })
@@ -161,11 +158,8 @@ impl TreeNodeRewriter for UnwrapCastExprRewriter {
                                 try_cast_literal_to_type(left_lit_value, &expr_type)?;
                             if let Some(value) = casted_scalar_value {
                                 // unwrap the cast/try_cast for the right expr
-                                return Ok(binary_expr(
-                                    lit(value),
-                                    *op,
-                                    expr.as_ref().clone(),
-                                ));
+                                **left = lit(value);
+                                **right = mem::take(expr.as_mut());
                             }
                         }
                         (
@@ -180,49 +174,42 @@ impl TreeNodeRewriter for UnwrapCastExprRewriter {
                                 try_cast_literal_to_type(right_lit_value, &expr_type)?;
                             if let Some(value) = casted_scalar_value {
                                 // unwrap the cast/try_cast for the left expr
-                                return Ok(binary_expr(
-                                    expr.as_ref().clone(),
-                                    *op,
-                                    lit(value),
-                                ));
+                                **left = mem::take(expr.as_mut());
+                                **right = lit(value);
                             }
                         }
                         (_, _) => {
                             // do nothing
                         }
-                    };
+                    }
                 }
-                // return the new binary op
-                Ok(binary_expr(left, *op, right))
             }
             // For case:
             // try_cast/cast(expr as left_type) in (expr1,expr2,expr3)
             Expr::InList(InList {
                 expr: left_expr,
                 list,
-                negated,
+                ..
             }) => {
-                if let Some(
-                    Expr::TryCast(TryCast {
-                        expr: internal_left_expr,
-                        ..
-                    })
-                    | Expr::Cast(Cast {
-                        expr: internal_left_expr,
-                        ..
-                    }),
-                ) = Some(left_expr.as_ref())
+                if let Expr::TryCast(TryCast {
+                    expr: internal_left_expr,
+                    ..
+                })
+                | Expr::Cast(Cast {
+                    expr: internal_left_expr,
+                    ..
+                }) = left_expr.as_ref()
                 {
                     let internal_left = internal_left_expr.as_ref().clone();
                     let internal_left_type = internal_left.get_type(&self.schema);
                     if internal_left_type.is_err() {
                         // error data type
-                        return Ok(expr);
+                        return Ok(TreeNodeRecursion::Continue);
                     }
                     let internal_left_type = internal_left_type?;
                     if !is_support_data_type(&internal_left_type) {
                         // not supported data type
-                        return Ok(expr);
+                        return Ok(TreeNodeRecursion::Continue);
                     }
                     let right_exprs = list
                         .iter()
@@ -256,19 +243,16 @@ impl TreeNodeRewriter for UnwrapCastExprRewriter {
                             }
                         })
                         .collect::<Result<Vec<_>>>();
-                    match right_exprs {
-                        Ok(right_exprs) => {
-                            Ok(in_list(internal_left, right_exprs, *negated))
-                        }
-                        Err(_) => Ok(expr),
+                    if let Ok(right_exprs) = right_exprs {
+                        **left_expr = internal_left;
+                        *list = right_exprs;
                     }
-                } else {
-                    Ok(expr)
                 }
             }
             // TODO: handle other expr type and dfs visit them
-            _ => Ok(expr),
+            _ => {}
         }
+        Ok(TreeNodeRecursion::Continue)
     }
 }
 
@@ -730,11 +714,12 @@ mod tests {
         assert_eq!(optimize_test(expr_lt, &schema), expected);
     }
 
-    fn optimize_test(expr: Expr, schema: &DFSchemaRef) -> Expr {
+    fn optimize_test(mut expr: Expr, schema: &DFSchemaRef) -> Expr {
         let mut expr_rewriter = UnwrapCastExprRewriter {
             schema: schema.clone(),
         };
-        expr.rewrite(&mut expr_rewriter).unwrap()
+        expr.transform(&mut expr_rewriter).unwrap();
+        expr
     }
 
     fn expr_test_schema() -> DFSchemaRef {

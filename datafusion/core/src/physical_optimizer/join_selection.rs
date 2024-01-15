@@ -238,7 +238,8 @@ impl PhysicalOptimizerRule for JoinSelection {
             Box::new(hash_join_convert_symmetric_subrule),
             Box::new(hash_join_swap_subrule),
         ];
-        let state = pipeline.transform_up(&|p| apply_subrules(p, &subrules, config))?;
+        let state =
+            pipeline.transform_up_old(&|p| apply_subrules(p, &subrules, config))?;
         // Next, we apply another subrule that tries to optimize joins using any
         // statistics their inputs might have.
         // - For a hash join with partition mode [`PartitionMode::Auto`], we will
@@ -252,7 +253,7 @@ impl PhysicalOptimizerRule for JoinSelection {
         //   side is the small side.
         let config = &config.optimizer;
         let collect_left_threshold = config.hash_join_single_partition_threshold;
-        state.plan.transform_up(&|plan| {
+        state.plan.transform_up_old(&|plan| {
             statistical_join_selection_subrule(plan, collect_left_threshold)
         })
     }

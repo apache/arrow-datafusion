@@ -52,7 +52,7 @@ impl PhysicalOptimizerRule for CoalesceBatches {
         }
 
         let target_batch_size = config.execution.batch_size;
-        plan.transform_up(&|plan| {
+        plan.transform_up_old(&|plan| {
             let plan_any = plan.as_any();
             // The goal here is to detect operators that could produce small batches and only
             // wrap those ones with a CoalesceBatchesExec operator. An alternate approach here

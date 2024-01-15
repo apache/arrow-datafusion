@@ -31,7 +31,7 @@ use crate::{
 };
 
 use arrow::datatypes::{DataType, TimeUnit};
-use datafusion_common::tree_node::{TreeNode, VisitRecursion};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::utils::get_at_indices;
 use datafusion_common::{
     internal_err, plan_datafusion_err, plan_err, Column, DFField, DFSchema, DFSchemaRef,
@@ -262,8 +262,8 @@ pub fn grouping_set_to_exprlist(group_expr: &[Expr]) -> Result<Vec<Expr>> {
 /// Recursively walk an expression tree, collecting the unique set of columns
 /// referenced in the expression
 pub fn expr_to_columns(expr: &Expr, accum: &mut HashSet<Column>) -> Result<()> {
-    inspect_expr_pre(expr, |expr| {
-        match expr {
+    expr.visit_down(&mut |e| {
+        match e {
             Expr::Column(qc) => {
                 accum.insert(qc.clone());
             }
@@ -304,8 +304,9 @@ pub fn expr_to_columns(expr: &Expr, accum: &mut HashSet<Column>) -> Result<()> {
             | Expr::Placeholder(_)
             | Expr::OuterReferenceColumn { .. } => {}
         }
-        Ok(())
+        Ok(TreeNodeRecursion::Continue)
     })
+    .map(|_| ())
 }
 
 /// Find excluded columns in the schema, if any
@@ -656,42 +657,20 @@ where
     F: Fn(&Expr) -> bool,
 {
     let mut exprs = vec![];
-    expr.apply(&mut |expr| {
+    expr.visit_down(&mut |expr| {
         if test_fn(expr) {
             if !(exprs.contains(expr)) {
                 exprs.push(expr.clone())
             }
             // stop recursing down this expr once we find a match
-            return Ok(VisitRecursion::Skip);
+            return Ok(TreeNodeRecursion::Prune);
         }
 
-        Ok(VisitRecursion::Continue)
+        Ok(TreeNodeRecursion::Continue)
     })
     // pre_visit always returns OK, so this will always too
     .expect("no way to return error during recursion");
     exprs
-}
-
-/// Recursively inspect an [`Expr`] and all its children.
-pub fn inspect_expr_pre<F, E>(expr: &Expr, mut f: F) -> Result<(), E>
-where
-    F: FnMut(&Expr) -> Result<(), E>,
-{
-    let mut err = Ok(());
-    expr.apply(&mut |expr| {
-        if let Err(e) = f(expr) {
-            // save the error for later (it may not be a DataFusionError
-            err = Err(e);
-            Ok(VisitRecursion::Stop)
-        } else {
-            // keep going
-            Ok(VisitRecursion::Continue)
-        }
-    })
-    // The closure always returns OK, so this will always too
-    .expect("no way to return error during recursion");
-
-    err
 }
 
 /// Returns a new logical plan based on the original one with inputs
@@ -826,17 +805,14 @@ pub fn find_column_exprs(exprs: &[Expr]) -> Vec<Expr> {
         .collect()
 }
 
-pub(crate) fn find_columns_referenced_by_expr(e: &Expr) -> Vec<Column> {
-    let mut exprs = vec![];
-    inspect_expr_pre(e, |expr| {
-        if let Expr::Column(c) = expr {
-            exprs.push(c.clone())
+pub(crate) fn find_columns_referenced_by_expr(expr: &Expr) -> Vec<Column> {
+    expr.collect(&mut |e| {
+        if let Expr::Column(c) = e {
+            vec![c.clone()]
+        } else {
+            vec![]
         }
-        Ok(()) as Result<()>
     })
-    // As the closure always returns Ok, this "can't" error
-    .expect("Unexpected error");
-    exprs
 }
 
 /// Convert any `Expr` to an `Expr::Column`.
@@ -853,26 +829,16 @@ pub fn expr_as_column_expr(expr: &Expr, plan: &LogicalPlan) -> Result<Expr> {
 /// Recursively walk an expression tree, collecting the column indexes
 /// referenced in the expression
 pub(crate) fn find_column_indexes_referenced_by_expr(
-    e: &Expr,
+    expr: &Expr,
     schema: &DFSchemaRef,
 ) -> Vec<usize> {
-    let mut indexes = vec![];
-    inspect_expr_pre(e, |expr| {
-        match expr {
-            Expr::Column(qc) => {
-                if let Ok(idx) = schema.index_of_column(qc) {
-                    indexes.push(idx);
-                }
-            }
-            Expr::Literal(_) => {
-                indexes.push(std::usize::MAX);
-            }
-            _ => {}
+    expr.collect(&mut |e| match e {
+        Expr::Column(qc) => schema.index_of_column(qc).into_iter().collect(),
+        Expr::Literal(_) => {
+            vec![std::usize::MAX]
         }
-        Ok(()) as Result<()>
+        _ => vec![],
     })
-    .unwrap();
-    indexes
 }
 
 /// can this data type be used in hash join equal conditions??

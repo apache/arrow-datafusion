@@ -30,7 +30,9 @@ use crate::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
 use crate::physical_plan::{with_new_children_if_necessary, ExecutionPlan};
 
 use datafusion_common::config::ConfigOptions;
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::{
+    Transformed, TreeNode, TreeNodeRecursion, VisitRecursionIterator,
+};
 use datafusion_physical_plan::unbounded_output;
 
 /// For a given `plan`, this object carries the information one needs from its
@@ -126,6 +128,23 @@ impl TreeNode for OrderPreservationContext {
             .into();
         }
         Ok(self)
+    }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        if !self.children_nodes.is_empty() {
+            let tnr = self.children_nodes.iter_mut().for_each_till_continue(f)?;
+            self.plan = with_new_children_if_necessary(
+                self.plan.clone(),
+                self.children_nodes.iter().map(|c| c.plan.clone()).collect(),
+            )?
+            .into();
+            Ok(tnr)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
     }
 }
 
@@ -395,7 +414,7 @@ mod tests {
             // Run the rule top-down
             let config = SessionConfig::new().with_prefer_existing_sort($PREFER_EXISTING_SORT);
             let plan_with_pipeline_fixer = OrderPreservationContext::new(physical_plan);
-            let parallel = plan_with_pipeline_fixer.transform_up(&|plan_with_pipeline_fixer| replace_with_order_preserving_variants(plan_with_pipeline_fixer, false, false, config.options()))?;
+            let parallel = plan_with_pipeline_fixer.transform_up_old(&|plan_with_pipeline_fixer| replace_with_order_preserving_variants(plan_with_pipeline_fixer, false, false, config.options()))?;
             let optimized_physical_plan = parallel.plan;
 
             // Get string representation of the plan

@@ -26,7 +26,7 @@ use crate::physical_plan::aggregates::{AggregateExec, AggregateMode, PhysicalGro
 use crate::physical_plan::ExecutionPlan;
 
 use datafusion_common::config::ConfigOptions;
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRecursion};
 use datafusion_physical_expr::expressions::Column;
 use datafusion_physical_expr::{AggregateExpr, PhysicalExpr};
 
@@ -48,27 +48,27 @@ impl CombinePartialFinalAggregate {
 impl PhysicalOptimizerRule for CombinePartialFinalAggregate {
     fn optimize(
         &self,
-        plan: Arc<dyn ExecutionPlan>,
+        mut plan: Arc<dyn ExecutionPlan>,
         _config: &ConfigOptions,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        plan.transform_down(&|plan| {
-            let transformed =
-                plan.as_any()
-                    .downcast_ref::<AggregateExec>()
-                    .and_then(|agg_exec| {
-                        if matches!(
-                            agg_exec.mode(),
-                            AggregateMode::Final | AggregateMode::FinalPartitioned
-                        ) {
-                            agg_exec
-                                .input()
-                                .as_any()
-                                .downcast_ref::<AggregateExec>()
-                                .and_then(|input_agg_exec| {
-                                    if matches!(
-                                        input_agg_exec.mode(),
-                                        AggregateMode::Partial
-                                    ) && can_combine(
+        plan.transform_down(&mut |plan| {
+            plan.clone()
+                .as_any()
+                .downcast_ref::<AggregateExec>()
+                .into_iter()
+                .for_each(|agg_exec| {
+                    if matches!(
+                        agg_exec.mode(),
+                        AggregateMode::Final | AggregateMode::FinalPartitioned
+                    ) {
+                        agg_exec
+                            .input()
+                            .as_any()
+                            .downcast_ref::<AggregateExec>()
+                            .into_iter()
+                            .for_each(|input_agg_exec| {
+                                if matches!(input_agg_exec.mode(), AggregateMode::Partial)
+                                    && can_combine(
                                         (
                                             agg_exec.group_by(),
                                             agg_exec.aggr_expr(),
@@ -79,41 +79,34 @@ impl PhysicalOptimizerRule for CombinePartialFinalAggregate {
                                             input_agg_exec.aggr_expr(),
                                             input_agg_exec.filter_expr(),
                                         ),
-                                    ) {
-                                        let mode =
-                                            if agg_exec.mode() == &AggregateMode::Final {
-                                                AggregateMode::Single
-                                            } else {
-                                                AggregateMode::SinglePartitioned
-                                            };
-                                        AggregateExec::try_new(
-                                            mode,
-                                            input_agg_exec.group_by().clone(),
-                                            input_agg_exec.aggr_expr().to_vec(),
-                                            input_agg_exec.filter_expr().to_vec(),
-                                            input_agg_exec.input().clone(),
-                                            input_agg_exec.input_schema(),
-                                        )
-                                        .map(|combined_agg| {
-                                            combined_agg.with_limit(agg_exec.limit())
-                                        })
-                                        .ok()
-                                        .map(Arc::new)
+                                    )
+                                {
+                                    let mode = if agg_exec.mode() == &AggregateMode::Final
+                                    {
+                                        AggregateMode::Single
                                     } else {
-                                        None
-                                    }
-                                })
-                        } else {
-                            None
-                        }
-                    });
-
-            Ok(if let Some(transformed) = transformed {
-                Transformed::Yes(transformed)
-            } else {
-                Transformed::No(plan)
-            })
-        })
+                                        AggregateMode::SinglePartitioned
+                                    };
+                                    AggregateExec::try_new(
+                                        mode,
+                                        input_agg_exec.group_by().clone(),
+                                        input_agg_exec.aggr_expr().to_vec(),
+                                        input_agg_exec.filter_expr().to_vec(),
+                                        input_agg_exec.input().clone(),
+                                        input_agg_exec.input_schema(),
+                                    )
+                                    .map(|combined_agg| {
+                                        combined_agg.with_limit(agg_exec.limit())
+                                    })
+                                    .into_iter()
+                                    .for_each(|p| *plan = Arc::new(p))
+                                }
+                            })
+                    }
+                });
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+        Ok(plan)
     }
 
     fn name(&self) -> &str {
@@ -178,7 +171,7 @@ fn normalize_group_exprs(group_exprs: GroupExprsRef) -> GroupExprs {
 fn discard_column_index(group_expr: Arc<dyn PhysicalExpr>) -> Arc<dyn PhysicalExpr> {
     group_expr
         .clone()
-        .transform(&|expr| {
+        .transform_up_old(&|expr| {
             let normalized_form: Option<Arc<dyn PhysicalExpr>> =
                 match expr.as_any().downcast_ref::<Column>() {
                     Some(column) => Some(Arc::new(Column::new(column.name(), 0))),

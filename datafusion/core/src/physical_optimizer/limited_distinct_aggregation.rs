@@ -160,7 +160,7 @@ impl PhysicalOptimizerRule for LimitedDistinctAggregation {
         config: &ConfigOptions,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let plan = if config.optimizer.enable_distinct_aggregation_soft_limit {
-            plan.transform_down(&|plan| {
+            plan.transform_down_old(&|plan| {
                 Ok(
                     if let Some(plan) =
                         LimitedDistinctAggregation::transform_limit(plan.clone())

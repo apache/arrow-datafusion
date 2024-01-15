@@ -83,7 +83,7 @@ fn rewrite_in_terms_of_projection(
 ) -> Result<Expr> {
     // assumption is that each item in exprs, such as "b + c" is
     // available as an output column named "b + c"
-    expr.transform(&|expr| {
+    expr.transform_up_old(&|expr| {
         // search for unnormalized names first such as "c1" (such as aliases)
         if let Some(found) = proj_exprs.iter().find(|a| (**a) == expr) {
             let col = Expr::Column(

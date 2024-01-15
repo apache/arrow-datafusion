@@ -28,7 +28,9 @@ use crate::physical_optimizer::PhysicalOptimizerRule;
 use crate::physical_plan::{with_new_children_if_necessary, ExecutionPlan};
 
 use datafusion_common::config::OptimizerOptions;
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::{
+    Transformed, TreeNode, TreeNodeRecursion, VisitRecursionIterator,
+};
 use datafusion_common::{plan_err, DataFusionError};
 use datafusion_physical_expr::intervals::utils::{check_support, is_datatype_supported};
 use datafusion_physical_plan::joins::SymmetricHashJoinExec;
@@ -53,7 +55,7 @@ impl PhysicalOptimizerRule for PipelineChecker {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let pipeline = PipelineStatePropagator::new(plan);
         let state = pipeline
-            .transform_up(&|p| check_finiteness_requirements(p, &config.optimizer))?;
+            .transform_up_old(&|p| check_finiteness_requirements(p, &config.optimizer))?;
         Ok(state.plan)
     }
 
@@ -113,6 +115,23 @@ impl TreeNode for PipelineStatePropagator {
             .into();
         }
         Ok(self)
+    }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        if !self.children.is_empty() {
+            let tnr = self.children.iter_mut().for_each_till_continue(f)?;
+            self.plan = with_new_children_if_necessary(
+                self.plan.clone(),
+                self.children.iter().map(|c| c.plan.clone()).collect(),
+            )?
+            .into();
+            Ok(tnr)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
     }
 }
 

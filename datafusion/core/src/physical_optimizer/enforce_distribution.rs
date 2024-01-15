@@ -48,7 +48,9 @@ use crate::physical_plan::{
 };
 
 use arrow::compute::SortOptions;
-use datafusion_common::tree_node::{Transformed, TreeNode};
+use datafusion_common::tree_node::{
+    Transformed, TreeNode, TreeNodeRecursion, VisitRecursionIterator,
+};
 use datafusion_expr::logical_plan::JoinType;
 use datafusion_physical_expr::expressions::{Column, NoOp};
 use datafusion_physical_expr::utils::map_columns_before_projection;
@@ -201,11 +203,11 @@ impl PhysicalOptimizerRule for EnforceDistribution {
             // Run a top-down process to adjust input key ordering recursively
             let plan_requirements = PlanWithKeyRequirements::new(plan);
             let adjusted =
-                plan_requirements.transform_down(&adjust_input_keys_ordering)?;
+                plan_requirements.transform_down_old(&adjust_input_keys_ordering)?;
             adjusted.plan
         } else {
             // Run a bottom-up process
-            plan.transform_up(&|plan| {
+            plan.transform_up_old(&|plan| {
                 Ok(Transformed::Yes(reorder_join_keys_to_inputs(plan)?))
             })?
         };
@@ -213,7 +215,7 @@ impl PhysicalOptimizerRule for EnforceDistribution {
         let distribution_context = DistributionContext::new(adjusted);
         // Distribution enforcement needs to be applied bottom-up.
         let distribution_context =
-            distribution_context.transform_up(&|distribution_context| {
+            distribution_context.transform_up_old(&|distribution_context| {
                 ensure_distribution(distribution_context, config)
             })?;
         Ok(distribution_context.plan)
@@ -1417,6 +1419,23 @@ impl TreeNode for DistributionContext {
         }
         Ok(self)
     }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        if !self.children_nodes.is_empty() {
+            let tnr = self.children_nodes.iter_mut().for_each_till_continue(f)?;
+            self.plan = with_new_children_if_necessary(
+                self.plan.clone(),
+                self.children_nodes.iter().map(|c| c.plan.clone()).collect(),
+            )?
+            .into();
+            Ok(tnr)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
+    }
 }
 
 /// implement Display method for `DistributionContext` struct.
@@ -1480,6 +1499,23 @@ impl TreeNode for PlanWithKeyRequirements {
             .into();
         }
         Ok(self)
+    }
+
+    fn transform_children<F>(&mut self, f: &mut F) -> Result<TreeNodeRecursion>
+    where
+        F: FnMut(&mut Self) -> Result<TreeNodeRecursion>,
+    {
+        if !self.children.is_empty() {
+            let tnr = self.children.iter_mut().for_each_till_continue(f)?;
+            self.plan = with_new_children_if_necessary(
+                self.plan.clone(),
+                self.children.iter().map(|c| c.plan.clone()).collect(),
+            )?
+            .into();
+            Ok(tnr)
+        } else {
+            Ok(TreeNodeRecursion::Continue)
+        }
     }
 }
 
