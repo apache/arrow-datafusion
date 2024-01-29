@@ -83,6 +83,11 @@ macro_rules! float_distinct_count_accumulator {
     }};
 }
 
+/// Returns the estimated number of hashbrown hashtables.
+fn estimated_buckets<T>(hashset: &HashSet<T, RandomState>) -> usize {
+    (hashset.len().checked_mul(8).unwrap_or(usize::MAX) / 7).next_power_of_two()
+}
+
 impl AggregateExpr for DistinctCount {
     /// Return a reference to Any that can be used for downcasting
     fn as_any(&self) -> &dyn Any {
@@ -336,9 +341,7 @@ where
     }
 
     fn size(&self) -> usize {
-        let estimated_buckets = (self.values.len().checked_mul(8).unwrap_or(usize::MAX)
-            / 7)
-        .next_power_of_two();
+        let estimated_buckets = estimated_buckets(&self.values);
 
         // Size of accumulator
         // + size of entry * number of buckets
@@ -423,9 +426,7 @@ where
     }
 
     fn size(&self) -> usize {
-        let estimated_buckets = (self.values.len().checked_mul(8).unwrap_or(usize::MAX)
-            / 7)
-        .next_power_of_two();
+        let estimated_buckets = estimated_buckets(&self.values);
 
         // Size of accumulator
         // + size of entry * number of buckets
