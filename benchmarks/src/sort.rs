@@ -18,7 +18,7 @@
 use crate::AccessLogOpt;
 use crate::BenchmarkRun;
 use crate::CommonOpt;
-use arrow::util::pretty;
+use datafusion::arrow::util::pretty;
 use datafusion::common::Result;
 use datafusion::physical_expr::PhysicalSortExpr;
 use datafusion::physical_plan::collect;

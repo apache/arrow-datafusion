@@ -23,8 +23,8 @@ use datafusion::common::not_impl_err;
 use datafusion::error::DataFusionError;
 use datafusion::error::Result;
 use datafusion::prelude::*;
-use parquet::basic::Compression;
-use parquet::file::properties::WriterProperties;
+use datafusion::parquet::basic::Compression;
+use datafusion::parquet::file::properties::WriterProperties;
 use structopt::StructOpt;
 
 use super::get_tbl_tpch_table_schema;

@@ -31,7 +31,9 @@ use crate::protobuf::{
 #[cfg(feature = "parquet")]
 use datafusion::datasource::file_format::parquet::ParquetSink;
 
-use crate::logical_plan::{csv_writer_options_to_proto, writer_properties_to_proto};
+use crate::logical_plan::csv_writer_options_to_proto;
+#[cfg(feature = "parquet")]
+use crate::logical_plan::writer_properties_to_proto;
 use datafusion::datasource::{
     file_format::csv::CsvSink,
     file_format::json::JsonSink,
@@ -39,11 +41,23 @@ use datafusion::datasource::{
     physical_plan::FileScanConfig,
     physical_plan::FileSinkConfig,
 };
-use datafusion::logical_expr::BuiltinScalarFunction;
-use datafusion::physical_expr::expressions::{GetFieldAccessExpr, GetIndexedFieldExpr};
-use datafusion::physical_expr::window::{NthValueKind, SlidingAggregateWindowExpr};
-use datafusion::physical_expr::{PhysicalSortExpr, ScalarFunctionExpr};
-use datafusion::physical_plan::expressions::{
+#[cfg(feature = "parquet")]
+use datafusion_common::file_options::parquet_writer::ParquetWriterOptions;
+use datafusion_common::{
+    file_options::{
+        arrow_writer::ArrowWriterOptions, avro_writer::AvroWriterOptions,
+        csv_writer::CsvWriterOptions, json_writer::JsonWriterOptions,
+    },
+    internal_err, not_impl_err,
+    parsers::CompressionTypeVariant,
+    stats::Precision,
+    DataFusionError, FileTypeWriterOptions, JoinSide, Result,
+};
+use datafusion_expr::BuiltinScalarFunction;
+use datafusion_physical_expr::expressions::{GetFieldAccessExpr, GetIndexedFieldExpr};
+use datafusion_physical_expr::window::{NthValueKind, SlidingAggregateWindowExpr};
+use datafusion_physical_expr::{PhysicalSortExpr, ScalarFunctionExpr};
+use datafusion_physical_plan::expressions::{
     ApproxDistinct, ApproxMedian, ApproxPercentileCont, ApproxPercentileContWithWeight,
     ArrayAgg, Avg, BinaryExpr, BitAnd, BitOr, BitXor, BoolAnd, BoolOr, CaseExpr,
     CastExpr, Column, Correlation, Count, Covariance, CovariancePop, CumeDist,
@@ -53,21 +67,10 @@ use datafusion::physical_plan::expressions::{
     Rank, RankType, Regr, RegrType, RowNumber, Stddev, StddevPop, StringAgg, Sum,
     TryCastExpr, Variance, VariancePop, WindowShift,
 };
-use datafusion::physical_plan::udaf::AggregateFunctionExpr;
-use datafusion::physical_plan::windows::{BuiltInWindowExpr, PlainAggregateWindowExpr};
-use datafusion::physical_plan::{
+use datafusion_physical_plan::udaf::AggregateFunctionExpr;
+use datafusion_physical_plan::windows::{BuiltInWindowExpr, PlainAggregateWindowExpr};
+use datafusion_physical_plan::{
     AggregateExpr, ColumnStatistics, PhysicalExpr, Statistics, WindowExpr,
-};
-use datafusion_common::{
-    file_options::{
-        arrow_writer::ArrowWriterOptions, avro_writer::AvroWriterOptions,
-        csv_writer::CsvWriterOptions, json_writer::JsonWriterOptions,
-        parquet_writer::ParquetWriterOptions,
-    },
-    internal_err, not_impl_err,
-    parsers::CompressionTypeVariant,
-    stats::Precision,
-    DataFusionError, FileTypeWriterOptions, JoinSide, Result,
 };
 
 impl TryFrom<Arc<dyn AggregateExpr>> for protobuf::PhysicalExprNode {

@@ -29,27 +29,28 @@ use datafusion::datasource::file_format::parquet::ParquetSink;
 use datafusion::datasource::listing::{FileRange, ListingTableUrl, PartitionedFile};
 use datafusion::datasource::object_store::ObjectStoreUrl;
 use datafusion::datasource::physical_plan::{FileScanConfig, FileSinkConfig};
-use datafusion::execution::context::ExecutionProps;
-use datafusion::execution::FunctionRegistry;
-use datafusion::logical_expr::WindowFunctionDefinition;
-use datafusion::physical_expr::{PhysicalSortExpr, ScalarFunctionExpr};
-use datafusion::physical_plan::expressions::{
-    in_list, BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, LikeExpr,
-    Literal, NegativeExpr, NotExpr, TryCastExpr,
-};
-use datafusion::physical_plan::expressions::{GetFieldAccessExpr, GetIndexedFieldExpr};
-use datafusion::physical_plan::windows::create_window_expr;
-use datafusion::physical_plan::{
-    functions, ColumnStatistics, Partitioning, PhysicalExpr, Statistics, WindowExpr,
-};
 use datafusion_common::file_options::arrow_writer::ArrowWriterOptions;
 use datafusion_common::file_options::csv_writer::CsvWriterOptions;
 use datafusion_common::file_options::json_writer::JsonWriterOptions;
+#[cfg(feature = "parquet")]
 use datafusion_common::file_options::parquet_writer::ParquetWriterOptions;
 use datafusion_common::parsers::CompressionTypeVariant;
 use datafusion_common::stats::Precision;
 use datafusion_common::{
     not_impl_err, DataFusionError, FileTypeWriterOptions, JoinSide, Result, ScalarValue,
+};
+use datafusion_execution::FunctionRegistry;
+use datafusion_expr::WindowFunctionDefinition;
+use datafusion_physical_expr::execution_props::ExecutionProps;
+use datafusion_physical_expr::{PhysicalSortExpr, ScalarFunctionExpr};
+use datafusion_physical_plan::expressions::{
+    in_list, BinaryExpr, CaseExpr, CastExpr, Column, IsNotNullExpr, IsNullExpr, LikeExpr,
+    Literal, NegativeExpr, NotExpr, TryCastExpr,
+};
+use datafusion_physical_plan::expressions::{GetFieldAccessExpr, GetIndexedFieldExpr};
+use datafusion_physical_plan::windows::create_window_expr;
+use datafusion_physical_plan::{
+    functions, ColumnStatistics, Partitioning, PhysicalExpr, Statistics, WindowExpr,
 };
 
 use crate::common::proto_error;
@@ -58,7 +59,9 @@ use crate::logical_plan;
 use crate::protobuf;
 use crate::protobuf::physical_expr_node::ExprType;
 
-use crate::logical_plan::{csv_writer_options_from_proto, writer_properties_from_proto};
+use crate::logical_plan::csv_writer_options_from_proto;
+#[cfg(feature = "parquet")]
+use crate::logical_plan::writer_properties_from_proto;
 use chrono::{TimeZone, Utc};
 use object_store::path::Path;
 use object_store::ObjectMeta;
@@ -851,6 +854,7 @@ impl TryFrom<&protobuf::FileTypeWriterOptions> for FileTypeWriterOptions {
                 let compression: CompressionTypeVariant = opts.compression().into();
                 Ok(Self::CSV(CsvWriterOptions::new(write_options, compression)))
             }
+            #[cfg(feature = "parquet")]
             protobuf::file_type_writer_options::FileType::ParquetOptions(opt) => {
                 let props = opt.writer_properties.clone().unwrap_or_default();
                 let writer_properties = writer_properties_from_proto(&props)?;

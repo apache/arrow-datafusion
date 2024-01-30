@@ -34,10 +34,9 @@ use prost::{
 };
 use std::sync::Arc;
 
-// Reexport Bytes which appears in the API
-use datafusion::execution::registry::FunctionRegistry;
-use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::SessionContext;
+use datafusion_execution::registry::FunctionRegistry;
+use datafusion_physical_plan::ExecutionPlan;
 
 mod registry;
 

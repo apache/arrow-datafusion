@@ -27,10 +27,16 @@ license = { workspace = true }
 authors = { workspace = true }
 rust-version = "1.70"
 
+[features]
+default = ["parquet"]
+parquet = ["datafusion/parquet", "datafusion-common/parquet"]
+protoc = ["substrait/protoc"]
+
 [dependencies]
 async-recursion = "1.0"
 chrono = { workspace = true }
-datafusion = { workspace = true }
+datafusion = { path = "../core", version = "35.0.0", default-features = false }
+datafusion-common = { path = "../common", version = "35.0.0", default-features = false }
 itertools = { workspace = true }
 object_store = { workspace = true }
 prost = "0.12"
@@ -39,6 +45,3 @@ substrait = "0.24.0"
 
 [dev-dependencies]
 tokio = "1.17"
-
-[features]
-protoc = ["substrait/protoc"]

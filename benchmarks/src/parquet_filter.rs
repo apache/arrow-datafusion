@@ -17,7 +17,7 @@
 
 use crate::AccessLogOpt;
 use crate::{BenchmarkRun, CommonOpt};
-use arrow::util::pretty;
+use datafusion::arrow::util::pretty;
 use datafusion::common::Result;
 use datafusion::logical_expr::utils::disjunction;
 use datafusion::logical_expr::{lit, or, Expr};

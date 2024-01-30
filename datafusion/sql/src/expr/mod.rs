@@ -23,6 +23,7 @@ mod identifier;
 mod json_access;
 mod order_by;
 mod subquery;
+#[cfg(feature = "unicode_expressions")]
 mod substring;
 mod unary_op;
 mod value;

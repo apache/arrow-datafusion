@@ -65,8 +65,10 @@ use datafusion_expr::{
     DistinctOn, DropView, Expr, LogicalPlan, LogicalPlanBuilder,
 };
 
+#[cfg(feature = "parquet")]
 use datafusion::parquet::file::properties::{WriterProperties, WriterVersion};
 use datafusion_common::file_options::csv_writer::CsvWriterOptions;
+#[cfg(feature = "parquet")]
 use datafusion_common::file_options::parquet_writer::ParquetWriterOptions;
 use datafusion_expr::dml::CopyOptions;
 use prost::bytes::BufMut;
@@ -466,7 +468,7 @@ impl AsLogicalPlan for LogicalPlanNode {
                 LogicalPlanBuilder::from(input).sort(sort_expr)?.build()
             }
             LogicalPlanType::Repartition(repartition) => {
-                use datafusion::logical_expr::Partitioning;
+                use datafusion_expr::Partitioning;
                 let input: LogicalPlan =
                     into_logical_plan!(repartition.input, ctx, extension_codec)?;
                 use protobuf::repartition_node::PartitionMethod;
@@ -880,6 +882,7 @@ impl AsLogicalPlan for LogicalPlanNode {
                                         ),
                                     ))
                                 }
+                                #[cfg(feature = "parquet")]
                                 file_type_writer_options::FileType::ParquetOptions(
                                     writer_options,
                                 ) => {
@@ -1343,7 +1346,7 @@ impl AsLogicalPlan for LogicalPlanNode {
                 input,
                 partitioning_scheme,
             }) => {
-                use datafusion::logical_expr::Partitioning;
+                use datafusion_expr::Partitioning;
                 let input: protobuf::LogicalPlanNode =
                     protobuf::LogicalPlanNode::try_from_logical_plan(
                         input.as_ref(),
@@ -1692,6 +1695,7 @@ impl AsLogicalPlan for LogicalPlanNode {
                                         },
                                     ))
                                 }
+                                #[cfg(feature = "parquet")]
                                 FileTypeWriterOptions::Parquet(parquet_opts) => {
                                     let parquet_writer_options =
                                         protobuf::ParquetWriterOptions {
@@ -1779,6 +1783,7 @@ pub(crate) fn csv_writer_options_from_proto(
         .with_null(writer_options.null_value.clone()))
 }
 
+#[cfg(feature = "parquet")]
 pub(crate) fn writer_properties_to_proto(
     props: &WriterProperties,
 ) -> protobuf::WriterProperties {
@@ -1793,6 +1798,7 @@ pub(crate) fn writer_properties_to_proto(
     }
 }
 
+#[cfg(feature = "parquet")]
 pub(crate) fn writer_properties_from_proto(
     props: &protobuf::WriterProperties,
 ) -> Result<WriterProperties, DataFusionError> {

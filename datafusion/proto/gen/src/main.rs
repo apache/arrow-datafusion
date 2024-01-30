@@ -30,6 +30,22 @@ fn main() -> Result<(), String> {
     prost_build::Config::new()
         .file_descriptor_set_path(&descriptor_path)
         .out_dir("src")
+        .field_attribute(
+            "PhysicalPlanNode.PhysicalPlanType.parquet_scan",
+            "#[cfg(feature = \"parquet\")]",
+        )
+        .field_attribute(
+            "PhysicalPlanNode.PhysicalPlanType.parquet_sink",
+            "#[cfg(feature = \"parquet\")]",
+        )
+        .field_attribute(
+            "ListingTableScanNode.FileFormatType.parquet",
+            "#[cfg(feature = \"parquet\")]",
+        )
+        .field_attribute(
+            "FileTypeWriterOptions.FileType.parquet_options",
+            "#[cfg(feature = \"parquet\")]",
+        )
         .compile_well_known_types()
         .extern_path(".google.protobuf", "::pbjson_types")
         .compile_protos(&[proto_path], &["proto"])

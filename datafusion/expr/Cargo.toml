@@ -32,8 +32,6 @@ rust-version = { workspace = true }
 name = "datafusion_expr"
 path = "src/lib.rs"
 
-[features]
-
 [dependencies]
 ahash = { version = "0.8", default-features = false, features = [
     "runtime-rng",

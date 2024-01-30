@@ -33,9 +33,10 @@ name = "datafusion_common"
 path = "src/lib.rs"
 
 [features]
-avro = ["apache-avro"]
+avro = ["dep:apache-avro"]
 backtrace = []
-pyarrow = ["pyo3", "arrow/pyarrow", "parquet"]
+parquet = ["dep:parquet"]
+pyarrow = ["dep:pyo3", "arrow/pyarrow", "dep:parquet"]
 
 [dependencies]
 ahash = { version = "0.8", default-features = false, features = [

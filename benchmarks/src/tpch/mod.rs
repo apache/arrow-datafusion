@@ -17,7 +17,7 @@
 
 //! Benchmark derived from TPC-H. This is not an official TPC-H benchmark.
 
-use arrow::datatypes::SchemaBuilder;
+use datafusion::arrow::datatypes::SchemaBuilder;
 use datafusion::{
     arrow::datatypes::{DataType, Field, Schema},
     common::plan_err,

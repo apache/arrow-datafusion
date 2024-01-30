@@ -17,8 +17,8 @@
 
 use super::get_query_sql;
 use crate::{BenchmarkRun, CommonOpt};
-use arrow::record_batch::RecordBatch;
-use arrow::util::pretty::{self, pretty_format_batches};
+use datafusion::arrow::record_batch::RecordBatch;
+use datafusion::arrow::util::pretty::{self, pretty_format_batches};
 use datafusion::datasource::file_format::csv::CsvFormat;
 use datafusion::datasource::file_format::parquet::ParquetFormat;
 use datafusion::datasource::file_format::FileFormat;

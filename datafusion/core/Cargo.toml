@@ -35,16 +35,16 @@ path = "src/lib.rs"
 
 [features]
 # Used to enable the avro format
-avro = ["apache-avro", "num-traits", "datafusion-common/avro"]
+avro = ["dep:apache-avro", "dep:num-traits", "datafusion-common/avro"]
 backtrace = ["datafusion-common/backtrace"]
-compression = ["xz2", "bzip2", "flate2", "zstd", "async-compression", "tokio-util"]
+compression = ["dep:xz2", "dep:bzip2", "dep:flate2", "dep:zstd", "dep:async-compression", "dep:tokio-util"]
 crypto_expressions = ["datafusion-physical-expr/crypto_expressions", "datafusion-optimizer/crypto_expressions"]
 default = ["crypto_expressions", "encoding_expressions", "regex_expressions", "unicode_expressions", "compression", "parquet"]
 encoding_expressions = ["datafusion-physical-expr/encoding_expressions"]
 # Used for testing ONLY: causes all values to hash to the same value (test for collisions)
 force_hash_collisions = []
 parquet = ["datafusion-common/parquet", "dep:parquet"]
-pyarrow = ["datafusion-common/pyarrow", "parquet"]
+pyarrow = ["datafusion-common/pyarrow", "dep:parquet"]
 regex_expressions = ["datafusion-physical-expr/regex_expressions", "datafusion-optimizer/regex_expressions"]
 serde = ["arrow-schema/serde"]
 unicode_expressions = ["datafusion-physical-expr/unicode_expressions", "datafusion-optimizer/unicode_expressions", "datafusion-sql/unicode_expressions"]

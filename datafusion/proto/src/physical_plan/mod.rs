@@ -29,37 +29,37 @@ use datafusion::datasource::file_format::parquet::ParquetSink;
 #[cfg(feature = "parquet")]
 use datafusion::datasource::physical_plan::ParquetExec;
 use datafusion::datasource::physical_plan::{AvroExec, CsvExec};
-use datafusion::execution::runtime_env::RuntimeEnv;
-use datafusion::execution::FunctionRegistry;
-use datafusion::physical_expr::PhysicalExprRef;
-use datafusion::physical_plan::aggregates::{create_aggregate_expr, AggregateMode};
-use datafusion::physical_plan::aggregates::{AggregateExec, PhysicalGroupBy};
-use datafusion::physical_plan::analyze::AnalyzeExec;
-use datafusion::physical_plan::coalesce_batches::CoalesceBatchesExec;
-use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
-use datafusion::physical_plan::empty::EmptyExec;
-use datafusion::physical_plan::explain::ExplainExec;
-use datafusion::physical_plan::expressions::PhysicalSortExpr;
-use datafusion::physical_plan::filter::FilterExec;
-use datafusion::physical_plan::insert::FileSinkExec;
-use datafusion::physical_plan::joins::utils::{ColumnIndex, JoinFilter};
-use datafusion::physical_plan::joins::{
+use datafusion_common::{internal_err, not_impl_err, DataFusionError, Result};
+use datafusion_execution::runtime_env::RuntimeEnv;
+use datafusion_execution::FunctionRegistry;
+use datafusion_physical_expr::PhysicalExprRef;
+use datafusion_physical_plan::aggregates::{create_aggregate_expr, AggregateMode};
+use datafusion_physical_plan::aggregates::{AggregateExec, PhysicalGroupBy};
+use datafusion_physical_plan::analyze::AnalyzeExec;
+use datafusion_physical_plan::coalesce_batches::CoalesceBatchesExec;
+use datafusion_physical_plan::coalesce_partitions::CoalescePartitionsExec;
+use datafusion_physical_plan::empty::EmptyExec;
+use datafusion_physical_plan::explain::ExplainExec;
+use datafusion_physical_plan::expressions::PhysicalSortExpr;
+use datafusion_physical_plan::filter::FilterExec;
+use datafusion_physical_plan::insert::FileSinkExec;
+use datafusion_physical_plan::joins::utils::{ColumnIndex, JoinFilter};
+use datafusion_physical_plan::joins::{
     CrossJoinExec, NestedLoopJoinExec, StreamJoinPartitionMode, SymmetricHashJoinExec,
 };
-use datafusion::physical_plan::joins::{HashJoinExec, PartitionMode};
-use datafusion::physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
-use datafusion::physical_plan::placeholder_row::PlaceholderRowExec;
-use datafusion::physical_plan::projection::ProjectionExec;
-use datafusion::physical_plan::repartition::RepartitionExec;
-use datafusion::physical_plan::sorts::sort::SortExec;
-use datafusion::physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
-use datafusion::physical_plan::union::{InterleaveExec, UnionExec};
-use datafusion::physical_plan::windows::{BoundedWindowAggExec, WindowAggExec};
-use datafusion::physical_plan::{
+use datafusion_physical_plan::joins::{HashJoinExec, PartitionMode};
+use datafusion_physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
+use datafusion_physical_plan::placeholder_row::PlaceholderRowExec;
+use datafusion_physical_plan::projection::ProjectionExec;
+use datafusion_physical_plan::repartition::RepartitionExec;
+use datafusion_physical_plan::sorts::sort::SortExec;
+use datafusion_physical_plan::sorts::sort_preserving_merge::SortPreservingMergeExec;
+use datafusion_physical_plan::union::{InterleaveExec, UnionExec};
+use datafusion_physical_plan::windows::{BoundedWindowAggExec, WindowAggExec};
+use datafusion_physical_plan::{
     udaf, AggregateExpr, ExecutionPlan, InputOrderMode, Partitioning, PhysicalExpr,
     WindowExpr,
 };
-use datafusion_common::{internal_err, not_impl_err, DataFusionError, Result};
 use prost::bytes::BufMut;
 use prost::Message;
 
@@ -1001,6 +1001,7 @@ impl AsExecutionPlan for PhysicalPlanNode {
                     sort_order,
                 )))
             }
+            #[cfg(feature = "parquet")]
             PhysicalPlanType::ParquetSink(sink) => {
                 let input =
                     into_physical_plan(&sink.input, registry, runtime, extension_codec)?;
@@ -1834,6 +1835,7 @@ impl AsExecutionPlan for PhysicalPlanNode {
                 });
             }
 
+            #[cfg(feature = "parquet")]
             if let Some(sink) = exec.sink().as_any().downcast_ref::<ParquetSink>() {
                 return Ok(protobuf::PhysicalPlanNode {
                     physical_plan_type: Some(PhysicalPlanType::ParquetSink(Box::new(

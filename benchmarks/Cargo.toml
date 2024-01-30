@@ -19,7 +19,7 @@
 name = "datafusion-benchmarks"
 description = "DataFusion Benchmarks"
 version = "35.0.0"
-edition = { workspace = true }
+edition = "2021"
 authors = ["Apache Arrow <dev@arrow.apache.org>"]
 homepage = "https://github.com/apache/arrow-datafusion"
 repository = "https://github.com/apache/arrow-datafusion"
@@ -32,17 +32,14 @@ default = ["mimalloc"]
 snmalloc = ["snmalloc-rs"]
 
 [dependencies]
-arrow = { workspace = true }
 datafusion = { path = "../datafusion/core", version = "35.0.0" }
 datafusion-common = { path = "../datafusion/common", version = "35.0.0" }
-env_logger = { workspace = true }
-futures = { workspace = true }
-log = { workspace = true }
+env_logger = "0.10"
+log = "^0.4"
 mimalloc = { version = "0.1", optional = true, default-features = false }
-num_cpus = { workspace = true }
-parquet = { workspace = true, default-features = true }
+num_cpus = "1.13.0"
 serde = { version = "1.0.136", features = ["derive"] }
-serde_json = { workspace = true }
+serde_json = "1"
 snmalloc-rs = { version = "0.3", optional = true }
 structopt = { version = "0.3", default-features = false }
 test-utils = { path = "../test-utils/", version = "0.1.0" }

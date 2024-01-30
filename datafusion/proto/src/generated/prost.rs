@@ -188,6 +188,7 @@ pub mod listing_table_scan_node {
         #[prost(message, tag = "10")]
         Csv(super::CsvFormat),
         #[prost(message, tag = "11")]
+        #[cfg(feature = "parquet")]
         Parquet(super::ParquetFormat),
         #[prost(message, tag = "12")]
         Avro(super::AvroFormat),
@@ -1576,6 +1577,7 @@ pub mod physical_plan_node {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum PhysicalPlanType {
         #[prost(message, tag = "1")]
+        #[cfg(feature = "parquet")]
         ParquetScan(super::ParquetScanExecNode),
         #[prost(message, tag = "2")]
         CsvScan(super::CsvScanExecNode),
@@ -1632,6 +1634,7 @@ pub mod physical_plan_node {
         #[prost(message, tag = "28")]
         CsvSink(::prost::alloc::boxed::Box<super::CsvSinkExecNode>),
         #[prost(message, tag = "29")]
+        #[cfg(feature = "parquet")]
         ParquetSink(::prost::alloc::boxed::Box<super::ParquetSinkExecNode>),
     }
 }
@@ -1657,6 +1660,7 @@ pub mod file_type_writer_options {
         #[prost(message, tag = "1")]
         JsonOptions(super::JsonWriterOptions),
         #[prost(message, tag = "2")]
+        #[cfg(feature = "parquet")]
         ParquetOptions(super::ParquetWriterOptions),
         #[prost(message, tag = "3")]
         CsvOptions(super::CsvWriterOptions),

@@ -22,7 +22,9 @@ use datafusion::arrow::datatypes::Schema;
 use datafusion::common::not_impl_err;
 use datafusion::datasource::listing::PartitionedFile;
 use datafusion::datasource::object_store::ObjectStoreUrl;
-use datafusion::datasource::physical_plan::{FileScanConfig, ParquetExec};
+use datafusion::datasource::physical_plan::FileScanConfig;
+#[cfg(feature = "parquet")]
+use datafusion::datasource::physical_plan::ParquetExec;
 use datafusion::error::{DataFusionError, Result};
 use datafusion::physical_plan::{ExecutionPlan, Statistics};
 use datafusion::prelude::SessionContext;
@@ -125,8 +127,15 @@ pub async fn from_substrait_rel(
                         }
                     }
 
-                    Ok(Arc::new(ParquetExec::new(base_config, None, None))
-                        as Arc<dyn ExecutionPlan>)
+                    #[cfg(feature = "parquet")]
+                    {
+                        Ok(Arc::new(ParquetExec::new(base_config, None, None))
+                            as Arc<dyn ExecutionPlan>)
+                    }
+                    #[cfg(not(feature = "parquet"))]
+                    {
+                        not_impl_err!("Requires 'parquet' feature to be enabled.")
+                    }
                 }
                 _ => not_impl_err!(
                     "Only LocalFile reads are supported when parsing physical"

@@ -19,7 +19,7 @@
 
 use datafusion::common::Result;
 use datafusion::test_util::parquet::TestParquetFile;
-use parquet::file::properties::WriterProperties;
+use datafusion::parquet::file::properties::WriterProperties;
 use std::path::PathBuf;
 use structopt::StructOpt;
 use test_utils::AccessLogGenerator;
