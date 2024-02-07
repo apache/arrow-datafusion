@@ -25,7 +25,7 @@ use super::utils::{
     convert_duration_type_to_interval, convert_interval_type_to_duration, get_inverse_op,
 };
 use crate::expressions::Literal;
-use crate::utils::{build_dag, ExprTreeNode};
+use crate::utils::build_dag;
 use crate::PhysicalExpr;
 
 use arrow_schema::{DataType, Schema};
@@ -176,11 +176,11 @@ impl ExprIntervalGraphNode {
         &self.interval
     }
 
-    /// This function creates a DAEG node from Datafusion's [`ExprTreeNode`]
+    /// This function creates a DAEG node from Datafusion's [`PhysicalExpr`]
     /// object. Literals are created with definite, singleton intervals while
     /// any other expression starts with an indefinite interval ([-∞, ∞]).
-    pub fn make_node(node: &ExprTreeNode<NodeIndex>, schema: &Schema) -> Result<Self> {
-        let expr = node.expr.clone();
+    pub fn make_node(expr: &Arc<dyn PhysicalExpr>, schema: &Schema) -> Result<Self> {
+        let expr = expr.clone();
         if let Some(literal) = expr.as_any().downcast_ref::<Literal>() {
             let value = literal.value();
             Interval::try_new(value.clone(), value.clone())

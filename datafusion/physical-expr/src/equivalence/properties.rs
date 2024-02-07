@@ -24,7 +24,7 @@ use crate::equivalence::{
     collapse_lex_req, EquivalenceGroup, OrderingEquivalenceClass, ProjectionMapping,
 };
 use crate::expressions::Literal;
-use crate::sort_properties::{ExprOrdering, SortProperties};
+use crate::sort_properties::SortProperties;
 use crate::{
     physical_exprs_contains, LexOrdering, LexOrderingRef, LexRequirement,
     LexRequirementRef, PhysicalExpr, PhysicalExprRef, PhysicalSortExpr,
@@ -313,8 +313,7 @@ impl EquivalenceProperties {
     ///
     /// Returns `true` if the specified ordering is satisfied, `false` otherwise.
     fn ordering_satisfy_single(&self, req: &PhysicalSortRequirement) -> bool {
-        let expr_ordering = self.get_expr_ordering(req.expr.clone());
-        let ExprOrdering { expr, data, .. } = expr_ordering;
+        let (expr, data) = self.get_expr_ordering(req.expr.clone());
         match data {
             SortProperties::Ordered(options) => {
                 let sort_expr = PhysicalSortExpr { expr, options };
@@ -708,7 +707,7 @@ impl EquivalenceProperties {
             let ordered_exprs = search_indices
                 .iter()
                 .flat_map(|&idx| {
-                    let ExprOrdering { expr, data, .. } =
+                    let (expr, data) =
                         eq_properties.get_expr_ordering(exprs[idx].clone());
                     if let SortProperties::Ordered(options) = data {
                         Some((PhysicalSortExpr { expr, options }, idx))
@@ -775,15 +774,29 @@ impl EquivalenceProperties {
     ///
     /// Returns an `ExprOrdering` object containing the ordering information for
     /// the given expression.
-    pub fn get_expr_ordering(&self, expr: Arc<dyn PhysicalExpr>) -> ExprOrdering {
-        ExprOrdering::new_default(expr.clone())
-            .transform_up(&|expr| Ok(update_ordering(expr, self)))
-            // Guaranteed to always return `Ok`.
-            .unwrap()
+    pub fn get_expr_ordering(
+        &self,
+        expr: Arc<dyn PhysicalExpr>,
+    ) -> (Arc<dyn PhysicalExpr>, SortProperties) {
+        // The transform is designed to aid in the determination of ordering (represented
+        // by [`SortProperties`]) for a given [`PhysicalExpr`]. When analyzing the orderings
+        // of a [`PhysicalExpr`], the process begins by assigning the ordering of its leaf nodes.
+        // By propagating these leaf node orderings upwards in the expression tree, the overall
+        // ordering of the entire [`PhysicalExpr`] can be derived.
+        //
+        // This struct holds the necessary state information for each expression in the [`PhysicalExpr`].
+        // It encapsulates the orderings (`state`) associated with the expression (`expr`), and
+        // orderings of the children expressions (`children_states`). The `state` of a parent
+        // expression is determined based on the states of its children expressions.
+        expr.transform_up_with_payload(&mut |expr, children_states| {
+            Ok(update_ordering(expr, children_states, self))
+        })
+        // Guaranteed to always return `Ok`.
+        .unwrap()
     }
 }
 
-/// Calculates the [`SortProperties`] of a given [`ExprOrdering`] node.
+/// Calculates the [`SortProperties`] of a given [`PhysicalExpr`] node.
 /// The node can either be a leaf node, or an intermediate node:
 /// - If it is a leaf node, we directly find the order of the node by looking
 /// at the given sort expression and equivalence properties if it is a `Column`
@@ -796,29 +809,31 @@ impl EquivalenceProperties {
 /// sort expression emerges at that node immediately, discarding the recursive
 /// result coming from its children.
 fn update_ordering(
-    mut node: ExprOrdering,
+    expr: Arc<dyn PhysicalExpr>,
+    children_states: Vec<SortProperties>,
     eq_properties: &EquivalenceProperties,
-) -> Transformed<ExprOrdering> {
+) -> (Transformed<Arc<dyn PhysicalExpr>>, SortProperties) {
     // We have a Column, which is one of the two possible leaf node types:
-    let normalized_expr = eq_properties.eq_group.normalize_expr(node.expr.clone());
+    let normalized_expr = eq_properties.eq_group.normalize_expr(expr.clone());
+
+    let state;
     if eq_properties.is_expr_constant(&normalized_expr) {
-        node.data = SortProperties::Singleton;
+        state = SortProperties::Singleton;
     } else if let Some(options) = eq_properties
         .normalized_oeq_class()
         .get_options(&normalized_expr)
     {
-        node.data = SortProperties::Ordered(options);
-    } else if !node.expr.children().is_empty() {
+        state = SortProperties::Ordered(options);
+    } else if !expr.children().is_empty() {
         // We have an intermediate (non-leaf) node, account for its children:
-        let children_orderings = node.children.iter().map(|c| c.data).collect_vec();
-        node.data = node.expr.get_ordering(&children_orderings);
-    } else if node.expr.as_any().is::<Literal>() {
+        state = expr.get_ordering(&children_states);
+    } else if expr.as_any().is::<Literal>() {
         // We have a Literal, which is the other possible leaf node type:
-        node.data = node.expr.get_ordering(&[]);
+        state = expr.get_ordering(&[]);
     } else {
-        return Transformed::No(node);
+        return (Transformed::No(expr), Default::default());
     }
-    Transformed::Yes(node)
+    (Transformed::Yes(expr), state)
 }
 
 /// This function determines whether the provided expression is constant
@@ -1681,12 +1696,12 @@ mod tests {
                 .iter()
                 .flat_map(|ordering| ordering.first().cloned())
                 .collect::<Vec<_>>();
-            let expr_ordering = eq_properties.get_expr_ordering(expr.clone());
+            let (_, state) = eq_properties.get_expr_ordering(expr.clone());
             let err_msg = format!(
                 "expr:{:?}, expected: {:?}, actual: {:?}, leading_orderings: {leading_orderings:?}",
-                expr, expected, expr_ordering.data
+                expr, expected, state
             );
-            assert_eq!(expr_ordering.data, expected, "{}", err_msg);
+            assert_eq!(state, expected, "{}", err_msg);
         }
 
         Ok(())

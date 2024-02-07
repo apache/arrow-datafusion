@@ -36,15 +36,15 @@
 
 use std::sync::Arc;
 
-use super::utils::add_sort_above;
+use super::utils::{add_sort_above, add_sort_above_plan_context};
 use crate::config::ConfigOptions;
 use crate::error::Result;
 use crate::physical_optimizer::replace_with_order_preserving_variants::{
-    replace_with_order_preserving_variants, OrderPreservationContext,
+    propagate_order_maintaining_connections_down,
+    replace_with_order_preserving_variants_up,
 };
-use crate::physical_optimizer::sort_pushdown::{
-    assign_initial_requirements, pushdown_sorts, SortPushDown,
-};
+use crate::physical_optimizer::sort_pushdown::pushdown_sorts;
+
 use crate::physical_optimizer::utils::{
     is_coalesce_partitions, is_limit, is_repartition, is_sort, is_sort_preserving_merge,
     is_union, is_window,
@@ -116,35 +116,6 @@ fn update_sort_ctx_children(
     node.update_plan_from_children()
 }
 
-/// This object is used within the [`EnforceSorting`] rule to track the closest
-/// [`CoalescePartitionsExec`] descendant(s) for every child of a plan. The data
-/// attribute stores whether the plan is a `CoalescePartitionsExec` or is
-/// connected to a `CoalescePartitionsExec` via its children.
-type PlanWithCorrespondingCoalescePartitions = PlanContext<bool>;
-
-fn update_coalesce_ctx_children(
-    coalesce_context: &mut PlanWithCorrespondingCoalescePartitions,
-) {
-    let children = &coalesce_context.children;
-    coalesce_context.data = if children.is_empty() {
-        // Plan has no children, it cannot be a `CoalescePartitionsExec`.
-        false
-    } else if is_coalesce_partitions(&coalesce_context.plan) {
-        // Initiate a connection:
-        true
-    } else {
-        children.iter().enumerate().any(|(idx, node)| {
-            // Only consider operators that don't require a single partition,
-            // and connected to some `CoalescePartitionsExec`:
-            node.data
-                && !matches!(
-                    coalesce_context.plan.required_input_distribution()[idx],
-                    Distribution::SinglePartition
-                )
-        })
-    };
-}
-
 /// The boolean flag `repartition_sorts` defined in the config indicates
 /// whether we elect to transform [`CoalescePartitionsExec`] + [`SortExec`] cascades
 /// into [`SortExec`] + [`SortPreservingMergeExec`] cascades, which enables us to
@@ -160,32 +131,37 @@ impl PhysicalOptimizerRule for EnforceSorting {
         // remove unnecessary sorts, and optimize sort-sensitive operators:
         let adjusted = plan_requirements.transform_up(&ensure_sorting)?;
         let new_plan = if config.optimizer.repartition_sorts {
-            let plan_with_coalesce_partitions =
-                PlanWithCorrespondingCoalescePartitions::new_default(adjusted.plan);
-            let parallel =
-                plan_with_coalesce_partitions.transform_up(&parallelize_sorts)?;
-            parallel.plan
+            let (parallel, _) = adjusted.plan.transform_with_payload(
+                &mut propagate_unnecessary_coalesce_connections_down,
+                false,
+                &mut parallelize_sorts_up,
+            )?;
+            parallel
         } else {
             adjusted.plan
         };
 
-        let plan_with_pipeline_fixer = OrderPreservationContext::new_default(new_plan);
-        let updated_plan =
-            plan_with_pipeline_fixer.transform_up(&|plan_with_pipeline_fixer| {
-                replace_with_order_preserving_variants(
-                    plan_with_pipeline_fixer,
+        let (updated_plan, _) = new_plan.transform_with_payload(
+            &mut |plan, ordering_connection| {
+                propagate_order_maintaining_connections_down(plan, ordering_connection)
+            },
+            false,
+            &mut |plan, ordering_connection, order_preserving_children| {
+                replace_with_order_preserving_variants_up(
+                    plan,
+                    ordering_connection,
+                    order_preserving_children,
                     false,
                     true,
                     config,
                 )
-            })?;
+            },
+        )?;
 
         // Execute a top-down traversal to exploit sort push-down opportunities
         // missed by the bottom-up traversal:
-        let mut sort_pushdown = SortPushDown::new_default(updated_plan.plan);
-        assign_initial_requirements(&mut sort_pushdown);
-        let adjusted = sort_pushdown.transform_down(&pushdown_sorts)?;
-        Ok(adjusted.plan)
+        let plan = updated_plan.transform_down_with_payload(&mut pushdown_sorts, None)?;
+        Ok(plan)
     }
 
     fn name(&self) -> &str {
@@ -197,82 +173,212 @@ impl PhysicalOptimizerRule for EnforceSorting {
     }
 }
 
-/// This function turns plans of the form
-/// ```text
+/// For a given `plan`, `propagate_unnecessary_coalesce_connections_down` and
+/// `parallelize_sorts_up` can be used with `TreeNode.transform_with_payload()` to
+/// propagate down/up the information one needs to decide if unnecessary coalesce nodes
+/// can be dropped so as to increase parallelism.
+///
+/// The algorithm flow is simply like this:
+/// 1. During the top-down traversal, keep track of operators that allow eliminating
+///    descendant coalesce nodes.
+///    There are 2 scenarios that this rule covers:
+///    - A one partition sort or sort preserving merge node allow eliminating descendant
+///      coalesce nodes that can be reached on connection that doesn't require single
+///      partition distribution. In this case the sort node needs to be adjusted to sort
+///      preserving merge followed by a sort node.
+///      E.g the following plan:
+///      ```text
 ///      "SortExec: expr=\[a@0 ASC\]",
-///      "  CoalescePartitionsExec",
-///      "    RepartitionExec: partitioning=RoundRobinBatch(8), input_partitions=1",
-/// ```
-/// to
-/// ```text
-///      "SortPreservingMergeExec: \[a@0 ASC\]",
-///      "  SortExec: expr=\[a@0 ASC\]",
-///      "    RepartitionExec: partitioning=RoundRobinBatch(8), input_partitions=1",
-/// ```
-/// by following connections from [`CoalescePartitionsExec`]s to [`SortExec`]s.
-/// By performing sorting in parallel, we can increase performance in some scenarios.
-fn parallelize_sorts(
-    mut requirements: PlanWithCorrespondingCoalescePartitions,
-) -> Result<Transformed<PlanWithCorrespondingCoalescePartitions>> {
-    update_coalesce_ctx_children(&mut requirements);
-
-    if requirements.children.is_empty() || !requirements.children[0].data {
-        // We only take an action when the plan is either a `SortExec`, a
-        // `SortPreservingMergeExec` or a `CoalescePartitionsExec`, and they
-        // all have a single child. Therefore, if the first child has no
-        // connection, we can return immediately.
-        Ok(Transformed::No(requirements))
-    } else if (is_sort(&requirements.plan)
-        || is_sort_preserving_merge(&requirements.plan))
-        && requirements.plan.output_partitioning().partition_count() <= 1
+///      "  ..."
+///      "    CoalescePartitionsExec",
+///      "      RepartitionExec: partitioning=RoundRobinBatch(8), input_partitions=1",
+///      ```
+///      can be optimized to
+///      ```text
+///        "SortPreservingMergeExec: \[a@0 ASC\]",
+///        "  SortExec: expr=\[a@0 ASC\]",
+///        "    ...
+///        "      RepartitionExec: partitioning=RoundRobinBatch(8), input_partitions=1",
+///      ```
+///    - A coalesce node allows eliminating descendant coalesce nodes that can be reached
+///      on connection that doesn't require single partition distribution.
+/// 2. During the bottom-up traversal, we use the information from the top-down traversal
+///    and propagate up an alternative plan that doesn't contain the unnecessary coalesce
+///    nodes.
+///    - If the node is a one partition sort or sort preserving merge node then the
+///      alternative plan is better and is accepted.
+///    - If the node is a coalesce node then the alternative plan is better and is
+///      accepted. Also, if the node can be reached from its parent via a connection that
+///      allows eliminating coalesce nodes then start propagating up continue propagating
+///      up the alternative plan without the coalesce node.
+///    - If the current node is something else, but we got an alternative plan from its
+///      children then extend the alternative plan with the current node.
+#[allow(clippy::type_complexity)]
+pub(crate) fn propagate_unnecessary_coalesce_connections_down(
+    plan: Arc<dyn ExecutionPlan>,
+    unnecessary_coalesce_connection: bool,
+) -> Result<(Transformed<Arc<dyn ExecutionPlan>>, Vec<bool>, bool)> {
+    let children_unnecessary_coalesce_connections = if (is_sort(&plan)
+        && plan.output_partitioning().partition_count() <= 1)
+        || is_sort_preserving_merge(&plan)
+        || is_coalesce_partitions(&plan)
     {
-        // Take the initial sort expressions and requirements
-        let (sort_exprs, fetch) = get_sort_exprs(&requirements.plan)?;
-        let sort_reqs = PhysicalSortRequirement::from_sort_exprs(sort_exprs);
-        let sort_exprs = sort_exprs.to_vec();
-
-        // If there is a connection between a `CoalescePartitionsExec` and a
-        // global sort that satisfy the requirements (i.e. intermediate
-        // executors don't require single partition), then we can replace
-        // the `CoalescePartitionsExec` + `SortExec` cascade with a `SortExec`
-        // + `SortPreservingMergeExec` cascade to parallelize sorting.
-        requirements = remove_corresponding_coalesce_in_sub_plan(requirements)?;
-        // We also need to remove the self node since `remove_corresponding_coalesce_in_sub_plan`
-        // deals with the children and their children and so on.
-        requirements = requirements.children.swap_remove(0);
-
-        if !requirements
-            .plan
-            .equivalence_properties()
-            .ordering_satisfy_requirement(&sort_reqs)
-        {
-            requirements = add_sort_above(requirements, sort_reqs, fetch);
-        }
-
-        let spm = SortPreservingMergeExec::new(sort_exprs, requirements.plan.clone());
-        Ok(Transformed::Yes(
-            PlanWithCorrespondingCoalescePartitions::new(
-                Arc::new(spm.with_fetch(fetch)),
-                false,
-                vec![requirements],
-            ),
-        ))
-    } else if is_coalesce_partitions(&requirements.plan) {
-        // There is an unnecessary `CoalescePartitionsExec` in the plan.
-        // This will handle the recursive `CoalescePartitionsExec` plans.
-        requirements = remove_corresponding_coalesce_in_sub_plan(requirements)?;
-        // For the removal of self node which is also a `CoalescePartitionsExec`.
-        requirements = requirements.children.swap_remove(0);
-
-        Ok(Transformed::Yes(
-            PlanWithCorrespondingCoalescePartitions::new(
-                Arc::new(CoalescePartitionsExec::new(requirements.plan.clone())),
-                false,
-                vec![requirements],
-            ),
-        ))
+        // Start a unnecessary coalesce connection from
+        // - a single partition sort or
+        // - a sort preserving merge or,
+        // - a coalesce
+        // node down the tree.
+        vec![true]
     } else {
-        Ok(Transformed::Yes(requirements))
+        // Keep the connection towards a child that doesn't require single partition
+        // distribution (coalesce).
+        plan.required_input_distribution()
+            .into_iter()
+            .map(|d| {
+                unnecessary_coalesce_connection
+                    && !matches!(d, Distribution::SinglePartition)
+            })
+            .collect()
+    };
+    Ok((
+        Transformed::No(plan),
+        children_unnecessary_coalesce_connections,
+        unnecessary_coalesce_connection,
+    ))
+}
+
+#[allow(clippy::type_complexity)]
+fn parallelize_sorts_up(
+    plan: Arc<dyn ExecutionPlan>,
+    unnecessary_coalesce_connection: bool,
+    mut unnecessary_coalesce_eliminated_children: Vec<Option<Arc<dyn ExecutionPlan>>>,
+) -> Result<(
+    Transformed<Arc<dyn ExecutionPlan>>,
+    Option<Arc<dyn ExecutionPlan>>,
+)> {
+    if (is_sort(&plan) || is_sort_preserving_merge(&plan))
+        && plan.output_partitioning().partition_count() <= 1
+    {
+        // If we encounter a sort or sort preserving merge node then we might get an
+        // alternative plan propagated up from the child node.
+        // As unnecessary coalesce nodes have been removed from alternative plan which is
+        // always better than the original so we can accept it, but we need to make sure
+        // that a sort preserving merge and sort modes are placed on the top of the
+        // alternative plan.
+        if let Some(mut unnecessary_coalesce_eliminated_plan) =
+            unnecessary_coalesce_eliminated_children.swap_remove(0)
+        {
+            let (sort_exprs, fetch) = get_sort_exprs(&plan)?;
+            let sort_reqs = PhysicalSortRequirement::from_sort_exprs(sort_exprs);
+            let sort_exprs = sort_exprs.to_vec();
+            if !unnecessary_coalesce_eliminated_plan
+                .equivalence_properties()
+                .ordering_satisfy_requirement(&sort_reqs)
+            {
+                unnecessary_coalesce_eliminated_plan = add_sort_above(
+                    &unnecessary_coalesce_eliminated_plan,
+                    sort_reqs,
+                    fetch,
+                );
+            }
+            let spm = Arc::new(
+                SortPreservingMergeExec::new(
+                    sort_exprs,
+                    unnecessary_coalesce_eliminated_plan,
+                )
+                .with_fetch(fetch),
+            );
+            Ok((Transformed::Yes(spm), None))
+        } else {
+            Ok((Transformed::No(plan), None))
+        }
+    } else if is_coalesce_partitions(&plan) {
+        // Drop coalesce node from the actual and alternative plans if possible.
+        if let Some(unnecessary_coalesce_eliminated_child_plan) =
+            unnecessary_coalesce_eliminated_children.swap_remove(0)
+        {
+            // If the alternative subplan already propagated up then it accept it as it
+            // means we manage to eliminate a coalesce node under the current coalesce
+            // node.
+            let unnecessary_coalesce_eliminated_plan = if unnecessary_coalesce_connection
+            {
+                // If the current node has a connection from its parent that allows
+                // eliminating unnecessary coalesce nodes then continue propagating up the
+                // alternative plan without the current node as even the current node
+                // might not be needed.
+                Some(unnecessary_coalesce_eliminated_child_plan.clone())
+            } else {
+                None
+            };
+            let new_plan = plan
+                .clone()
+                .with_new_children(vec![unnecessary_coalesce_eliminated_child_plan])?;
+            Ok((
+                Transformed::Yes(new_plan),
+                unnecessary_coalesce_eliminated_plan,
+            ))
+        } else {
+            let unnecessary_coalesce_eliminated_plan = if unnecessary_coalesce_connection
+            {
+                // If the current node has a connection from its parent that allows
+                // eliminating unnecessary coalesce nodes then start propagating up an
+                // alternative plan without the current node.
+                Some(plan.children().swap_remove(0))
+            } else {
+                None
+            };
+            Ok((Transformed::No(plan), unnecessary_coalesce_eliminated_plan))
+        }
+    } else if unnecessary_coalesce_connection && is_repartition(&plan) {
+        // Due to the removal of coalesce nodes duplicate repartition nodes can become
+        // adjacent in which case we should get rid one of them.
+        // Please note that although getting rid of adjacent duplicate nodes is useful the
+        // issue should not be specific to this optimization rule so this part might be at
+        // a better place in a separate rule.
+        // But this optimization has been introduced since
+        // https://github.com/apache/arrow-datafusion/commit/5fc91cc8fbb56b6d2a32e66f8b327a871f7d15ac
+        // so we can leave it here for now.
+
+        // Drop repartition node from the alternative plans if possible.
+        let unnecessary_coalesce_eliminated_plan =
+            unnecessary_coalesce_eliminated_children
+                .swap_remove(0)
+                .map(|unnecessary_coalesce_eliminated_child_plan| {
+                    if is_repartition(&unnecessary_coalesce_eliminated_child_plan)
+                        && plan.output_partitioning()
+                            == unnecessary_coalesce_eliminated_child_plan
+                                .output_partitioning()
+                    {
+                        Ok(unnecessary_coalesce_eliminated_child_plan)
+                    } else {
+                        plan.clone().with_new_children(vec![
+                            unnecessary_coalesce_eliminated_child_plan,
+                        ])
+                    }
+                })
+                .transpose()?;
+        Ok((Transformed::No(plan), unnecessary_coalesce_eliminated_plan))
+    } else {
+        // If any of the children propagated up an alternative plan then keep propagating
+        // up the alternative plan extended with the current node.
+        let unnecessary_coalesce_eliminated_plan =
+            if unnecessary_coalesce_eliminated_children
+                .iter()
+                .any(|opc| opc.is_some())
+            {
+                Some(
+                    plan.clone().with_new_children(
+                        unnecessary_coalesce_eliminated_children
+                            .into_iter()
+                            .zip(plan.children().into_iter())
+                            .map(|(opc, c)| opc.unwrap_or(c))
+                            .collect(),
+                    )?,
+                )
+            } else {
+                None
+            };
+        Ok((Transformed::No(plan), unnecessary_coalesce_eliminated_plan))
     }
 }
 
@@ -309,7 +415,7 @@ fn ensure_sorting(
                 if physical_ordering.is_some() {
                     child = update_child_to_remove_unnecessary_sort(idx, child, plan)?;
                 }
-                child = add_sort_above(child, required, None);
+                child = add_sort_above_plan_context(child, required, None);
                 child = update_sort_ctx_children(child, true)?;
             }
         } else if physical_ordering.is_none()
@@ -419,7 +525,7 @@ fn adjust_window_sort_removal(
 
         // Satisfy the ordering requirement so that the window can run:
         let mut child_node = window_tree.children.swap_remove(0);
-        child_node = add_sort_above(child_node, reqs, None);
+        child_node = add_sort_above_plan_context(child_node, reqs, None);
         let child_plan = child_node.plan.clone();
         window_tree.children.push(child_node);
 
@@ -441,39 +547,6 @@ fn adjust_window_sort_removal(
 
     window_tree.data = false;
     Ok(window_tree)
-}
-
-/// Removes the [`CoalescePartitionsExec`] from the plan in `node`.
-fn remove_corresponding_coalesce_in_sub_plan(
-    mut requirements: PlanWithCorrespondingCoalescePartitions,
-) -> Result<PlanWithCorrespondingCoalescePartitions> {
-    let plan = &requirements.plan;
-    let children = &mut requirements.children;
-    if is_coalesce_partitions(&children[0].plan) {
-        // We can safely use the 0th index since we have a `CoalescePartitionsExec`.
-        let mut new_child_node = children[0].children.swap_remove(0);
-        while new_child_node.plan.output_partitioning() == plan.output_partitioning()
-            && is_repartition(&new_child_node.plan)
-            && is_repartition(plan)
-        {
-            new_child_node = new_child_node.children.swap_remove(0)
-        }
-        children[0] = new_child_node;
-    } else {
-        requirements.children = requirements
-            .children
-            .into_iter()
-            .map(|node| {
-                if node.data {
-                    remove_corresponding_coalesce_in_sub_plan(node)
-                } else {
-                    Ok(node)
-                }
-            })
-            .collect::<Result<_>>()?;
-    }
-
-    requirements.update_plan_from_children()
 }
 
 /// Updates child to remove the unnecessary sort below it.
@@ -646,36 +719,34 @@ mod tests {
                 // TODO: End state payloads will be checked here.
 
                 let new_plan = if state.config_options().optimizer.repartition_sorts {
-                    let plan_with_coalesce_partitions =
-                        PlanWithCorrespondingCoalescePartitions::new_default(adjusted.plan);
-                    let parallel = plan_with_coalesce_partitions
-                        .transform_up(&parallelize_sorts)
-                        .and_then(check_integrity)?;
-                    // TODO: End state payloads will be checked here.
-                    parallel.plan
+                    let (parallel, _) = adjusted.plan.transform_with_payload(
+                        &mut propagate_unnecessary_coalesce_connections_down,
+                        false,
+                        &mut parallelize_sorts_up,
+                    )?;
+                    parallel
                 } else {
                     adjusted.plan
                 };
 
-                let plan_with_pipeline_fixer = OrderPreservationContext::new_default(new_plan);
-                let updated_plan = plan_with_pipeline_fixer
-                    .transform_up(&|plan_with_pipeline_fixer| {
-                        replace_with_order_preserving_variants(
-                            plan_with_pipeline_fixer,
+                let (updated_plan, _) = new_plan.transform_with_payload(
+                    &mut |plan, ordering_connection| {
+                        propagate_order_maintaining_connections_down(plan, ordering_connection)
+                    },
+                    false,
+                    &mut |plan, ordering_connection, order_preserving_children| {
+                        replace_with_order_preserving_variants_up(
+                            plan,
+                            ordering_connection,
+                            order_preserving_children,
                             false,
                             true,
                             state.config_options(),
                         )
-                    })
-                    .and_then(check_integrity)?;
-                // TODO: End state payloads will be checked here.
+                    },
+                )?;
 
-                let mut sort_pushdown = SortPushDown::new_default(updated_plan.plan);
-                assign_initial_requirements(&mut sort_pushdown);
-                sort_pushdown
-                    .transform_down(&pushdown_sorts)
-                    .and_then(check_integrity)?;
-                // TODO: End state payloads will be checked here.
+                updated_plan.transform_down_with_payload(&mut pushdown_sorts, None)?;
             }
 
             let physical_plan = $PLAN;

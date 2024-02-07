@@ -113,6 +113,52 @@ pub trait TreeNode: Sized {
         self.transform_up(op)
     }
 
+    /// Transforms the tree using `f_down` and `f_up` closures. `f_down` is applied on a
+    /// node while traversing the tree top-down (pre-order, before the node's children are
+    /// visited) while `f_up` is applied on a node while traversing the tree bottom-up
+    /// (post-order, after the the node's children are visited).
+    ///
+    /// The `f_down` closure takes
+    /// - a `PD` type payload from its parent
+    /// and returns a tuple made of:
+    /// - a possibly modified node,
+    /// - a `PC` type payload to pass to `f_up`,
+    /// - a `Vec<PD>` type payload to propagate down to the node's children
+    ///    (one `PD` element is propagated down to each child).
+    ///
+    /// The `f_up` closure takes
+    /// - a `PC` type payload from `f_down` and
+    /// - a `Vec<PU>` type payload collected from the node's children
+    /// and returns a tuple made of:
+    /// - a possibly modified node,
+    /// - a `PU` type payload to propagate up to the node's parent.
+    fn transform_with_payload<FD, PD, PC, FU, PU>(
+        self,
+        f_down: &mut FD,
+        payload_down: PD,
+        f_up: &mut FU,
+    ) -> Result<(Self, PU)>
+    where
+        FD: FnMut(Self, PD) -> Result<(Transformed<Self>, Vec<PD>, PC)>,
+        FU: FnMut(Self, PC, Vec<PU>) -> Result<(Transformed<Self>, PU)>,
+    {
+        let (new_node, new_payload_down, payload_current) = f_down(self, payload_down)?;
+        let mut new_payload_down_iter = new_payload_down.into_iter();
+        let mut payload_up = vec![];
+        let node_with_new_children = new_node.into().map_children(|node| {
+            let (new_node, p) = node.transform_with_payload(
+                f_down,
+                new_payload_down_iter.next().unwrap(),
+                f_up,
+            )?;
+            payload_up.push(p);
+            Ok(new_node)
+        })?;
+        let (new_node, new_payload_up) =
+            f_up(node_with_new_children, payload_current, payload_up)?;
+        Ok((new_node.into(), new_payload_up))
+    }
+
     /// Convenience utils for writing optimizers rule: recursively apply the given 'op' to the node and all of its
     /// children(Preorder Traversal).
     /// When the `op` does not apply to a given node, it is left unchanged.
@@ -133,6 +179,26 @@ pub trait TreeNode: Sized {
     {
         let after_op = op(self)?.into();
         after_op.map_children(|node| node.transform_down_mut(op))
+    }
+
+    /// Transforms the tree using `f` closure. `f` is applied on a node while traversing
+    /// the tree top-down (pre-order, before the node's children are visited).
+    ///
+    /// The `f` closure takes
+    /// - a `P` type payload from its parent
+    /// and returns a tuple made of:
+    /// - a possibly modified node,
+    /// - a `Vec<P>` type payload to propagate down to the node's children
+    ///    (one `P` element is propagated down to each child).
+    fn transform_down_with_payload<F, P>(self, f: &mut F, payload: P) -> Result<Self>
+    where
+        F: FnMut(Self, P) -> Result<(Transformed<Self>, Vec<P>)>,
+    {
+        let (new_node, new_payload) = f(self, payload)?;
+        let mut new_payload_iter = new_payload.into_iter();
+        new_node.into().map_children(|node| {
+            node.transform_down_with_payload(f, new_payload_iter.next().unwrap())
+        })
     }
 
     /// Convenience utils for writing optimizers rule: recursively apply the given 'op' first to all of its
@@ -157,6 +223,28 @@ pub trait TreeNode: Sized {
         let after_op_children = self.map_children(|node| node.transform_up_mut(op))?;
         let new_node = op(after_op_children)?.into();
         Ok(new_node)
+    }
+
+    /// Transforms the tree using `f` closure. `f` is applied on a node while traversing
+    /// the tree bottom-up (post-order, after the the node's children are visited).
+    ///
+    /// The `f_up` closure takes
+    /// - a `Vec<P>` type payload collected from the node's children
+    /// and returns a tuple made of:
+    /// - a possibly modified node,
+    /// - a `P` type payload to propagate up to the node's parent.
+    fn transform_up_with_payload<F, P>(self, f: &mut F) -> Result<(Self, P)>
+    where
+        F: FnMut(Self, Vec<P>) -> Result<(Transformed<Self>, P)>,
+    {
+        let mut payload = vec![];
+        let node_with_new_children = self.map_children(|node| {
+            let (new_node, p) = node.transform_up_with_payload(f)?;
+            payload.push(p);
+            Ok(new_node)
+        })?;
+        let (new_node, new_payload) = f(node_with_new_children, payload)?;
+        Ok((new_node.into(), new_payload))
     }
 
     /// Transform the tree node using the given [TreeNodeRewriter]

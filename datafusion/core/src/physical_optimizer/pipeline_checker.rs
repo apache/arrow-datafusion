@@ -31,7 +31,6 @@ use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{plan_err, DataFusionError};
 use datafusion_physical_expr::intervals::utils::{check_support, is_datatype_supported};
 use datafusion_physical_plan::joins::SymmetricHashJoinExec;
-use datafusion_physical_plan::tree_node::PlanContext;
 
 /// The PipelineChecker rule rejects non-runnable query plans that use
 /// pipeline-breaking operators on infinite input(s).
@@ -51,10 +50,11 @@ impl PhysicalOptimizerRule for PipelineChecker {
         plan: Arc<dyn ExecutionPlan>,
         config: &ConfigOptions,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        let pipeline = PipelineStatePropagator::new_default(plan);
-        let state = pipeline
-            .transform_up(&|p| check_finiteness_requirements(p, &config.optimizer))?;
-        Ok(state.plan)
+        let (plan, _) =
+            plan.transform_up_with_payload(&mut |p, children_unbounded| {
+                check_finiteness_requirements(p, children_unbounded, &config.optimizer)
+            })?;
+        Ok(plan)
     }
 
     fn name(&self) -> &str {
@@ -66,21 +66,14 @@ impl PhysicalOptimizerRule for PipelineChecker {
     }
 }
 
-/// This object propagates the [`ExecutionPlan`] pipelining information.
-pub type PipelineStatePropagator = PlanContext<bool>;
-
-/// Collects unboundedness flags of all the children of the plan in `pipeline`.
-pub fn children_unbounded(pipeline: &PipelineStatePropagator) -> Vec<bool> {
-    pipeline.children.iter().map(|c| c.data).collect()
-}
-
 /// This function propagates finiteness information and rejects any plan with
 /// pipeline-breaking operators acting on infinite inputs.
 pub fn check_finiteness_requirements(
-    mut input: PipelineStatePropagator,
+    plan: Arc<dyn ExecutionPlan>,
+    children_unbounded: Vec<bool>,
     optimizer_options: &OptimizerOptions,
-) -> Result<Transformed<PipelineStatePropagator>> {
-    if let Some(exec) = input.plan.as_any().downcast_ref::<SymmetricHashJoinExec>() {
+) -> Result<(Transformed<Arc<dyn ExecutionPlan>>, bool)> {
+    if let Some(exec) = plan.as_any().downcast_ref::<SymmetricHashJoinExec>() {
         if !(optimizer_options.allow_symmetric_joins_without_pruning
             || (exec.check_if_order_information_available()? && is_prunable(exec)))
         {
@@ -88,13 +81,8 @@ pub fn check_finiteness_requirements(
                               the 'allow_symmetric_joins_without_pruning' configuration flag");
         }
     }
-    input
-        .plan
-        .unbounded_output(&children_unbounded(&input))
-        .map(|value| {
-            input.data = value;
-            Transformed::Yes(input)
-        })
+    plan.unbounded_output(children_unbounded.as_slice())
+        .map(|value| (Transformed::No(plan), value))
 }
 
 /// This function returns whether a given symmetric hash join is amenable to

@@ -23,15 +23,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::expressions::{BinaryExpr, Column};
-use crate::tree_node::ExprContext;
 use crate::{PhysicalExpr, PhysicalSortExpr};
 
 use arrow::array::{make_array, Array, ArrayRef, BooleanArray, MutableArrayData};
 use arrow::compute::{and_kleene, is_not_null, SlicesIterator};
 use arrow::datatypes::SchemaRef;
-use datafusion_common::tree_node::{
-    Transformed, TreeNode, TreeNodeRewriter, VisitRecursion,
-};
+use datafusion_common::tree_node::{Transformed, TreeNode, VisitRecursion};
 use datafusion_common::Result;
 use datafusion_expr::Operator;
 
@@ -128,14 +125,10 @@ pub fn get_indices_of_exprs_strict<T: Borrow<Arc<dyn PhysicalExpr>>>(
         .collect()
 }
 
-pub type ExprTreeNode<T> = ExprContext<Option<T>>;
-
-/// This struct facilitates the [TreeNodeRewriter] mechanism to convert a
-/// [PhysicalExpr] tree into a DAEG (i.e. an expression DAG) by collecting
-/// identical expressions in one node. Caller specifies the node type in the
-/// DAEG via the `constructor` argument, which constructs nodes in the DAEG
-/// from the [ExprTreeNode] ancillary object.
-struct PhysicalExprDAEGBuilder<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>> {
+/// This struct converts a [PhysicalExpr] tree into a DAEG (i.e. an expression DAG) by
+/// collecting identical expressions in one node. Caller specifies the node type in the
+/// DAEG via the `constructor` argument.
+struct PhysicalExprDAEGBuilder<'a, T, F: Fn(&Arc<dyn PhysicalExpr>) -> Result<T>> {
     // The resulting DAEG (expression DAG).
     graph: StableGraph<T, usize>,
     // A vector of visited expression nodes and their corresponding node indices.
@@ -144,19 +137,16 @@ struct PhysicalExprDAEGBuilder<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<
     constructor: &'a F,
 }
 
-impl<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>> TreeNodeRewriter
-    for PhysicalExprDAEGBuilder<'a, T, F>
+impl<'a, T, F: Fn(&Arc<dyn PhysicalExpr>) -> Result<T>>
+    PhysicalExprDAEGBuilder<'a, T, F>
 {
-    type N = ExprTreeNode<NodeIndex>;
-    // This method mutates an expression node by transforming it to a physical expression
-    // and adding it to the graph. The method returns the mutated expression node.
-    fn mutate(
+    // This method adds an expression to the graph and returns the corresponding node
+    // index.
+    fn calculate_node_index(
         &mut self,
-        mut node: ExprTreeNode<NodeIndex>,
-    ) -> Result<ExprTreeNode<NodeIndex>> {
-        // Get the expression associated with the input expression node.
-        let expr = &node.expr;
-
+        expr: Arc<dyn PhysicalExpr>,
+        children_node_indices: Vec<NodeIndex>,
+    ) -> Result<(Transformed<Arc<dyn PhysicalExpr>>, NodeIndex)> {
         // Check if the expression has already been visited.
         let node_idx = match self.visited_plans.iter().find(|(e, _)| expr.eq(e)) {
             // If the expression has been visited, return the corresponding node index.
@@ -165,18 +155,15 @@ impl<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>> TreeNodeRewriter
             // add edges to its child nodes. Add the visited expression to the vector
             // of visited expressions and return the newly created node index.
             None => {
-                let node_idx = self.graph.add_node((self.constructor)(&node)?);
-                for expr_node in node.children.iter() {
-                    self.graph.add_edge(node_idx, expr_node.data.unwrap(), 0);
+                let node_idx = self.graph.add_node((self.constructor)(&expr)?);
+                for child_node_index in children_node_indices.into_iter() {
+                    self.graph.add_edge(node_idx, child_node_index, 0);
                 }
                 self.visited_plans.push((expr.clone(), node_idx));
                 node_idx
             }
         };
-        // Set the data field of the input expression node to the corresponding node index.
-        node.data = Some(node_idx);
-        // Return the mutated expression node.
-        Ok(node)
+        Ok((Transformed::No(expr), node_idx))
     }
 }
 
@@ -186,10 +173,8 @@ pub fn build_dag<T, F>(
     constructor: &F,
 ) -> Result<(NodeIndex, StableGraph<T, usize>)>
 where
-    F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>,
+    F: Fn(&Arc<dyn PhysicalExpr>) -> Result<T>,
 {
-    // Create a new expression tree node from the input expression.
-    let init = ExprTreeNode::new_default(expr);
     // Create a new `PhysicalExprDAEGBuilder` instance.
     let mut builder = PhysicalExprDAEGBuilder {
         graph: StableGraph::<T, usize>::new(),
@@ -197,9 +182,12 @@ where
         constructor,
     };
     // Use the builder to transform the expression tree node into a DAG.
-    let root = init.rewrite(&mut builder)?;
+    let (_, node_index) =
+        expr.transform_up_with_payload(&mut |expr, children_node_indices| {
+            builder.calculate_node_index(expr, children_node_indices)
+        })?;
     // Return a tuple containing the root node index and the DAG.
-    Ok((root.data.unwrap(), builder.graph))
+    Ok((node_index, builder.graph))
 }
 
 /// Recursively extract referenced [`Column`]s within a [`PhysicalExpr`].
@@ -346,8 +334,8 @@ mod tests {
         }
     }
 
-    fn make_dummy_node(node: &ExprTreeNode<NodeIndex>) -> Result<PhysicalExprDummyNode> {
-        let expr = node.expr.clone();
+    fn make_dummy_node(expr: &Arc<dyn PhysicalExpr>) -> Result<PhysicalExprDummyNode> {
+        let expr = expr.clone();
         let dummy_property = if expr.as_any().is::<BinaryExpr>() {
             "Binary"
         } else if expr.as_any().is::<Column>() {
