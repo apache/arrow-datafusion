@@ -1257,6 +1257,48 @@ message WriterProperties {
   uint64 max_row_group_size = 5;
   string writer_version = 6;
   string created_by = 7;
+  map<string, string> key_value_metadata = 8;
+// WriterProperties does not provide access to default_column_properties
+//  ColumnProperties default_column_properties = 9;
+//  repeated SpecificColumnProperties column_properties = 10;
+}
+
+message SpecificColumnProperties{
+  ColumnPath path = 1;
+  ColumnProperties properties = 2;
+}
+
+message ColumnPath{
+  repeated string parts = 1;
+}
+
+message ColumnProperties{
+  Encoding encoding = 1;
+  Compression codec = 2;
+  int32 level = 3;
+}
+
+enum Compression{
+  PQ_UNCOMPRESSED = 0;
+  PQ_SNAPPY = 1;
+  PQ_GZIP = 2;
+  PQ_LZO = 3;
+  PQ_BROTLI = 4;
+  PQ_LZ4 = 5;
+  PQ_ZSTD = 6;
+  PQ_LZ4_RAW = 7;
+}
+
+enum Encoding{
+    PLAIN = 0;
+    PLAIN_DICTIONARY = 1;
+    RLE = 2; 
+    BIT_PACKED = 3;
+    DELTA_BINARY_PACKED = 4;
+    DELTA_LENGTH_BYTE_ARRAY = 5;
+    DELTA_BYTE_ARRAY = 6;
+    RLE_DICTIONARY = 7;
+    BYTE_STREAM_SPLIT = 8;
 }
 
 message FileSinkConfig {

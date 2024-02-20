@@ -1722,6 +1722,37 @@ pub struct WriterProperties {
     pub writer_version: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub created_by: ::prost::alloc::string::String,
+    ///   ColumnProperties default_column_properties = 9;
+    ///   repeated SpecificColumnProperties column_properties = 10;
+    #[prost(map = "string, string", tag = "8")]
+    pub key_value_metadata: ::std::collections::HashMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SpecificColumnProperties {
+    #[prost(message, optional, tag = "1")]
+    pub path: ::core::option::Option<ColumnPath>,
+    #[prost(message, optional, tag = "2")]
+    pub properties: ::core::option::Option<ColumnProperties>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ColumnPath {
+    #[prost(string, repeated, tag = "1")]
+    pub parts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ColumnProperties {
+    #[prost(enumeration = "Encoding", tag = "1")]
+    pub encoding: i32,
+    #[prost(enumeration = "Compression", tag = "2")]
+    pub codec: i32,
+    #[prost(int32, tag = "3")]
+    pub level: i32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3439,6 +3470,97 @@ impl CompressionTypeVariant {
             "XZ" => Some(Self::Xz),
             "ZSTD" => Some(Self::Zstd),
             "UNCOMPRESSED" => Some(Self::Uncompressed),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum Compression {
+    PqUncompressed = 0,
+    PqSnappy = 1,
+    PqGzip = 2,
+    PqLzo = 3,
+    PqBrotli = 4,
+    PqLz4 = 5,
+    PqZstd = 6,
+    PqLz4Raw = 7,
+}
+impl Compression {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Compression::PqUncompressed => "PQ_UNCOMPRESSED",
+            Compression::PqSnappy => "PQ_SNAPPY",
+            Compression::PqGzip => "PQ_GZIP",
+            Compression::PqLzo => "PQ_LZO",
+            Compression::PqBrotli => "PQ_BROTLI",
+            Compression::PqLz4 => "PQ_LZ4",
+            Compression::PqZstd => "PQ_ZSTD",
+            Compression::PqLz4Raw => "PQ_LZ4_RAW",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PQ_UNCOMPRESSED" => Some(Self::PqUncompressed),
+            "PQ_SNAPPY" => Some(Self::PqSnappy),
+            "PQ_GZIP" => Some(Self::PqGzip),
+            "PQ_LZO" => Some(Self::PqLzo),
+            "PQ_BROTLI" => Some(Self::PqBrotli),
+            "PQ_LZ4" => Some(Self::PqLz4),
+            "PQ_ZSTD" => Some(Self::PqZstd),
+            "PQ_LZ4_RAW" => Some(Self::PqLz4Raw),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum Encoding {
+    Plain = 0,
+    PlainDictionary = 1,
+    Rle = 2,
+    BitPacked = 3,
+    DeltaBinaryPacked = 4,
+    DeltaLengthByteArray = 5,
+    DeltaByteArray = 6,
+    RleDictionary = 7,
+    ByteStreamSplit = 8,
+}
+impl Encoding {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Encoding::Plain => "PLAIN",
+            Encoding::PlainDictionary => "PLAIN_DICTIONARY",
+            Encoding::Rle => "RLE",
+            Encoding::BitPacked => "BIT_PACKED",
+            Encoding::DeltaBinaryPacked => "DELTA_BINARY_PACKED",
+            Encoding::DeltaLengthByteArray => "DELTA_LENGTH_BYTE_ARRAY",
+            Encoding::DeltaByteArray => "DELTA_BYTE_ARRAY",
+            Encoding::RleDictionary => "RLE_DICTIONARY",
+            Encoding::ByteStreamSplit => "BYTE_STREAM_SPLIT",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "PLAIN" => Some(Self::Plain),
+            "PLAIN_DICTIONARY" => Some(Self::PlainDictionary),
+            "RLE" => Some(Self::Rle),
+            "BIT_PACKED" => Some(Self::BitPacked),
+            "DELTA_BINARY_PACKED" => Some(Self::DeltaBinaryPacked),
+            "DELTA_LENGTH_BYTE_ARRAY" => Some(Self::DeltaLengthByteArray),
+            "DELTA_BYTE_ARRAY" => Some(Self::DeltaByteArray),
+            "RLE_DICTIONARY" => Some(Self::RleDictionary),
+            "BYTE_STREAM_SPLIT" => Some(Self::ByteStreamSplit),
             _ => None,
         }
     }

@@ -39,6 +39,7 @@ use crate::{
 use arrow::datatypes::{DataType, Schema, SchemaRef};
 #[cfg(feature = "parquet")]
 use datafusion::datasource::file_format::parquet::ParquetFormat;
+use datafusion::parquet::format::KeyValue;
 use datafusion::{
     datasource::{
         file_format::{avro::AvroFormat, csv::CsvFormat, FileFormat},
@@ -1792,6 +1793,10 @@ pub(crate) fn writer_properties_to_proto(
         max_row_group_size: props.max_row_group_size() as u64,
         writer_version: format!("{:?}", props.writer_version()),
         created_by: props.created_by().to_string(),
+        key_value_metadata: match props.key_value_metadata(){
+            Some(m) => HashMap::from_iter(m.iter().map(|s| (s.key.clone(), s.value.clone().unwrap_or("".to_string())))),
+            None => HashMap::new(),
+        },
     }
 }
 
@@ -1808,5 +1813,10 @@ pub(crate) fn writer_properties_from_proto(
         .set_data_page_size_limit(props.data_page_size_limit as usize)
         .set_write_batch_size(props.write_batch_size as usize)
         .set_max_row_group_size(props.max_row_group_size as usize)
+        .set_key_value_metadata(Some(props.key_value_metadata.clone()
+                .into_iter()
+                .map(|s| KeyValue{key: s.0, value: if !s.1.is_empty(){ Some(s.1) } else {None} })
+                .collect()
+            ))
         .build())
 }
