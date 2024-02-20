@@ -174,8 +174,6 @@ math_unary_function!("atan", atan);
 math_unary_function!("asinh", asinh);
 math_unary_function!("acosh", acosh);
 math_unary_function!("atanh", atanh);
-math_unary_function!("floor", floor);
-math_unary_function!("ceil", ceil);
 math_unary_function!("abs", abs);
 math_unary_function!("signum", signum);
 math_unary_function!("exp", exp);
@@ -184,6 +182,62 @@ math_unary_function!("log2", log2);
 math_unary_function!("log10", log10);
 math_unary_function!("degrees", to_degrees);
 math_unary_function!("radians", to_radians);
+
+///
+pub fn floor(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    match &args[0] {
+        ColumnarValue::Array(array) => match array.data_type() {
+            DataType::Int32 | DataType::Int64 => Ok(ColumnarValue::Array(array.clone())),
+            DataType::Float32 => {
+                let result = downcast_compute_op!(array, "floor", floor, Float32Array);
+                Ok(ColumnarValue::Array(result?))
+            }
+            DataType::Float64 => {
+                let result = downcast_compute_op!(array, "floor", floor, Float64Array);
+                Ok(ColumnarValue::Array(result?))
+            }
+            other => internal_err!("Unsupported data type {other:?} for function floor"),
+        },
+        ColumnarValue::Scalar(a) => match a {
+            ScalarValue::Int32(_) | ScalarValue::Int64(_) => Ok(ColumnarValue::Scalar(a.clone())),
+            ScalarValue::Float32(a) => Ok(ColumnarValue::Scalar(
+                ScalarValue::Float32(a.map(|x| x.floor())),
+            )),
+            ScalarValue::Float64(a) => Ok(ColumnarValue::Scalar(
+                ScalarValue::Float64(a.map(|x| x.floor())),
+            )),
+            _ => internal_err!("Unsupported data type {a:?} for function floor"),
+        },
+    }
+}
+
+///
+pub fn ceil(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    match &args[0] {
+        ColumnarValue::Array(array) => match array.data_type() {
+            DataType::Int32 | DataType::Int64 => Ok(ColumnarValue::Array(array.clone())),
+            DataType::Float32 => {
+                let result = downcast_compute_op!(array, "ceil", ceil, Float32Array);
+                Ok(ColumnarValue::Array(result?))
+            }
+            DataType::Float64 => {
+                let result = downcast_compute_op!(array, "ceil", ceil, Float64Array);
+                Ok(ColumnarValue::Array(result?))
+            }
+            other => internal_err!("Unsupported data type {other:?} for function ceil"),
+        },
+        ColumnarValue::Scalar(a) => match a {
+            ScalarValue::Int32(_) | ScalarValue::Int64(_) => Ok(ColumnarValue::Scalar(a.clone())),
+            ScalarValue::Float32(a) => Ok(ColumnarValue::Scalar(
+                ScalarValue::Float32(a.map(|x| x.ceil())),
+            )),
+            ScalarValue::Float64(a) => Ok(ColumnarValue::Scalar(
+                ScalarValue::Float64(a.map(|x| x.ceil())),
+            )),
+            _ => internal_err!("Unsupported data type {a:?} for function ceil"),
+        },
+    }
+}
 
 /// Factorial SQL function
 pub fn factorial(args: &[ArrayRef]) -> Result<ArrayRef> {

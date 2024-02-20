@@ -867,7 +867,16 @@ impl BuiltinScalarFunction {
 
             BuiltinScalarFunction::ArrowTypeof => Ok(Utf8),
 
-            BuiltinScalarFunction::Abs => Ok(input_expr_types[0].clone()),
+            BuiltinScalarFunction::Abs
+            | BuiltinScalarFunction::Floor
+            | BuiltinScalarFunction::Ceil => {
+                let expr_type = input_expr_types[0].clone();
+                if expr_type.is_numeric() {
+                    Ok(expr_type)
+                } else {
+                    Ok(DataType::Null)
+                }
+            }
 
             BuiltinScalarFunction::OverLay => {
                 utf8_to_str_type(&input_expr_types[0], "overlay")
@@ -883,12 +892,10 @@ impl BuiltinScalarFunction {
             | BuiltinScalarFunction::Acosh
             | BuiltinScalarFunction::Asinh
             | BuiltinScalarFunction::Atanh
-            | BuiltinScalarFunction::Ceil
             | BuiltinScalarFunction::Cos
             | BuiltinScalarFunction::Cosh
             | BuiltinScalarFunction::Degrees
             | BuiltinScalarFunction::Exp
-            | BuiltinScalarFunction::Floor
             | BuiltinScalarFunction::Ln
             | BuiltinScalarFunction::Log10
             | BuiltinScalarFunction::Log2
@@ -1337,7 +1344,9 @@ impl BuiltinScalarFunction {
                 Signature::uniform(2, vec![Int64], self.volatility())
             }
             BuiltinScalarFunction::ArrowTypeof => Signature::any(1, self.volatility()),
-            BuiltinScalarFunction::Abs => Signature::any(1, self.volatility()),
+            BuiltinScalarFunction::Abs
+            | BuiltinScalarFunction::Floor
+            | BuiltinScalarFunction::Ceil => Signature::any(1, self.volatility()),
             BuiltinScalarFunction::OverLay => Signature::one_of(
                 vec![
                     Exact(vec![Utf8, Utf8, Int64, Int64]),
@@ -1358,12 +1367,10 @@ impl BuiltinScalarFunction {
             | BuiltinScalarFunction::Asinh
             | BuiltinScalarFunction::Atanh
             | BuiltinScalarFunction::Cbrt
-            | BuiltinScalarFunction::Ceil
             | BuiltinScalarFunction::Cos
             | BuiltinScalarFunction::Cosh
             | BuiltinScalarFunction::Degrees
             | BuiltinScalarFunction::Exp
-            | BuiltinScalarFunction::Floor
             | BuiltinScalarFunction::Ln
             | BuiltinScalarFunction::Log10
             | BuiltinScalarFunction::Log2
