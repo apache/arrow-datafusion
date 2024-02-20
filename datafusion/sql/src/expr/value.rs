@@ -18,7 +18,8 @@
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
 use arrow::compute::kernels::cast_utils::parse_interval_month_day_nano;
 use arrow::datatypes::DECIMAL128_MAX_PRECISION;
-use arrow_schema::DataType;
+use arrow_schema::{DataType, DECIMAL128_MAX_SCALE};
+use bigdecimal::{BigDecimal, ToPrimitive};
 use datafusion_common::{
     not_impl_err, plan_err, DFSchema, DataFusionError, Result, ScalarValue,
 };
@@ -30,6 +31,7 @@ use log::debug;
 use sqlparser::ast::{BinaryOperator, Expr as SQLExpr, Interval, Value};
 use sqlparser::parser::ParserError::ParserError;
 use std::borrow::Cow;
+use std::str::FromStr;
 
 impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     pub(crate) fn parse_value(
@@ -380,38 +382,40 @@ const fn try_decode_hex_char(c: u8) -> Option<u8> {
 }
 
 /// Parse Decimal128 from a string
-///
-/// TODO: support parsing from scientific notation
 fn parse_decimal_128(unsigned_number: &str, negative: bool) -> Result<Expr> {
-    // remove leading zeroes
-    let trimmed = unsigned_number.trim_start_matches('0');
-    // parse precision and scale, remove decimal point if exists
-    let (precision, scale, replaced_str) = if trimmed == "." {
-        // special cases for numbers such as “0.”, “000.”, and so on.
-        (1, 0, Cow::Borrowed("0"))
-    } else if let Some(i) = trimmed.find('.') {
-        (
-            trimmed.len() - 1,
-            trimmed.len() - i - 1,
-            Cow::Owned(trimmed.replace('.', "")),
-        )
-    } else {
-        // no decimal point, keep as is
-        (trimmed.len(), 0, Cow::Borrowed(trimmed))
-    };
-
-    let number = replaced_str.parse::<i128>().map_err(|e| {
+    let big_decimal = BigDecimal::from_str(unsigned_number).map_err(|e| {
         DataFusionError::from(ParserError(format!(
-            "Cannot parse {replaced_str} as i128 when building decimal: {e}"
+            "Cannot parse {unsigned_number} into BigDecimal when building decimal: {e}"
         )))
     })?;
 
+    let (big_int, scale) = big_decimal.clone().into_bigint_and_exponent();
+    let precision = if scale <= 0 {
+        big_int.to_string().len() as u64
+    } else {
+        let precision = big_int.to_string().len() as u64;
+        precision.max(scale as u64)
+    };
+
     // check precision overflow
-    if precision as u8 > DECIMAL128_MAX_PRECISION {
+    if precision > DECIMAL128_MAX_PRECISION as u64 {
         return Err(DataFusionError::from(ParserError(format!(
-            "Cannot parse {replaced_str} as i128 when building decimal: precision overflow"
-        ))));
+                    "Cannot parse {unsigned_number} as i128 when building decimal: precision overflow"
+                ))));
     }
+
+    // // check scale overflow
+    if scale > DECIMAL128_MAX_SCALE as i64 {
+        return Err(DataFusionError::from(ParserError(format!(
+                    "Cannot parse {unsigned_number} as i128 when building decimal: scale overflow"
+                ))));
+    }
+
+    let number = big_int.to_i128().ok_or_else(|| {
+        DataFusionError::from(ParserError(format!(
+            "Cannot parse {unsigned_number} as i128 when building decimal"
+        )))
+    })?;
 
     Ok(Expr::Literal(ScalarValue::Decimal128(
         Some(if negative { -number } else { number }),

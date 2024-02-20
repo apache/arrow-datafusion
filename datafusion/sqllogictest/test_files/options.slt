@@ -193,18 +193,27 @@ select arrow_typeof(00009999999999999999999999999999999999.9999),
 Decimal128(38, 4) Decimal128(38, 4) Decimal128(20, 0)
 
 # precision overflow
-statement error DataFusion error: SQL error: ParserError\("Cannot parse 123456789012345678901234567890123456789 as i128 when building decimal: precision overflow"\)
+statement error DataFusion error: SQL error: ParserError\("Cannot parse 123456789.012345678901234567890123456789 as i128 when building decimal: precision overflow"\)
 select 123456789.012345678901234567890123456789
 
-statement error SQL error: ParserError\("Cannot parse 123456789012345678901234567890123456789 as i128 when building decimal: precision overflow"\)
+statement error SQL error: ParserError\("Cannot parse 123456789.012345678901234567890123456789 as i128 when building decimal: precision overflow"\)
 select -123456789.012345678901234567890123456789
 
 # can not fit in i128
-statement error SQL error: ParserError\("Cannot parse 1234567890123456789012345678901234567890 as i128 when building decimal: number too large to fit in target type"\)
+statement error SQL error: ParserError\("Cannot parse 123456789.0123456789012345678901234567890 as i128 when building decimal: precision overflow"\)
 select 123456789.0123456789012345678901234567890
 
-statement error SQL error: ParserError\("Cannot parse 1234567890123456789012345678901234567890 as i128 when building decimal: number too large to fit in target type"\)
+statement error SQL error: ParserError\("Cannot parse 123456789.0123456789012345678901234567890 as i128 when building decimal: precision overflow"\)
 select -123456789.0123456789012345678901234567890
+
+# scientific notation
+query RRRR
+select 1.234e2, 1.234e-2, -1.234e2, -1.234e-2
+----
+123.4 0.01234 -123.4 -0.01234
+
+statement error DataFusion error: SQL error: ParserError\("Cannot parse 1.234e-40 as i128 when building decimal: precision overflow"\)
+select 1.234e-40
 
 # Restore option to default value
 statement ok

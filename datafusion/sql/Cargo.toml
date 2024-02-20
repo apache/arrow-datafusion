@@ -39,6 +39,7 @@ unicode_expressions = []
 [dependencies]
 arrow = { workspace = true }
 arrow-schema = { workspace = true }
+bigdecimal = { workspace = true }
 datafusion-common = { workspace = true }
 datafusion-expr = { workspace = true }
 log = { workspace = true }
