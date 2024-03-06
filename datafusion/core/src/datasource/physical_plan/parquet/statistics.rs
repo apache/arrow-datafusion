@@ -19,6 +19,7 @@
 
 // TODO: potentially move this to arrow-rs: https://github.com/apache/arrow-rs/issues/4328
 
+use crate::arrow::datatypes::TimeUnit;
 use arrow::{array::ArrayRef, datatypes::DataType};
 use arrow_array::new_empty_array;
 use arrow_schema::{FieldRef, Schema};
@@ -84,6 +85,25 @@ macro_rules! get_statistic {
                             *scale,
                         ))
                     }
+                    // int64 to timestamp with the time unit and time zone
+                    Some(DataType::Timestamp(time_unit, time_zone)) => match time_unit {
+                        TimeUnit::Nanosecond => Some(ScalarValue::TimestampNanosecond(
+                            Some(*s.$func() as i64),
+                            time_zone.clone(),
+                        )),
+                        TimeUnit::Microsecond => Some(ScalarValue::TimestampMicrosecond(
+                            Some(*s.$func() as i64),
+                            time_zone.clone(),
+                        )),
+                        TimeUnit::Millisecond => Some(ScalarValue::TimestampMillisecond(
+                            Some(*s.$func() as i64),
+                            time_zone.clone(),
+                        )),
+                        TimeUnit::Second => Some(ScalarValue::TimestampSecond(
+                            Some(*s.$func() as i64),
+                            time_zone.clone(),
+                        )),
+                    },
                     _ => Some(ScalarValue::Int64(Some(*s.$func()))),
                 }
             }
@@ -334,10 +354,6 @@ mod test {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Inconsistent types in ScalarValue::iter_to_array. Expected Int64, got TimestampNanosecond(NULL, None)"
-    )]
-    // Due to https://github.com/apache/arrow-datafusion/issues/8295
     fn roundtrip_timestamp() {
         Test {
             input: timestamp_array([

@@ -17,7 +17,12 @@
 
 //! [`ParquetFormat`]: Parquet [`FileFormat`] abstractions
 
-use arrow_array::RecordBatch;
+use arrow_array::types::Utf8Type;
+use arrow_array::{
+    GenericByteArray, RecordBatch, TimestampMicrosecondArray, TimestampMillisecondArray,
+    TimestampNanosecondArray, TimestampSecondArray,
+};
+use arrow_schema::TimeUnit;
 use async_trait::async_trait;
 use datafusion_common::stats::Precision;
 use datafusion_physical_plan::metrics::MetricsSet;
@@ -334,18 +339,98 @@ fn summarize_min_max(
                     .unwrap_or_else(|_| min_values[i] = None);
             }
         }
-        ParquetStatistics::Int64(s) if DataType::Int64 == *fields[i].data_type() => {
-            if let Some(max_value) = &mut max_values[i] {
-                max_value
-                    .update_batch(&[Arc::new(Int64Array::from_value(*s.max(), 1))])
-                    .unwrap_or_else(|_| max_values[i] = None);
+        ParquetStatistics::Int64(s) => match fields[i].data_type().clone() {
+            DataType::Int64 => {
+                if let Some(max_value) = &mut max_values[i] {
+                    max_value
+                        .update_batch(&[Arc::new(Int64Array::from_value(*s.max(), 1))])
+                        .unwrap_or_else(|_| max_values[i] = None);
+                }
+                if let Some(min_value) = &mut min_values[i] {
+                    min_value
+                        .update_batch(&[Arc::new(Int64Array::from_value(*s.min(), 1))])
+                        .unwrap_or_else(|_| min_values[i] = None);
+                }
             }
-            if let Some(min_value) = &mut min_values[i] {
-                min_value
-                    .update_batch(&[Arc::new(Int64Array::from_value(*s.min(), 1))])
-                    .unwrap_or_else(|_| min_values[i] = None);
+            DataType::Timestamp(time_unit, time_zone) => match time_unit {
+                TimeUnit::Second => {
+                    if let Some(max_value) = &mut max_values[i] {
+                        max_value
+                            .update_batch(&[Arc::new(
+                                TimestampSecondArray::from_value(*s.max(), 1)
+                                    .with_timezone_opt(time_zone.clone()),
+                            )])
+                            .unwrap_or_else(|_| max_values[i] = None);
+                    }
+                    if let Some(min_value) = &mut min_values[i] {
+                        min_value
+                            .update_batch(&[Arc::new(
+                                TimestampSecondArray::from_value(*s.min(), 1)
+                                    .with_timezone_opt(time_zone),
+                            )])
+                            .unwrap_or_else(|_| min_values[i] = None);
+                    }
+                }
+                TimeUnit::Millisecond => {
+                    if let Some(max_value) = &mut max_values[i] {
+                        max_value
+                            .update_batch(&[Arc::new(
+                                TimestampMillisecondArray::from_value(*s.max(), 1)
+                                    .with_timezone_opt(time_zone.clone()),
+                            )])
+                            .unwrap_or_else(|_| max_values[i] = None);
+                    }
+                    if let Some(min_value) = &mut min_values[i] {
+                        min_value
+                            .update_batch(&[Arc::new(
+                                TimestampMillisecondArray::from_value(*s.min(), 1)
+                                    .with_timezone_opt(time_zone),
+                            )])
+                            .unwrap_or_else(|_| min_values[i] = None);
+                    }
+                }
+                TimeUnit::Microsecond => {
+                    if let Some(max_value) = &mut max_values[i] {
+                        max_value
+                            .update_batch(&[Arc::new(
+                                TimestampMicrosecondArray::from_value(*s.max(), 1)
+                                    .with_timezone_opt(time_zone.clone()),
+                            )])
+                            .unwrap_or_else(|_| max_values[i] = None);
+                    }
+                    if let Some(min_value) = &mut min_values[i] {
+                        min_value
+                            .update_batch(&[Arc::new(
+                                TimestampMicrosecondArray::from_value(*s.min(), 1)
+                                    .with_timezone_opt(time_zone),
+                            )])
+                            .unwrap_or_else(|_| min_values[i] = None);
+                    }
+                }
+                TimeUnit::Nanosecond => {
+                    if let Some(max_value) = &mut max_values[i] {
+                        max_value
+                            .update_batch(&[Arc::new(
+                                TimestampNanosecondArray::from_value(*s.max(), 1)
+                                    .with_timezone_opt(time_zone.clone()),
+                            )])
+                            .unwrap_or_else(|_| max_values[i] = None);
+                    }
+                    if let Some(min_value) = &mut min_values[i] {
+                        min_value
+                            .update_batch(&[Arc::new(
+                                TimestampNanosecondArray::from_value(*s.min(), 1)
+                                    .with_timezone_opt(time_zone),
+                            )])
+                            .unwrap_or_else(|_| min_values[i] = None);
+                    }
+                }
+            },
+            _ => {
+                max_values[i] = None;
+                min_values[i] = None;
             }
-        }
+        },
         ParquetStatistics::Float(s) if DataType::Float32 == *fields[i].data_type() => {
             if let Some(max_value) = &mut max_values[i] {
                 max_value
@@ -368,6 +453,29 @@ fn summarize_min_max(
                 min_value
                     .update_batch(&[Arc::new(Float64Array::from(vec![*s.min()]))])
                     .unwrap_or_else(|_| min_values[i] = None);
+            }
+        }
+
+        ParquetStatistics::ByteArray(s)
+            if matches!(fields[i].data_type(), DataType::Utf8 | DataType::LargeUtf8) =>
+        {
+            if let Some(max_value) = &mut max_values[i] {
+                let stat_value = s.max().as_utf8().unwrap_or_default();
+                let array: GenericByteArray<Utf8Type> = vec![Some(stat_value)].into();
+                if max_value.update_batch(&[Arc::new(array)]).is_err()
+                    || stat_value.is_empty()
+                {
+                    max_values[i] = None;
+                }
+            }
+            if let Some(min_value) = &mut min_values[i] {
+                let stat_value = s.min().as_utf8().unwrap_or_default();
+                let array: GenericByteArray<Utf8Type> = vec![Some(stat_value)].into();
+                if min_value.update_batch(&[Arc::new(array)]).is_err()
+                    || stat_value.is_empty()
+                {
+                    min_values[i] = None;
+                }
             }
         }
         _ => {

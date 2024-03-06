@@ -345,6 +345,7 @@ mod tests {
     use arrow::datatypes::DataType::Decimal128;
     use arrow::datatypes::Schema;
     use arrow::datatypes::{DataType, Field};
+    use arrow_schema::TimeUnit;
     use datafusion_common::{Result, ToDFSchema};
     use datafusion_expr::execution_props::ExecutionProps;
     use datafusion_expr::{cast, col, lit, Expr};
@@ -353,6 +354,7 @@ mod tests {
     use parquet::arrow::async_reader::ParquetObjectReader;
     use parquet::basic::LogicalType;
     use parquet::data_type::{ByteArray, FixedLenByteArray};
+    use parquet::format::TimeUnit as ParquetTimeUnit;
     use parquet::{
         basic::Type as PhysicalType,
         file::{metadata::RowGroupMetaData, statistics::Statistics as ParquetStatistics},
@@ -361,6 +363,7 @@ mod tests {
     use std::ops::Rem;
     use std::sync::Arc;
 
+    #[derive(Debug)]
     struct PrimitiveTypeField {
         name: &'static str,
         physical_ty: PhysicalType,
@@ -1000,6 +1003,246 @@ mod tests {
                 &metrics
             ),
             vec![1, 2]
+        );
+    }
+
+    #[test]
+    fn row_group_pruning_predicate_utf8() {
+        // For the utf8 data type, parquet can use `BYTE_ARRAY` to store the data.
+        // In this case, construct four types of statistics to filtered with the utf8 predication.
+        let schema = Arc::new(Schema::new(vec![Field::new("c1", DataType::Utf8, false)]));
+        let field = PrimitiveTypeField::new("c1", PhysicalType::BYTE_ARRAY)
+            .with_logical_type(LogicalType::String);
+        let schema_descr = get_test_schema_descr(vec![field]);
+        let expr = col("c1").eq(lit("Hello"));
+        let expr = logical2physical(&expr, &schema);
+        let pruning_predicate = PruningPredicate::try_new(expr, schema.clone()).unwrap();
+        let rgm1 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from("Hello".as_bytes().to_vec())),
+                Some(ByteArray::from("World".as_bytes().to_vec())),
+                None,
+                0,
+                false,
+            )],
+        );
+        let rgm2 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from("Hello".as_bytes().to_vec())),
+                Some(ByteArray::from("World".as_bytes().to_vec())),
+                None,
+                0,
+                false,
+            )],
+        );
+        let rgm3 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from("World".as_bytes().to_vec())),
+                Some(ByteArray::from("World".as_bytes().to_vec())),
+                None,
+                0,
+                false,
+            )],
+        );
+        let rgm4 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from("World".as_bytes().to_vec())),
+                None,
+                None,
+                0,
+                false,
+            )],
+        );
+        let metrics = parquet_file_metrics();
+        assert_eq!(
+            prune_row_groups_by_statistics(
+                &schema,
+                &schema_descr,
+                &[rgm1, rgm2, rgm3, rgm4],
+                None,
+                Some(&pruning_predicate),
+                &metrics
+            ),
+            vec![0, 1, 3]
+        );
+    }
+
+    #[test]
+    fn row_group_pruning_predicate_timestamp() {
+        // For the timestamp data type, parquet can use `INT64` to store the data.
+        // In this case, construct four types of statistics to filtered with the timestamp predication.
+
+        // Nanoseconds
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "c1",
+            DataType::Timestamp(TimeUnit::Nanosecond, None),
+            false,
+        )]));
+        let field = PrimitiveTypeField::new("c1", PhysicalType::INT64).with_logical_type(
+            LogicalType::Timestamp {
+                unit: ParquetTimeUnit::NANOS(Default::default()),
+                is_adjusted_to_u_t_c: false,
+            },
+        );
+        let schema_descr = get_test_schema_descr(vec![field]);
+        let expr = col("c1").gt(lit(ScalarValue::TimestampNanosecond(Some(1000), None)));
+        let expr = logical2physical(&expr, &schema);
+        let pruning_predicate = PruningPredicate::try_new(expr, schema.clone()).unwrap();
+        // this row should be included in the results.
+        let rgm1 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from(
+                    "1970-01-01T00:00:05.000000000".as_bytes().to_vec(),
+                )),
+                Some(ByteArray::from(
+                    "1970-01-01T00:00:10.000000000".as_bytes().to_vec(),
+                )),
+                None,
+                0,
+                false,
+            )],
+        );
+        // this row should be included in the results.
+        let rgm2 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from(
+                    "1970-01-01T00:01:00.000000000".as_bytes().to_vec(),
+                )),
+                Some(ByteArray::from(
+                    "1970-01-01T00:02:00.000000000".as_bytes().to_vec(),
+                )),
+                None,
+                0,
+                false,
+            )],
+        );
+        let rgm3 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from(
+                    "1970-01-01T00:00:00.000000000".as_bytes().to_vec(),
+                )),
+                Some(ByteArray::from(
+                    "1970-01-01T00:00:00.000000000".as_bytes().to_vec(),
+                )),
+                None,
+                0,
+                false,
+            )],
+        );
+        let rgm4 = get_row_group_meta_data(
+            &schema_descr,
+            vec![ParquetStatistics::byte_array(
+                Some(ByteArray::from(
+                    "1970-01-01T00:00:00.000000000".as_bytes().to_vec(),
+                )),
+                None,
+                None,
+                0,
+                false,
+            )],
+        );
+        let metrics = parquet_file_metrics();
+        assert_eq!(
+            prune_row_groups_by_statistics(
+                &schema,
+                &schema_descr,
+                &[rgm1.clone(), rgm2.clone(), rgm3.clone(), rgm4.clone()],
+                None,
+                Some(&pruning_predicate),
+                &metrics
+            ),
+            vec![0, 1, 3]
+        );
+
+        // Microseconds
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "c1",
+            DataType::Timestamp(TimeUnit::Microsecond, None),
+            false,
+        )]));
+        let field = PrimitiveTypeField::new("c1", PhysicalType::INT64).with_logical_type(
+            LogicalType::Timestamp {
+                unit: ParquetTimeUnit::MICROS(Default::default()),
+                is_adjusted_to_u_t_c: false,
+            },
+        );
+        let schema_descr = get_test_schema_descr(vec![field]);
+        let expr = col("c1").gt(lit(ScalarValue::TimestampMicrosecond(Some(1000), None)));
+        let expr = logical2physical(&expr, &schema);
+        let pruning_predicate = PruningPredicate::try_new(expr, schema.clone()).unwrap();
+        assert_eq!(
+            prune_row_groups_by_statistics(
+                &schema,
+                &schema_descr,
+                &[rgm1.clone(), rgm2.clone(), rgm3.clone(), rgm4.clone()],
+                None,
+                Some(&pruning_predicate),
+                &metrics
+            ),
+            vec![0, 1, 3]
+        );
+
+        // Milliseconds
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "c1",
+            DataType::Timestamp(TimeUnit::Millisecond, None),
+            false,
+        )]));
+        let field = PrimitiveTypeField::new("c1", PhysicalType::INT64).with_logical_type(
+            LogicalType::Timestamp {
+                unit: ParquetTimeUnit::MILLIS(Default::default()),
+                is_adjusted_to_u_t_c: false,
+            },
+        );
+        let schema_descr = get_test_schema_descr(vec![field]);
+        let expr = col("c1").gt(lit(ScalarValue::TimestampMillisecond(Some(1000), None)));
+        let expr = logical2physical(&expr, &schema);
+        let pruning_predicate = PruningPredicate::try_new(expr, schema.clone()).unwrap();
+        assert_eq!(
+            prune_row_groups_by_statistics(
+                &schema,
+                &schema_descr,
+                &[rgm1.clone(), rgm2.clone(), rgm3.clone(), rgm4.clone()],
+                None,
+                Some(&pruning_predicate),
+                &metrics
+            ),
+            vec![0, 1, 3]
+        );
+
+        // Seconds
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "c1",
+            DataType::Timestamp(TimeUnit::Second, None),
+            false,
+        )]));
+        let field = PrimitiveTypeField::new("c1", PhysicalType::INT64).with_logical_type(
+            LogicalType::Timestamp {
+                unit: ParquetTimeUnit::MILLIS(Default::default()),
+                is_adjusted_to_u_t_c: false,
+            },
+        );
+        let schema_descr = get_test_schema_descr(vec![field]);
+        let expr = col("c1").gt(lit(ScalarValue::TimestampSecond(Some(1000), None)));
+        let expr = logical2physical(&expr, &schema);
+        let pruning_predicate = PruningPredicate::try_new(expr, schema.clone()).unwrap();
+        assert_eq!(
+            prune_row_groups_by_statistics(
+                &schema,
+                &schema_descr,
+                &[rgm1.clone(), rgm2.clone(), rgm3.clone(), rgm4.clone()],
+                None,
+                Some(&pruning_predicate),
+                &metrics
+            ),
+            vec![3]
         );
     }
 
