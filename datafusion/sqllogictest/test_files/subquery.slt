@@ -1034,6 +1034,235 @@ catan-prod1-daily success catan-prod1-daily high
 #4
 
 statement ok
+DROP TABLE t1;
+
+statement ok
+DROP TABLE t2;
+
+#
+# Tests for NOT IN with a nullable subquery expression
+#
+statement ok
+set datafusion.explain.logical_plan_only = false;
+
+
+statement ok
+CREATE TABLE t1(t1_id INT NOT NULL, t1_name TEXT, t1_int INT NOT NULL);
+
+statement ok
+INSERT INTO t1 VALUES
+(11, 'a', 1),
+(22, 'b', 2),
+(33, 'c', 3),
+(44, 'd', 4),
+(66, 'd', 4);
+
+statement ok
+CREATE TABLE t1n(t1_id INT, t1_name TEXT, t1_int INT);
+
+statement ok
+INSERT INTO t1n SELECT * FROM t1;
+
+statement ok
+CREATE TABLE t2(t2_id INT NOT NULL, t2_name TEXT, t2_int INT NOT NULL);
+
+statement ok
+INSERT INTO t2 VALUES
+(11, 'z', 3),
+(22, 'y', 1),
+(44, 'x', 3),
+(44, null, 3),
+(55, 'w', 3),
+(66, 'd', 4);
+
+statement ok
+CREATE TABLE t2n(t2_id INT, t2_name TEXT, t2_int INT);
+
+statement ok
+INSERT INTO t2n SELECT * FROM t2;
+
+statement ok
+INSERT INTO t2n VALUES (null, 'a', 3);
+
+# NOT IN with nullable subquery expression uses IS NOT FALSE
+query TT
+explain SELECT t1_id, t1_name FROM t1 WHERE t1_id not in (SELECT t2_id FROM t2n)
+----
+logical_plan
+LeftAnti Join:  Filter: t1.t1_id = __correlated_sq_1.t2_id IS NOT FALSE
+--TableScan: t1 projection=[t1_id, t1_name]
+--SubqueryAlias: __correlated_sq_1
+----TableScan: t2n projection=[t2_id]
+physical_plan
+NestedLoopJoinExec: join_type=LeftAnti, filter=t1_id@0 = t2_id@1 IS DISTINCT FROM false
+--RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----MemoryExec: partitions=1, partition_sizes=[1]
+--MemoryExec: partitions=1, partition_sizes=[2]
+
+# NOT IN with nullable outer query expression uses IS NOT FALSE
+query TT
+explain SELECT t1_id, t1_name FROM t1n WHERE t1_id not in (SELECT t2_id FROM t2)
+----
+logical_plan
+LeftAnti Join:  Filter: t1n.t1_id = __correlated_sq_1.t2_id IS NOT FALSE
+--TableScan: t1n projection=[t1_id, t1_name]
+--SubqueryAlias: __correlated_sq_1
+----TableScan: t2 projection=[t2_id]
+physical_plan
+NestedLoopJoinExec: join_type=LeftAnti, filter=t1_id@0 = t2_id@1 IS DISTINCT FROM false
+--RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----MemoryExec: partitions=1, partition_sizes=[1]
+--MemoryExec: partitions=1, partition_sizes=[1]
+
+# NOT IN with null subquery value disqualifies all rows
+query IT rowsort
+SELECT t1_id, t1_name FROM t1 WHERE t1_id not in (SELECT t2_id FROM t2n)
+----
+
+# NOT IN subquery with correlated outer filter and inner nullable expression
+# which isn't a simple column reference uses IS NOT FALSE
+query TT
+explain select t1.t1_id,
+       t1.t1_name,
+       t1.t1_int
+from t1
+where t1.t1_id + 12 not in (
+                               select t2n.t2_id + 1 from t2n where t1.t1_int < 4
+                           )
+----
+logical_plan
+LeftAnti Join:  Filter: CAST(t1.t1_id AS Int64) + Int64(12) = __correlated_sq_1.t2n.t2_id + Int64(1) IS NOT FALSE AND t1.t1_int < Int32(4)
+--TableScan: t1 projection=[t1_id, t1_name, t1_int]
+--SubqueryAlias: __correlated_sq_1
+----Projection: CAST(t2n.t2_id AS Int64) + Int64(1)
+------TableScan: t2n projection=[t2_id]
+physical_plan
+NestedLoopJoinExec: join_type=LeftAnti, filter=(CAST(t1_id@0 AS Int64) + 12 = t2n.t2_id + Int64(1)@2 IS DISTINCT FROM false) AND t1_int@1 < 4
+--RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----MemoryExec: partitions=1, partition_sizes=[1]
+--CoalescePartitionsExec
+----ProjectionExec: expr=[CAST(t2_id@0 AS Int64) + 1 as t2n.t2_id + Int64(1)]
+------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------MemoryExec: partitions=1, partition_sizes=[2]
+
+# NOT IN subquery with correlated outer filter and inner nullable expression
+# which isn't a simple column reference should not return the `22 b 2` row.
+query ITI rowsort
+select t1.t1_id,
+       t1.t1_name,
+       t1.t1_int
+from t1
+where t1.t1_id + 12 not in (
+                               select t2n.t2_id + 1 from t2n where t1.t1_int < 4
+                           )
+----
+44 d 4
+66 d 4
+
+# NOT IN subquery with correlated outer filter and non-nullable expressions in NOT IN predicate
+# should not use IS NOT FALSE
+query TT
+explain select t1.t1_id,
+       t1.t1_name,
+       t1.t1_int
+from t1
+where t1.t1_id + 12 not in (
+                               select t2.t2_id + 1 from t2 where t1.t1_int < 4
+                           )
+----
+logical_plan
+LeftAnti Join: CAST(t1.t1_id AS Int64) + Int64(12) = __correlated_sq_1.t2.t2_id + Int64(1) Filter: t1.t1_int < Int32(4)
+--TableScan: t1 projection=[t1_id, t1_name, t1_int]
+--SubqueryAlias: __correlated_sq_1
+----Projection: CAST(t2.t2_id AS Int64) + Int64(1)
+------TableScan: t2 projection=[t2_id]
+physical_plan
+ProjectionExec: expr=[t1_id@0 as t1_id, t1_name@1 as t1_name, t1_int@2 as t1_int]
+--CoalesceBatchesExec: target_batch_size=2
+----HashJoinExec: mode=Partitioned, join_type=RightAnti, on=[(t2.t2_id + Int64(1)@0, t1.t1_id + Int64(12)@3)], filter=t1_int@0 < 4
+------CoalesceBatchesExec: target_batch_size=2
+--------RepartitionExec: partitioning=Hash([t2.t2_id + Int64(1)@0], 4), input_partitions=4
+----------ProjectionExec: expr=[CAST(t2_id@0 AS Int64) + 1 as t2.t2_id + Int64(1)]
+------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------------MemoryExec: partitions=1, partition_sizes=[1]
+------CoalesceBatchesExec: target_batch_size=2
+--------RepartitionExec: partitioning=Hash([t1.t1_id + Int64(12)@3], 4), input_partitions=4
+----------ProjectionExec: expr=[t1_id@0 as t1_id, t1_name@1 as t1_name, t1_int@2 as t1_int, CAST(t1_id@0 AS Int64) + 12 as t1.t1_id + Int64(12)]
+------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------------MemoryExec: partitions=1, partition_sizes=[1]
+
+query ITI rowsort
+select t1.t1_id,
+       t1.t1_name,
+       t1.t1_int
+from t1
+where t1.t1_id + 12 not in (
+                               select t2.t2_id + 1 from t2 where t1.t1_int < 4
+                           )
+----
+22 b 2
+44 d 4
+66 d 4
+
+# NOT IN with nullable subquery expression and a correlated equality predicate uses IS NOT FALSE.
+# The correlated equality predicate allows LeftAnti hash join to be used.
+query TT
+explain
+select t1.t1_id,
+       t1.t1_name,
+       t1.t1_int
+from t1
+where t1.t1_id not in (select t2_id from t2n where t1_name = t2_name);
+----
+logical_plan
+LeftAnti Join: t1.t1_name = __correlated_sq_1.t2_name Filter: t1.t1_id = __correlated_sq_1.t2_id IS NOT FALSE
+--TableScan: t1 projection=[t1_id, t1_name, t1_int]
+--SubqueryAlias: __correlated_sq_1
+----TableScan: t2n projection=[t2_id, t2_name]
+physical_plan
+CoalesceBatchesExec: target_batch_size=2
+--HashJoinExec: mode=Partitioned, join_type=LeftAnti, on=[(t1_name@1, t2_name@1)], filter=t1_id@0 = t2_id@1 IS DISTINCT FROM false
+----CoalesceBatchesExec: target_batch_size=2
+------RepartitionExec: partitioning=Hash([t1_name@1], 4), input_partitions=4
+--------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----------MemoryExec: partitions=1, partition_sizes=[1]
+----CoalesceBatchesExec: target_batch_size=2
+------RepartitionExec: partitioning=Hash([t2_name@1], 4), input_partitions=4
+--------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----------MemoryExec: partitions=1, partition_sizes=[2]
+
+# Applying the `IS DISTINCT FROM false` filter as the secondary filter of the join produces correct results
+query ITI rowsort
+select t1.t1_id,
+       t1.t1_name,
+       t1.t1_int
+from t1
+where t1.t1_id not in (select t2_id from t2n where t1_name = t2_name);
+----
+22 b 2
+33 c 3
+44 d 4
+
+# The filter should not be qualified
+query T
+select 'qualified filter' where 1 NOT IN (select * from (values (3), (null)) my_tab);
+----
+
+# The filter should not be qualified
+query T
+select 'qualified filter' where null NOT IN (select * from (values (1), (2)) my_tab);
+----
+
+statement ok
+DROP TABLE t1;
+
+statement ok
+DROP TABLE t2;
+
+statement ok
+set datafusion.explain.logical_plan_only = true;
+
+statement ok
 create table t(a bigint);
 
 # Result of query below shouldn't depend on
@@ -1060,3 +1289,6 @@ logical_plan
 Projection: t.a / Int64(2)Int64(2)t.a AS t.a / Int64(2), t.a / Int64(2)Int64(2)t.a AS t.a / Int64(2) + Int64(1)
 --Projection: t.a / Int64(2) AS t.a / Int64(2)Int64(2)t.a
 ----TableScan: t projection=[a]
+
+statement ok
+DROP TABLE t;

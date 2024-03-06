@@ -1929,7 +1929,7 @@ where join_t1.t1_id + 12 not in
     (select join_t2.t2_id + 1 from join_t2 where join_t1.t1_int > 0)
 ----
 logical_plan
-LeftAnti Join: CAST(join_t1.t1_id AS Int64) + Int64(12) = __correlated_sq_1.join_t2.t2_id + Int64(1) Filter: join_t1.t1_int > UInt32(0)
+LeftAnti Join:  Filter: CAST(join_t1.t1_id AS Int64) + Int64(12) = __correlated_sq_1.join_t2.t2_id + Int64(1) IS NOT FALSE AND join_t1.t1_int > UInt32(0)
 --TableScan: join_t1 projection=[t1_id, t1_name, t1_int]
 --SubqueryAlias: __correlated_sq_1
 ----Projection: CAST(join_t2.t2_id AS Int64) + Int64(1)

@@ -45,6 +45,25 @@ pub fn test_table_scan() -> Result<LogicalPlan> {
     test_table_scan_with_name("test")
 }
 
+pub fn test_table_scan_nullable_fields() -> Vec<Field> {
+    vec![
+        Field::new("a", DataType::UInt32, true),
+        Field::new("b", DataType::UInt32, true),
+        Field::new("c", DataType::UInt32, true),
+    ]
+}
+
+/// some tests share a common table with different names and nullable fields
+pub fn test_table_scan_nullable_with_name(name: &str) -> Result<LogicalPlan> {
+    let schema = Schema::new(test_table_scan_nullable_fields());
+    table_scan(Some(name), &schema, None)?.build()
+}
+
+/// some tests share a common table with nullable fields
+pub fn test_table_scan_nullable() -> Result<LogicalPlan> {
+    test_table_scan_nullable_with_name("test")
+}
+
 /// Scan an empty data source, mainly used in tests
 pub fn scan_empty(
     name: Option<&str>,

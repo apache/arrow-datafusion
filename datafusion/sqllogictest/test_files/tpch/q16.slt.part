@@ -55,7 +55,7 @@ Limit: skip=0, fetch=10
 ----Projection: part.p_brand, part.p_type, part.p_size, COUNT(alias1) AS supplier_cnt
 ------Aggregate: groupBy=[[part.p_brand, part.p_type, part.p_size]], aggr=[[COUNT(alias1)]]
 --------Aggregate: groupBy=[[part.p_brand, part.p_type, part.p_size, partsupp.ps_suppkey AS alias1]], aggr=[[]]
-----------LeftAnti Join: partsupp.ps_suppkey = __correlated_sq_1.s_suppkey
+----------LeftAnti Join:  Filter: partsupp.ps_suppkey = __correlated_sq_1.s_suppkey IS NOT FALSE
 ------------Projection: partsupp.ps_suppkey, part.p_brand, part.p_type, part.p_size
 --------------Inner Join: partsupp.ps_partkey = part.p_partkey
 ----------------TableScan: partsupp projection=[ps_partkey, ps_suppkey]
@@ -78,31 +78,25 @@ GlobalLimitExec: skip=0, fetch=10
 ------------------CoalesceBatchesExec: target_batch_size=8192
 --------------------RepartitionExec: partitioning=Hash([p_brand@0, p_type@1, p_size@2, alias1@3], 4), input_partitions=4
 ----------------------AggregateExec: mode=Partial, gby=[p_brand@1 as p_brand, p_type@2 as p_type, p_size@3 as p_size, ps_suppkey@0 as alias1], aggr=[]
-------------------------CoalesceBatchesExec: target_batch_size=8192
---------------------------HashJoinExec: mode=Partitioned, join_type=LeftAnti, on=[(ps_suppkey@0, s_suppkey@0)]
+------------------------NestedLoopJoinExec: join_type=LeftAnti, filter=ps_suppkey@0 = s_suppkey@1 IS DISTINCT FROM false
+--------------------------ProjectionExec: expr=[ps_suppkey@1 as ps_suppkey, p_brand@3 as p_brand, p_type@4 as p_type, p_size@5 as p_size]
 ----------------------------CoalesceBatchesExec: target_batch_size=8192
-------------------------------RepartitionExec: partitioning=Hash([ps_suppkey@0], 4), input_partitions=4
---------------------------------ProjectionExec: expr=[ps_suppkey@1 as ps_suppkey, p_brand@3 as p_brand, p_type@4 as p_type, p_size@5 as p_size]
-----------------------------------CoalesceBatchesExec: target_batch_size=8192
-------------------------------------HashJoinExec: mode=Partitioned, join_type=Inner, on=[(ps_partkey@0, p_partkey@0)]
---------------------------------------CoalesceBatchesExec: target_batch_size=8192
-----------------------------------------RepartitionExec: partitioning=Hash([ps_partkey@0], 4), input_partitions=4
-------------------------------------------CsvExec: file_groups={4 groups: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:0..2932049], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:2932049..5864098], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:5864098..8796147], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:8796147..11728193]]}, projection=[ps_partkey, ps_suppkey], has_header=false
---------------------------------------CoalesceBatchesExec: target_batch_size=8192
-----------------------------------------RepartitionExec: partitioning=Hash([p_partkey@0], 4), input_partitions=4
-------------------------------------------CoalesceBatchesExec: target_batch_size=8192
---------------------------------------------FilterExec: p_brand@1 != Brand#45 AND p_type@2 NOT LIKE MEDIUM POLISHED% AND Use p_size@3 IN (SET) ([Literal { value: Int32(49) }, Literal { value: Int32(14) }, Literal { value: Int32(23) }, Literal { value: Int32(45) }, Literal { value: Int32(19) }, Literal { value: Int32(3) }, Literal { value: Int32(36) }, Literal { value: Int32(9) }])
-----------------------------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
-------------------------------------------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/part.tbl]]}, projection=[p_partkey, p_brand, p_type, p_size], has_header=false
-----------------------------CoalesceBatchesExec: target_batch_size=8192
-------------------------------RepartitionExec: partitioning=Hash([s_suppkey@0], 4), input_partitions=4
---------------------------------ProjectionExec: expr=[s_suppkey@0 as s_suppkey]
-----------------------------------CoalesceBatchesExec: target_batch_size=8192
-------------------------------------FilterExec: s_comment@1 LIKE %Customer%Complaints%
---------------------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
-----------------------------------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/supplier.tbl]]}, projection=[s_suppkey, s_comment], has_header=false
-
-
+------------------------------HashJoinExec: mode=Partitioned, join_type=Inner, on=[(ps_partkey@0, p_partkey@0)]
+--------------------------------CoalesceBatchesExec: target_batch_size=8192
+----------------------------------RepartitionExec: partitioning=Hash([ps_partkey@0], 4), input_partitions=4
+------------------------------------CsvExec: file_groups={4 groups: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:0..2932049], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:2932049..5864098], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:5864098..8796147], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/partsupp.tbl:8796147..11728193]]}, projection=[ps_partkey, ps_suppkey], has_header=false
+--------------------------------CoalesceBatchesExec: target_batch_size=8192
+----------------------------------RepartitionExec: partitioning=Hash([p_partkey@0], 4), input_partitions=4
+------------------------------------CoalesceBatchesExec: target_batch_size=8192
+--------------------------------------FilterExec: p_brand@1 != Brand#45 AND p_type@2 NOT LIKE MEDIUM POLISHED% AND Use p_size@3 IN (SET) ([Literal { value: Int32(49) }, Literal { value: Int32(14) }, Literal { value: Int32(23) }, Literal { value: Int32(45) }, Literal { value: Int32(19) }, Literal { value: Int32(3) }, Literal { value: Int32(36) }, Literal { value: Int32(9) }])
+----------------------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+------------------------------------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/part.tbl]]}, projection=[p_partkey, p_brand, p_type, p_size], has_header=false
+--------------------------CoalescePartitionsExec
+----------------------------ProjectionExec: expr=[s_suppkey@0 as s_suppkey]
+------------------------------CoalesceBatchesExec: target_batch_size=8192
+--------------------------------FilterExec: s_comment@1 LIKE %Customer%Complaints%
+----------------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+------------------------------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/tpch/data/supplier.tbl]]}, projection=[s_suppkey, s_comment], has_header=false
 
 query TTII
 select
