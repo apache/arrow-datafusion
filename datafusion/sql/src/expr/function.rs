@@ -112,6 +112,13 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             crate::utils::normalize_ident(name.0[0].clone())
         };
 
+        if Self::all_suger_function().contains(&name.as_str()) {
+            if let Some(expr) =
+                self.try_rewrite_suger_function(&name, &args, schema, planner_context)?
+            {
+                return Ok(expr);
+            }
+        }
         // user-defined function (UDF) should have precedence in case it has the same name as a scalar built-in function
         if let Some(fm) = self.context_provider.get_function_meta(&name) {
             let args = self.function_args_to_expr(args, schema, planner_context)?;
@@ -359,6 +366,35 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             _ => {
                 plan_err!("unnest() can only be applied to array, struct and null")
             }
+        }
+    }
+
+    fn all_suger_function() -> &'static [&'static str] {
+        &["nvl", "ifnull"]
+    }
+
+    fn try_rewrite_suger_function(
+        &self,
+        name: &str,
+        args: &[FunctionArg],
+        schema: &DFSchema,
+        planner_context: &mut PlannerContext,
+    ) -> Result<Option<Expr>> {
+        match (name, args) {
+            // rewirte nvl function to nvl2 function
+            ("nvl" | "ifnull", [left, right]) => {
+                if let Some(fm) = self.context_provider.get_function_meta("nvl2") {
+                    let new_args = vec![left.clone(), left.clone(), right.clone()];
+                    let args =
+                        self.function_args_to_expr(new_args, schema, planner_context)?;
+                    Ok(Some(Expr::ScalarFunction(ScalarFunction::new_udf(
+                        fm, args,
+                    ))))
+                } else {
+                    Ok(None)
+                }
+            }
+            (_, _) => Ok(None),
         }
     }
 }

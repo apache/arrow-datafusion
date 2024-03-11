@@ -18,17 +18,14 @@
 //! "core" DataFusion functions
 
 mod nullif;
-mod nvl;
 mod nvl2;
 
 // create UDFs
 make_udf_function!(nullif::NullIfFunc, NULLIF, nullif);
-make_udf_function!(nvl::NVLFunc, NVL, nvl);
 make_udf_function!(nvl2::NVL2Func, NVL2, nvl2);
 
 // Export the functions out of this package, both as expr_fn as well as a list of functions
 export_functions!(
     (nullif, arg_1 arg_2, "returns NULL if value1 equals value2; otherwise it returns value1. This can be used to perform the inverse operation of the COALESCE expression."),
-    (nvl, arg_1 arg_2, "returns value2 if value1 is NULL; otherwise it returns value1"),
     (nvl2, arg_1 arg_2 arg_3, "Returns value2 if value1 is not NULL; otherwise, it returns value3.")
 );
