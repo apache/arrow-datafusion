@@ -48,7 +48,7 @@ unicode_expressions = ["unicode-segmentation"]
 ahash = { version = "0.8", default-features = false, features = [
     "runtime-rng",
 ] }
-arrow = { workspace = true }
+arrow = { workspace = true, features = ["test_utils"] }
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
 arrow-ord = { workspace = true }
