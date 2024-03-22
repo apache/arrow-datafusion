@@ -34,6 +34,8 @@ use arrow::{
     },
     datatypes::{ArrowNativeType, ArrowPrimitiveType, DataType},
 };
+use arrow_array::builder::StringBuilder;
+use arrow_buffer::MutableBuffer;
 use uuid::Uuid;
 
 use datafusion_common::utils::datafusion_strsim;
@@ -227,6 +229,121 @@ pub fn concat(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }
 }
 
+enum ColumnarValueRef<'a> {
+    Scalar(&'a [u8]),
+    Array(&'a StringArray),
+}
+
+impl<'a> ColumnarValueRef<'a> {
+    #[inline]
+    fn is_valid(&self, i: usize) -> bool {
+        match &self {
+            Self::Scalar(_) => true,
+            Self::Array(array) => array.is_valid(i),
+        }
+    }
+}
+
+struct StringArrayBuilder {
+    offsets_buffer: MutableBuffer,
+    value_buffer: MutableBuffer,
+}
+
+impl StringArrayBuilder {
+    fn with_capacity(item_capacity: usize, data_capacity: usize) -> Self {
+        let mut offsets_buffer = MutableBuffer::with_capacity(
+            (item_capacity + 1) * std::mem::size_of::<i32>(),
+        );
+        offsets_buffer.push(0_i32);
+        Self {
+            offsets_buffer,
+            value_buffer: MutableBuffer::with_capacity(data_capacity),
+        }
+    }
+
+    fn write<const CHECK_VALID: bool>(&mut self, column: &ColumnarValueRef, i: usize) {
+        match column {
+            ColumnarValueRef::Scalar(s) => {
+                self.value_buffer.extend_from_slice(s);
+            }
+            ColumnarValueRef::Array(array) => {
+                if !CHECK_VALID || array.is_valid(i) {
+                    self.value_buffer
+                        .extend_from_slice(array.value(i).as_bytes());
+                }
+            }
+        }
+    }
+
+    fn append_offset(&mut self) {
+        let next_offset: i32 = self
+            .value_buffer
+            .len()
+            .try_into()
+            .expect("byte array offset overflow");
+        self.offsets_buffer.push(next_offset);
+    }
+
+    fn finish(self) -> StringArray {
+        let mut builder = unsafe {
+            StringBuilder::new_from_buffer(self.offsets_buffer, self.value_buffer, None)
+        };
+        builder.finish()
+    }
+}
+
+pub fn concat2(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    let array_len = args
+        .iter()
+        .filter_map(|x| match x {
+            ColumnarValue::Array(array) => Some(array.len()),
+            _ => None,
+        })
+        .next();
+
+    // Scalar
+    if array_len.is_none() {
+        let mut result = String::new();
+        for arg in args {
+            if let ColumnarValue::Scalar(ScalarValue::Utf8(Some(v))) = arg {
+                result.push_str(v);
+            }
+        }
+        return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(Some(result))));
+    }
+
+    // Array
+    let len = array_len.unwrap();
+    let mut data_size = 0;
+    let mut columns = Vec::with_capacity(args.len());
+
+    for arg in args {
+        match arg {
+            ColumnarValue::Scalar(ScalarValue::Utf8(maybe_value)) => {
+                if let Some(s) = maybe_value {
+                    data_size += s.len() * len;
+                    columns.push(ColumnarValueRef::Scalar(s.as_bytes()));
+                }
+            }
+            ColumnarValue::Array(array) => {
+                let string_array = as_string_array(array)?;
+                data_size += string_array.values().len();
+                columns.push(ColumnarValueRef::Array(string_array));
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    let mut builder = StringArrayBuilder::with_capacity(len, data_size);
+    for i in 0..len {
+        columns
+            .iter()
+            .for_each(|column| builder.write::<true>(column, i));
+        builder.append_offset();
+    }
+    Ok(ColumnarValue::Array(Arc::new(builder.finish())))
+}
+
 /// Concatenates all but the first argument, with separators. The first argument is used as the separator string, and should not be NULL. Other NULL arguments are ignored.
 /// concat_ws(',', 'abcde', 2, NULL, 22) = 'abcde,2,22'
 pub fn concat_ws(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -266,6 +383,126 @@ pub fn concat_ws(args: &[ArrayRef]) -> Result<ArrayRef> {
         .collect::<StringArray>();
 
     Ok(Arc::new(result) as ArrayRef)
+}
+
+pub fn concat_ws2(args: &[ColumnarValue]) -> Result<ColumnarValue> {
+    // do not accept 0 or 1 arguments.
+    if args.len() < 2 {
+        return exec_err!(
+            "concat_ws was called with {} arguments. It requires at least 2.",
+            args.len()
+        );
+    }
+
+    let array_len = args
+        .iter()
+        .filter_map(|x| match x {
+            ColumnarValue::Array(array) => Some(array.len()),
+            _ => None,
+        })
+        .next();
+
+    // Scalar
+    if array_len.is_none() {
+        let sep = match &args[0] {
+            ColumnarValue::Scalar(ScalarValue::Utf8(Some(s))) => s,
+            ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {
+                return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(None)));
+            }
+            _ => unreachable!(),
+        };
+
+        let mut result = String::new();
+        let iter = &mut args[1..].iter();
+
+        while let Some(arg) = iter.next() {
+            match arg {
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some(s))) => {
+                    result.push_str(s);
+                    break;
+                }
+                ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {}
+                _ => unreachable!(),
+            }
+        }
+
+        while let Some(arg) = iter.next() {
+            match arg {
+                ColumnarValue::Scalar(ScalarValue::Utf8(Some(s))) => {
+                    result.push_str(sep);
+                    result.push_str(s);
+                }
+                ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {}
+                _ => unreachable!(),
+            }
+        }
+
+        return Ok(ColumnarValue::Scalar(ScalarValue::Utf8(Some(result))));
+    }
+
+    // Array
+    let len = array_len.unwrap();
+    let mut data_size = 0;
+
+    // parse sep
+    let sep = match &args[0] {
+        ColumnarValue::Scalar(ScalarValue::Utf8(Some(s))) => {
+            data_size += s.len() * len * (args.len() - 2); // estimate
+            ColumnarValueRef::Scalar(s.as_bytes())
+        }
+        ColumnarValue::Scalar(ScalarValue::Utf8(None)) => {
+            return Ok(ColumnarValue::Array(Arc::new(StringArray::new_null(len))));
+        }
+        ColumnarValue::Array(array) => {
+            let string_array = as_string_array(array)?;
+            data_size += string_array.values().len() * (args.len() - 2); // estimate
+            ColumnarValueRef::Array(string_array)
+        }
+        _ => unreachable!(),
+    };
+
+    let mut columns = Vec::with_capacity(args.len() - 1);
+    for arg in &args[1..] {
+        match arg {
+            ColumnarValue::Scalar(ScalarValue::Utf8(maybe_value)) => {
+                if let Some(s) = maybe_value {
+                    data_size += s.len() * len;
+                    columns.push(ColumnarValueRef::Scalar(s.as_bytes()));
+                }
+            }
+            ColumnarValue::Array(array) => {
+                let string_array = as_string_array(array)?;
+                data_size += string_array.values().len();
+                columns.push(ColumnarValueRef::Array(string_array));
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    let mut builder = StringArrayBuilder::with_capacity(len, data_size);
+    for i in 0..len {
+        if !sep.is_valid(i) {
+            continue;
+        }
+
+        let mut iter = columns.iter();
+        while let Some(column) = iter.next() {
+            if column.is_valid(i) {
+                builder.write::<false>(column, i);
+                break;
+            }
+        }
+
+        while let Some(column) = iter.next() {
+            if column.is_valid(i) {
+                builder.write::<false>(&sep, i);
+                builder.write::<false>(column, i);
+            }
+        }
+
+        builder.append_offset();
+    }
+    Ok(ColumnarValue::Array(Arc::new(builder.finish())))
 }
 
 /// Converts the first letter of each word to upper case and the rest to lower case. Words are sequences of alphanumeric characters separated by non-alphanumeric characters.
