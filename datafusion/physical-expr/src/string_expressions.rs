@@ -27,6 +27,7 @@ use std::{
     iter,
 };
 
+use arrow::array::ArrayDataBuilder;
 use arrow::{
     array::{
         Array, ArrayRef, GenericStringArray, Int32Array, Int64Array, OffsetSizeTrait,
@@ -34,8 +35,7 @@ use arrow::{
     },
     datatypes::{ArrowNativeType, ArrowPrimitiveType, DataType},
 };
-use arrow_array::builder::StringBuilder;
-use arrow_buffer::MutableBuffer;
+use arrow_buffer::{MutableBuffer, NullBuffer};
 use uuid::Uuid;
 
 use datafusion_common::utils::datafusion_strsim;
@@ -242,6 +242,14 @@ impl<'a> ColumnarValueRef<'a> {
             Self::Array(array) => array.is_valid(i),
         }
     }
+
+    #[inline]
+    fn nulls(&self) -> Option<NullBuffer> {
+        match &self {
+            Self::Scalar(_) => None,
+            Self::Array(array) => array.nulls().map(|b| b.clone()),
+        }
+    }
 }
 
 struct StringArrayBuilder {
@@ -254,7 +262,7 @@ impl StringArrayBuilder {
         let mut offsets_buffer = MutableBuffer::with_capacity(
             (item_capacity + 1) * std::mem::size_of::<i32>(),
         );
-        offsets_buffer.push(0_i32);
+        unsafe { offsets_buffer.push_unchecked(0_i32) };
         Self {
             offsets_buffer,
             value_buffer: MutableBuffer::with_capacity(data_capacity),
@@ -281,14 +289,17 @@ impl StringArrayBuilder {
             .len()
             .try_into()
             .expect("byte array offset overflow");
-        self.offsets_buffer.push(next_offset);
+        unsafe { self.offsets_buffer.push_unchecked(next_offset) };
     }
 
-    fn finish(self) -> StringArray {
-        let mut builder = unsafe {
-            StringBuilder::new_from_buffer(self.offsets_buffer, self.value_buffer, None)
-        };
-        builder.finish()
+    fn finish(self, null_buffer: Option<NullBuffer>) -> StringArray {
+        let array_builder = ArrayDataBuilder::new(DataType::Utf8)
+            .len(self.offsets_buffer.len() / std::mem::size_of::<i32>() - 1)
+            .add_buffer(self.offsets_buffer.into())
+            .add_buffer(self.value_buffer.into())
+            .nulls(null_buffer);
+        let array_data = unsafe { array_builder.build_unchecked() };
+        StringArray::from(array_data)
     }
 }
 
@@ -341,7 +352,7 @@ pub fn concat2(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             .for_each(|column| builder.write::<true>(column, i));
         builder.append_offset();
     }
-    Ok(ColumnarValue::Array(Arc::new(builder.finish())))
+    Ok(ColumnarValue::Array(Arc::new(builder.finish(None))))
 }
 
 /// Concatenates all but the first argument, with separators. The first argument is used as the separator string, and should not be NULL. Other NULL arguments are ignored.
@@ -482,6 +493,7 @@ pub fn concat_ws2(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     let mut builder = StringArrayBuilder::with_capacity(len, data_size);
     for i in 0..len {
         if !sep.is_valid(i) {
+            builder.append_offset();
             continue;
         }
 
@@ -502,7 +514,8 @@ pub fn concat_ws2(args: &[ColumnarValue]) -> Result<ColumnarValue> {
 
         builder.append_offset();
     }
-    Ok(ColumnarValue::Array(Arc::new(builder.finish())))
+
+    Ok(ColumnarValue::Array(Arc::new(builder.finish(sep.nulls()))))
 }
 
 /// Converts the first letter of each word to upper case and the rest to lower case. Words are sequences of alphanumeric characters separated by non-alphanumeric characters.

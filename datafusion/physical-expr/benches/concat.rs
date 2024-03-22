@@ -17,7 +17,7 @@ fn create_args(size: usize, str_len: usize) -> Vec<ColumnarValue> {
 
 fn criterion_benchmark(c: &mut Criterion) {
     for size in [1024, 4096, 8192] {
-        let args = create_args(1024, 8);
+        let args = create_args(1024, 32);
         let mut group = c.benchmark_group("concat function");
         group.bench_function(BenchmarkId::new("concat(old)", size), |b| {
             b.iter(|| criterion::black_box(concat(&args).unwrap()))
