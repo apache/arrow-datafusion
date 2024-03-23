@@ -42,6 +42,7 @@ cargo run --example csv_sql
 
 ## Single Process
 
+- [`async_udf.rs`](examples/async_udf.rs): Replace a UDF with a User Defined Extension to run an async function instead.
 - [`avro_sql.rs`](examples/avro_sql.rs): Build and run a query plan from a SQL statement against a local AVRO file
 - [`csv_sql.rs`](examples/csv_sql.rs): Build and run a query plan from a SQL statement against a local CSV file
 - [`csv_sql_streaming.rs`](examples/csv_sql_streaming.rs): Build and run a streaming query plan from a SQL statement against a local CSV file
