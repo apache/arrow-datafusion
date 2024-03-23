@@ -307,11 +307,19 @@ fn size_of_columns(
 /// For a given set of `Column`s required for predicate `Expr` determine whether all
 /// columns are sorted. Sorted columns may be queried more efficiently in the presence of
 /// a PageIndex.
-fn columns_sorted(
-    _columns: &BTreeSet<usize>,
-    _metadata: &ParquetMetaData,
-) -> Result<bool> {
-    // TODO How do we know this?
+fn columns_sorted(columns: &BTreeSet<usize>, metadata: &ParquetMetaData) -> Result<bool> {
+    // For now we only set sorted with single col with pageIndex
+    if columns.len() == 1 && metadata.column_index().is_some() {
+        let column_idx = columns.iter().next().unwrap();
+        let column_index = metadata.column_index().unwrap();
+        for row_group_num in 0..metadata.num_row_groups() {
+            if !column_index[row_group_num][*column_idx].is_sorted() {
+                // If any Row Group is not sorted we can't assume we can use the PageIndex.
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
     Ok(false)
 }
 
