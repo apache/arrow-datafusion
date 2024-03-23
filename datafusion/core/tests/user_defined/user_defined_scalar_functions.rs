@@ -219,8 +219,10 @@ async fn scalar_udf_zero_params() -> Result<()> {
 
     let result = plan_and_collect(&ctx, "select get_100() from t where a=999").await?;
     let expected = [
-        "++", //
-        "++",
+        "+-----------+",
+        "| get_100() |",
+        "+-----------+",
+        "+-----------+",
     ];
     assert_batches_eq!(expected, &result);
     Ok(())

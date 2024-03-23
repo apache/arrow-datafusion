@@ -228,6 +228,7 @@ async fn exec_and_print(
         );
         let df = ctx.execute_logical_plan(plan).await?;
         let physical_plan = df.create_physical_plan().await?;
+        let schema = physical_plan.schema();
 
         if physical_plan.execution_mode().is_unbounded() {
             let stream = execute_stream(physical_plan, task_ctx.clone())?;
@@ -241,7 +242,7 @@ async fn exec_and_print(
                 print_options.format = PrintFormat::Table;
             }
             let results = collect(physical_plan, task_ctx.clone()).await?;
-            print_options.print_batches(&results, now)?;
+            print_options.print_batches_with_empty_result(&results, schema, now)?;
         }
     }
 

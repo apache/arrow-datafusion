@@ -23,7 +23,8 @@ use std::str::FromStr;
 
 use crate::print_format::PrintFormat;
 
-use arrow::record_batch::RecordBatch;
+use arrow::datatypes::SchemaRef;
+use arrow::record_batch::{RecordBatch, RecordBatchOptions};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use datafusion::physical_plan::RecordBatchStream;
@@ -94,6 +95,23 @@ fn get_timing_info_str(
 }
 
 impl PrintOptions {
+    pub fn print_batches_with_empty_result(
+        &self,
+        batches: &[RecordBatch],
+        schema: SchemaRef,
+        query_start_time: Instant,
+    ) -> Result<()> {
+        if batches.len() == 0 {
+            let option = RecordBatchOptions::new().with_match_field_names(false);
+
+            return self.print_batches(
+                &[RecordBatch::try_new_with_options(schema, vec![], &option)?],
+                query_start_time,
+            );
+        };
+        return self.print_batches(batches, query_start_time);
+    }
+
     /// Print the batches to stdout using the specified format
     pub fn print_batches(
         &self,
