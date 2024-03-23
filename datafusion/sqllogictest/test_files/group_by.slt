@@ -5059,3 +5059,50 @@ query II
 SELECT a + 1 AS d, a + 1 + b AS c FROM (SELECT 1 AS a, 2 AS b) GROUP BY a + 1, a + 1 + b;
 ----
 2 4
+
+query III
+SELECT a, b, SUM(d)
+FROM multiple_ordered_table
+GROUP BY a, b
+ORDER BY a, b;
+----
+0 0 42
+0 1 42
+1 2 48
+1 3 49
+
+query III
+SELECT a, b, SUM(d)
+FROM multiple_ordered_table
+GROUP BY b, a
+ORDER BY a, b;
+----
+0 0 42
+0 1 42
+1 2 48
+1 3 49
+
+# Physical Plan of the query below should have
+# an AggregateExec in the Sorted mode. Since ordering
+# [a ASC, b ASC] is satisfied at the source.
+query TT
+EXPLAIN SELECT a, b, SUM(d)
+FROM multiple_ordered_table
+GROUP BY b, a
+ORDER BY a, b;
+----
+logical_plan
+Sort: multiple_ordered_table.a ASC NULLS LAST, multiple_ordered_table.b ASC NULLS LAST
+--Projection: multiple_ordered_table.a, multiple_ordered_table.b, SUM(multiple_ordered_table.d)
+----Aggregate: groupBy=[[multiple_ordered_table.b, multiple_ordered_table.a]], aggr=[[SUM(CAST(multiple_ordered_table.d AS Int64))]]
+------TableScan: multiple_ordered_table projection=[a, b, d]
+physical_plan
+SortPreservingMergeExec: [a@0 ASC NULLS LAST,b@1 ASC NULLS LAST]
+--ProjectionExec: expr=[a@1 as a, b@0 as b, SUM(multiple_ordered_table.d)@2 as SUM(multiple_ordered_table.d)]
+----AggregateExec: mode=FinalPartitioned, gby=[b@0 as b, a@1 as a], aggr=[SUM(multiple_ordered_table.d)], ordering_mode=Sorted
+------SortExec: expr=[a@1 ASC NULLS LAST,b@0 ASC NULLS LAST]
+--------CoalesceBatchesExec: target_batch_size=2
+----------RepartitionExec: partitioning=Hash([b@0, a@1], 8), input_partitions=8
+------------AggregateExec: mode=Partial, gby=[b@1 as b, a@0 as a], aggr=[SUM(multiple_ordered_table.d)], ordering_mode=Sorted
+--------------RepartitionExec: partitioning=RoundRobinBatch(8), input_partitions=1
+----------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[a, b, d], output_ordering=[a@0 ASC NULLS LAST, b@1 ASC NULLS LAST], has_header=true

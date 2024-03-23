@@ -32,7 +32,7 @@ use crate::metrics::{BaselineMetrics, RecordOutput};
 use crate::sorts::sort::{read_spill_as_stream, sort_batch};
 use crate::sorts::streaming_merge;
 use crate::stream::RecordBatchStreamAdapter;
-use crate::{aggregates, ExecutionPlan, PhysicalExpr};
+use crate::{aggregates, ExecutionPlan, InputOrderMode, PhysicalExpr};
 use crate::{RecordBatchStream, SendableRecordBatchStream};
 
 use arrow::array::*;
@@ -350,7 +350,12 @@ impl GroupedHashAggregateStream {
             ordering.as_slice(),
         )?;
 
-        let group_values = new_group_values(group_schema)?;
+        let ordering = match agg.input_order_mode {
+            InputOrderMode::Sorted => Some(ordering),
+            InputOrderMode::PartiallySorted(_) | InputOrderMode::Linear => None,
+        };
+
+        let group_values = new_group_values(group_schema, ordering)?;
         timer.done();
 
         let exec_state = ExecutionState::ReadingInput;

@@ -28,8 +28,12 @@ mod row;
 use row::GroupValuesRows;
 
 mod bytes;
+mod fully_ordered;
+
+use crate::aggregates::group_values::fully_ordered::GroupValuesFullyOrdered;
 use bytes::GroupValuesByes;
 use datafusion_physical_expr::binary_map::OutputType;
+use datafusion_physical_expr::PhysicalSortExpr;
 
 /// An interning store for group keys
 pub trait GroupValues: Send {
@@ -52,7 +56,10 @@ pub trait GroupValues: Send {
     fn clear_shrink(&mut self, batch: &RecordBatch);
 }
 
-pub fn new_group_values(schema: SchemaRef) -> Result<Box<dyn GroupValues>> {
+pub fn new_group_values(
+    schema: SchemaRef,
+    ordering: Option<Vec<PhysicalSortExpr>>,
+) -> Result<Box<dyn GroupValues>> {
     if schema.fields.len() == 1 {
         let d = schema.fields[0].data_type();
 
@@ -79,6 +86,10 @@ pub fn new_group_values(schema: SchemaRef) -> Result<Box<dyn GroupValues>> {
         if let DataType::LargeBinary = d {
             return Ok(Box::new(GroupValuesByes::<i64>::new(OutputType::Binary)));
         }
+    } else if let Some(ordering) = ordering {
+        return Ok(Box::new(GroupValuesFullyOrdered::try_new(
+            schema, ordering,
+        )?));
     }
 
     Ok(Box::new(GroupValuesRows::try_new(schema)?))
