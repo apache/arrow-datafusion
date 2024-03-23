@@ -330,6 +330,20 @@ impl DataFrame {
 
     /// Return a new DataFrame that adds the result of evaluating one or more
     /// window functions ([`Expr::WindowFunction`]) to the existing columns
+    /// # Example
+    /// ```
+    /// # use datafusion::prelude::*;
+    /// # use datafusion::error::Result;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<()> {
+    /// let ctx = SessionContext::new();
+    /// let df = ctx.read_csv("tests/data/example.csv", CsvReadOptions::new()).await?;
+    ///
+    /// let window_expr = vec![min(col("b"))];
+    /// let _ = df.window(window_expr)?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn window(self, window_exprs: Vec<Expr>) -> Result<DataFrame> {
         let plan = LogicalPlanBuilder::from(self.plan)
             .window(window_exprs)?
