@@ -48,13 +48,13 @@ use crate::utils::log_plan;
 use datafusion_common::alias::AliasGenerator;
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::instant::Instant;
-use datafusion_common::{DataFusionError, DFSchema, Result};
+use datafusion_common::{DFSchema, DataFusionError, Result};
 use datafusion_expr::logical_plan::LogicalPlan;
 
 use chrono::{DateTime, Utc};
-use log::{debug, warn};
-use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRewriter};
+use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
 use datafusion_expr::interval_arithmetic::apply_operator;
+use log::{debug, warn};
 
 /// `OptimizerRule` transforms one [`LogicalPlan`] into another which
 /// computes the same results, but in a potentially more efficient
@@ -219,6 +219,7 @@ pub struct Optimizer {
 ///     }
 /// }
 /// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ApplyOrder {
     TopDown,
     BottomUp,
@@ -284,57 +285,73 @@ struct Rewriter<'a> {
     config: &'a dyn OptimizerConfig,
 }
 
-impl <'a> TreeNodeRewriter for Rewriter<'a> {
+impl<'a> TreeNodeRewriter for Rewriter<'a> {
     type Node = &'a mut LogicalPlan;
 
     fn f_down(&mut self, node: Self::Node) -> Result<Transformed<Self::Node>> {
-        todo!()
+        if self.apply_order == ApplyOrder::TopDown {
+            optimize_in_place(node, self.rule, self.config)
+        } else {
+            Ok(Transformed::no(node))
+        }
     }
 
     fn f_up(&mut self, node: Self::Node) -> Result<Transformed<Self::Node>> {
-        todo!()
+        if self.apply_order == ApplyOrder::BottomUp {
+            optimize_in_place(node, self.rule, self.config)
+        } else {
+            Ok(Transformed::no(node))
+        }
     }
 }
 
 /// Applies rule to the plan in place, returning Transformed with the rewritten
 /// plan
-fn rewrite_in_place(mut plan: LogicalPlan,
-                    rule: &dyn OptimizerRule,
-                    config: &dyn OptimizerConfig,
-) -> Result<Transformed<LogicalPlan>>  {
-    match rule.apply_order() {
+fn rewrite_in_place(
+    mut plan: LogicalPlan,
+    rule: &dyn OptimizerRule,
+    config: &dyn OptimizerConfig,
+) -> Result<Transformed<LogicalPlan>> {
+    let transformed = match rule.apply_order() {
         Some(apply_order) => {
             // use &mut to rewrite plan in place
-            let transformed = (&mut plan)
-                .rewrite(&mut Rewriter {
-                    apply_order,
-                    rule,
-                    config,
-                })
-                // convert to bool to drop mut borrow on new_plan
-                .map(|tnr| tnr.transformed);
-
-            // take back ownership of new_plan
-            transformed.map(|transformed| {
-                if transformed {
-                    Transformed::yes(plan)
-                } else {
-                    Transformed::no(plan)
-                }
+            (&mut plan).rewrite(&mut Rewriter {
+                apply_order,
+                rule,
+                config,
             })
-        },
-        None => {
-            // TODO extend the OptimizerRule to permit in-place updates
-            // this API requires at least one copy
-            rule.try_optimize(&plan, config)
-                .map(|maybe_plan| {
-                    match maybe_plan {
-                        Some(plan) => Transformed::yes(plan),
-                        None => Transformed::no(plan),
-                    }
-                })
         }
+        None => optimize_in_place(&mut plan, rule, config),
     }
+    // convert to bool to drop mut borrow on plan
+    .map(|tnr| tnr.transformed);
+
+    // take back ownership
+    transformed.map(|transformed| {
+        if transformed {
+            Transformed::yes(plan)
+        } else {
+            Transformed::no(plan)
+        }
+    })
+}
+
+/// Invokes the Optimizer rule to rewrite the LogicalPlan in place.
+fn optimize_in_place<'a>(
+    plan: &'a mut LogicalPlan,
+    rule: &'_ dyn OptimizerRule,
+    config: &'_ dyn OptimizerConfig,
+) -> Result<Transformed<&'a mut LogicalPlan>> {
+    // TODO: introduce a better API to OptimizerRule to allow rewriting in place
+    rule.try_optimize(plan, config).map(|maybe_plan| {
+        match maybe_plan {
+            Some(new_plan) => {
+                *plan = new_plan; // can avoid this copy with better OptimizerRule::try_optimize
+                Transformed::yes(plan)
+            }
+            None => Transformed::no(plan),
+        }
+    })
 }
 
 impl Optimizer {
@@ -370,20 +387,31 @@ impl Optimizer {
 
                 let starting_schema = new_plan.schema().clone();
 
-                let result = rewrite_in_place(new_plan,  rule.as_ref(), config)
-                // verify the rule didn't change the schema
-                .and_then(|tnr| {
-                    if tnr.transformed {
-                        assert_only_schema_is_the_same(rule.name(),&starting_schema, &tnr.data)?;
-                    }
-                    Ok(tnr)
-                });
+                let result = rewrite_in_place(new_plan, rule.as_ref(), config)
+                    // verify the rule didn't change the schema
+                    .and_then(|tnr| {
+                        if tnr.transformed {
+                            assert_only_schema_is_the_same(
+                                rule.name(),
+                                &starting_schema,
+                                &tnr.data,
+                            )?;
+                        }
+                        Ok(tnr)
+                    });
 
                 match (result, prev_plan) {
-                    (Ok(Transformed{ data: plan, transformed, ..}), _) => {
+                    (
+                        Ok(Transformed {
+                            data: plan,
+                            transformed,
+                            ..
+                        }),
+                        _,
+                    ) => {
                         new_plan = plan;
                         observer(&new_plan, rule.as_ref());
-                        if (transformed) {
+                        if transformed {
                             log_plan(rule.name(), &new_plan);
                         } else {
                             debug!(
@@ -519,9 +547,7 @@ pub(crate) fn assert_only_schema_is_the_same(
     prev_schema: &DFSchema,
     new_plan: &LogicalPlan,
 ) -> Result<()> {
-    let equivalent = new_plan
-        .schema()
-        .equivalent_names_and_types(prev_schema);
+    let equivalent = new_plan.schema().equivalent_names_and_types(prev_schema);
 
     if !equivalent {
         let e = DataFusionError::Internal(format!(
