@@ -406,6 +406,18 @@ AS VALUES
 ;
 
 statement ok
+CREATE TABLE array_setop_table
+AS VALUES
+  ([1, 2, 2, 3], [2, 3, 4]),
+  ([2, 3, 3], [3]),
+  ([3], [3, 3, 4]),
+  (null, [3, 4]),
+  ([1, 2], null),
+  (null, null)
+;
+
+
+statement ok
 CREATE TABLE array_intersect_table_1D
 AS VALUES
   (make_array(1, 2), make_array(1), make_array(1,2,3), make_array(1,3), make_array(1,3,5), make_array(2,4,6,8,1,3)),
@@ -3891,6 +3903,17 @@ select array_union(arrow_cast(['hello'], 'LargeList(Utf8)'), arrow_cast(['hello'
 ----
 [hello, datafusion]
 
+query ?
+select array_union(column1, column2)
+from array_setop_table;
+----
+[1, 2, 3, 4]
+[2, 3]
+[3, 4]
+[3, 4]
+[1, 2]
+NULL
+
 
 # list_to_string scalar function #4 (function alias `array_to_string`)
 query TTT
@@ -5329,6 +5352,17 @@ from array_distinct_table_2D_fixed;
 [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]]
 [, [5, 6]]
 
+query ?
+select array_intersect(column1, column2)
+from array_setop_table;
+----
+[2, 3]
+[3]
+[3]
+NULL
+NULL
+NULL
+
 query ???
 select array_intersect(column1, column2),
        array_intersect(column3, column4),
@@ -5747,19 +5781,8 @@ NULL
 
 ## array_except
 
-statement ok
-CREATE TABLE array_except_table
-AS VALUES
-  ([1, 2, 2, 3], [2, 3, 4]),
-  ([2, 3, 3], [3]),
-  ([3], [3, 3, 4]),
-  (null, [3, 4]),
-  ([1, 2], null),
-  (null, null)
-;
-
 query ?
-select array_except(column1, column2) from array_except_table;
+select array_except(column1, column2) from array_setop_table;
 ----
 [1]
 [2]
@@ -5768,8 +5791,6 @@ NULL
 [1, 2]
 NULL
 
-statement ok
-drop table array_except_table;
 
 statement ok
 CREATE TABLE array_except_nested_list_table
@@ -5847,7 +5868,7 @@ select array_except(column1, column2) from array_except_table_bool;
 [true]
 [true]
 [false]
-[true, false]
+[false, true]
 NULL
 
 statement ok
@@ -6583,3 +6604,6 @@ drop table fixed_size_arrays_values_without_nulls;
 
 statement ok
 drop table test_create_array_table;
+
+statement ok
+drop table array_setop_table;
