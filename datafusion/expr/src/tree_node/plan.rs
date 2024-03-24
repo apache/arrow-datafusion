@@ -111,3 +111,20 @@ impl TreeNode for LogicalPlan {
         }
     }
 }
+
+/// Allow rewriting LogicalPlans in place
+impl TreeNode for &mut LogicalPlan {
+    fn apply_children<F: FnMut(&Self) -> Result<TreeNodeRecursion>>(
+        &self,
+        _f: &mut F,
+    ) -> Result<TreeNodeRecursion> {
+        todo!()
+    }
+
+    fn map_children<F: FnMut(Self) -> Result<Transformed<Self>>>(
+        self,
+        _f: F,
+    ) -> Result<Transformed<Self>> {
+        todo!()
+    }
+}
