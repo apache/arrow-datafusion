@@ -310,4 +310,28 @@ mod tests {
         let err = r4.try_grow(30).unwrap_err().strip_backtrace();
         assert_eq!(err, "Resources exhausted: Failed to allocate additional 30 bytes for s4 with 0 bytes already allocated - maximum available is 20");
     }
+#[test]
+fn test_fail_on_exhaustion() {
+    /*
+     * This test ensures that the FairSpillPool will fail if a spilling consumer tries to allocate more memory than is available.
+     */
+
+    // Create a new FairSpillPool with a capacity of 100 bytes.
+    let pool = Arc::new(FairSpillPool::new(100)) as _;
+
+    // Create two memory consumers. The first memory consumer cannot spill, and the second memory consumer can spill.
+    let mut r1 = MemoryConsumer::new("unspillable");
+    r1.grow(2000); // The first memory consumer allocates 2000 bytes.
+
+    let mut r2 = MemoryConsumer::new("s1").with_can_spill(true);
+    r2.grow(2000); // The second memory consumer allocates 2000 bytes.
+
+    // Try to allocate an additional 1 byte for the second memory consumer. This should fail because the pool is exhausted.
+    let err = r2.try_grow(1).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "Resources exhausted: Failed to allocate additional 1 bytes for s1 with 2000 bytes already allocated - maximum available is 0"
+    );
+}
+
 }
