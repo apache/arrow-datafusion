@@ -53,7 +53,6 @@ use datafusion_expr::logical_plan::LogicalPlan;
 
 use chrono::{DateTime, Utc};
 use datafusion_common::tree_node::{Transformed, TreeNode, TreeNodeRewriter};
-use datafusion_expr::interval_arithmetic::apply_operator;
 use log::{debug, warn};
 
 /// `OptimizerRule` transforms one [`LogicalPlan`] into another which
