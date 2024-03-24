@@ -112,7 +112,17 @@ impl TreeNode for LogicalPlan {
     }
 }
 
-/// Allow rewriting LogicalPlans in place
+/// Allow rewriting LogicalPlans in place (taking a `&mut` reference)
+///
+/// For example, see XXXX
+///
+/// The upsides of using the owned API (above) is that it is more ideomatic and
+/// is clearer what happens on error (the node is consumed). However, it still
+/// requires copying the structs around
+///
+/// The upsides of rewriting in place is that it can be faster (no copying if no
+/// changes) but the downside is that the structures can be left in an
+/// inconsistent state when an error occurs
 impl TreeNode for &mut LogicalPlan {
     fn apply_children<F: FnMut(&Self) -> Result<TreeNodeRecursion>>(
         &self,
