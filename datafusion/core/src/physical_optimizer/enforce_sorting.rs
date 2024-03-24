@@ -211,9 +211,6 @@ fn replace_with_partial_sort(
     let plan_any = plan.as_any();
     if let Some(sort_plan) = plan_any.downcast_ref::<SortExec>() {
         let child = sort_plan.children()[0].clone();
-        if !child.execution_mode().is_unbounded() {
-            return Ok(plan);
-        }
 
         // here we're trying to find the common prefix for sorted columns that is required for the
         // sort and already satisfied by the given ordering
