@@ -299,21 +299,35 @@ impl Optimizer {
             log_plan(&format!("Optimizer input (pass {i})"), &new_plan);
 
             for rule in &self.rules {
-                let result =
-                    self.optimize_recursively(rule, &new_plan, config)
-                        .and_then(|plan| {
-                            if let Some(plan) = &plan {
-                                assert_schema_is_the_same(rule.name(), plan, &new_plan)?;
-                            }
-                            Ok(plan)
-                        });
-                match result {
-                    Ok(Some(plan)) => {
+                // If we need to skip failed rules, must copy plan
+                let prev_plan = options
+                    .optimizer
+                    .skip_failed_rules
+                    .then(|| new_plan.clone());
+
+                // Apply optimizer rule
+                let result = match rule.apply_order() {
+                    Some(ApplyOrder::TopDown) => todo!(),
+                    Some(ApplyOrder::BottomUp) => {
+                        todo!()
+                    }
+                    None => rule.try_optimize(&new_plan, config),
+                }
+                // verify the rule didn't change the schema
+                .and_then(|plan| {
+                    if let Some(plan) = &plan {
+                        assert_schema_is_the_same(rule.name(), plan, &new_plan)?;
+                    }
+                    Ok(plan)
+                });
+
+                match (result, prev_plan) {
+                    (Ok(Some(plan)), _) => {
                         new_plan = plan;
                         observer(&new_plan, rule.as_ref());
                         log_plan(rule.name(), &new_plan);
                     }
-                    Ok(None) => {
+                    (Ok(None), _) => {
                         observer(&new_plan, rule.as_ref());
                         debug!(
                             "Plan unchanged by optimizer rule '{}' (pass {})",
@@ -321,22 +335,22 @@ impl Optimizer {
                             i
                         );
                     }
-                    Err(e) => {
-                        if options.optimizer.skip_failed_rules {
-                            // Note to future readers: if you see this warning it signals a
-                            // bug in the DataFusion optimizer. Please consider filing a ticket
-                            // https://github.com/apache/arrow-datafusion
-                            warn!(
+                    (Err(e), Some(orig_plan)) => {
+                        // Note to future readers: if you see this warning it signals a
+                        // bug in the DataFusion optimizer. Please consider filing a ticket
+                        // https://github.com/apache/arrow-datafusion
+                        warn!(
                             "Skipping optimizer rule '{}' due to unexpected error: {}",
                             rule.name(),
                             e
                         );
-                        } else {
-                            return Err(DataFusionError::Context(
-                                format!("Optimizer rule '{}' failed", rule.name(),),
-                                Box::new(e),
-                            ));
-                        }
+                        new_plan = orig_plan;
+                    }
+                    (Err(e), None) => {
+                        return Err(e.context(format!(
+                            "Optimizer rule '{}' failed",
+                            rule.name()
+                        )));
                     }
                 }
             }
