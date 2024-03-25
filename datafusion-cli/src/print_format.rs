@@ -29,7 +29,7 @@ use datafusion::common::format::DEFAULT_FORMAT_OPTIONS;
 use datafusion::error::Result;
 
 /// Allow records to be printed in different formats
-#[derive(Debug, PartialEq, Eq, clap::ArgEnum, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, clap::ValueEnum, Clone, Copy)]
 pub enum PrintFormat {
     Csv,
     Tsv,
@@ -43,7 +43,7 @@ impl FromStr for PrintFormat {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        clap::ArgEnum::from_str(s, true)
+        clap::ValueEnum::from_str(s, true)
     }
 }
 

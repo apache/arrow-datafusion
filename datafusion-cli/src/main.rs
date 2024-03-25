@@ -42,7 +42,7 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 enum PoolType {
     Greedy,
     Fair,
@@ -67,7 +67,7 @@ struct Args {
         short = 'p',
         long,
         help = "Path to your data, default to current directory",
-        validator(is_valid_data_dir)
+        value_parser(is_valid_data_dir)
     )]
     data_path: Option<String>,
 
@@ -75,14 +75,14 @@ struct Args {
         short = 'b',
         long,
         help = "The batch size of each query, or use DataFusion default",
-        validator(is_valid_batch_size)
+        value_parser(is_valid_batch_size)
     )]
     batch_size: Option<usize>,
 
     #[clap(
         short = 'c',
         long,
-        multiple_values = true,
+        num_args(0..),
         help = "Execute the given command string(s), then exit"
     )]
     command: Vec<String>,
@@ -91,30 +91,30 @@ struct Args {
         short = 'm',
         long,
         help = "The memory pool limitation (e.g. '10g'), default to None (no limit)",
-        validator(is_valid_memory_pool_size)
+        value_parser(is_valid_memory_pool_size)
     )]
     memory_limit: Option<String>,
 
     #[clap(
         short,
         long,
-        multiple_values = true,
+        num_args(0..),
         help = "Execute commands from file(s), then exit",
-        validator(is_valid_file)
+        value_parser(is_valid_file)
     )]
     file: Vec<String>,
 
     #[clap(
         short = 'r',
         long,
-        multiple_values = true,
+        num_args(0..),
         help = "Run the provided files on startup instead of ~/.datafusionrc",
-        validator(is_valid_file),
+        value_parser(is_valid_file),
         conflicts_with = "file"
     )]
     rc: Option<Vec<String>>,
 
-    #[clap(long, arg_enum, default_value_t = PrintFormat::Automatic)]
+    #[clap(long, value_enum, default_value_t = PrintFormat::Automatic)]
     format: PrintFormat,
 
     #[clap(
@@ -255,9 +255,9 @@ fn create_runtime_env(rn_config: RuntimeConfig) -> Result<RuntimeEnv> {
     RuntimeEnv::new(rn_config)
 }
 
-fn is_valid_file(dir: &str) -> Result<(), String> {
+fn is_valid_file(dir: &str) -> Result<String, String> {
     if Path::new(dir).is_file() {
-        Ok(())
+        Ok(dir.to_string())
     } else {
         Err(format!("Invalid file '{}'", dir))
     }
@@ -271,9 +271,9 @@ fn is_valid_data_dir(dir: &str) -> Result<(), String> {
     }
 }
 
-fn is_valid_batch_size(size: &str) -> Result<(), String> {
+fn is_valid_batch_size(size: &str) -> Result<usize, String> {
     match size.parse::<usize>() {
-        Ok(size) if size > 0 => Ok(()),
+        Ok(size) if size > 0 => Ok(size),
         _ => Err(format!("Invalid batch size '{}'", size)),
     }
 }
