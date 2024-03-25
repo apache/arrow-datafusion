@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! [`ScalarUDFImpl`] definitions for array functions.
+//! [`ScalarUDFImpl`] definitions for array_has, array_has_all and array_has_any functions.
 
 use arrow::array::{Array, ArrayRef, BooleanArray, OffsetSizeTrait};
 use arrow::datatypes::DataType;
@@ -85,11 +85,11 @@ impl ScalarUDFImpl for ArrayHas {
         &self.signature
     }
 
-    fn return_type(&self, _: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
         Ok(DataType::Boolean)
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         let args = ColumnarValue::values_to_arrays(args)?;
 
         if args.len() != 2 {
@@ -147,11 +147,11 @@ impl ScalarUDFImpl for ArrayHasAll {
         &self.signature
     }
 
-    fn return_type(&self, _: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
         Ok(DataType::Boolean)
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         let args = ColumnarValue::values_to_arrays(args)?;
         if args.len() != 2 {
             return exec_err!("array_has_all needs two arguments");
@@ -204,11 +204,11 @@ impl ScalarUDFImpl for ArrayHasAny {
         &self.signature
     }
 
-    fn return_type(&self, _: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, _: &[DataType]) -> Result<DataType> {
         Ok(DataType::Boolean)
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         let args = ColumnarValue::values_to_arrays(args)?;
 
         if args.len() != 2 {

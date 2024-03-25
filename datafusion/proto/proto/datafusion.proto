@@ -563,10 +563,10 @@ enum ScalarFunction {
   Trunc = 19;
   // 20 was Array
   // RegexpMatch = 21;
-  BitLength = 22;
+  // 22 was BitLength
   // 23 was Btrim
   CharacterLength = 24;
-  Chr = 25;
+  // 25 was Chr
   Concat = 26;
   ConcatWithSeparator = 27;
   // 28 was DatePart
@@ -581,8 +581,8 @@ enum ScalarFunction {
   // 37 was OctetLength 
   Random = 38;
   // 39 was RegexpReplace
-  Repeat = 40;
-  Replace = 41;
+  // 40 was Repeat
+  // 41 was Replace
   Reverse = 42;
   Right = 43;
   Rpad = 44;
@@ -591,7 +591,7 @@ enum ScalarFunction {
   // 47 was SHA256
   // 48 was SHA384
   // 49 was SHA512
-  SplitPart = 50;
+  // 50 was SplitPart
   // StartsWith = 51;
   Strpos = 52;
   Substr = 53;

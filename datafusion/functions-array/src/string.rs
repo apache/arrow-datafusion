@@ -32,7 +32,7 @@ use datafusion_common::{plan_err, DataFusionError, Result};
 use std::any::{type_name, Any};
 
 use crate::utils::{downcast_arg, make_scalar_function};
-use arrow_schema::DataType::{LargeUtf8, Utf8};
+use arrow_schema::DataType::{FixedSizeList, LargeList, LargeUtf8, List, Null, Utf8};
 use datafusion_common::cast::{
     as_generic_string_array, as_large_list_array, as_list_array, as_string_array,
 };
@@ -133,6 +133,7 @@ impl ScalarUDFImpl for ArrayToString {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_to_string"
     }
@@ -142,7 +143,6 @@ impl ScalarUDFImpl for ArrayToString {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        use DataType::*;
         Ok(match arg_types[0] {
             List(_) | LargeList(_) | FixedSizeList(_, _) => Utf8,
             _ => {
@@ -195,6 +195,7 @@ impl ScalarUDFImpl for StringToArray {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "string_to_array"
     }
@@ -204,7 +205,6 @@ impl ScalarUDFImpl for StringToArray {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        use DataType::*;
         Ok(match arg_types[0] {
             Utf8 | LargeUtf8 => {
                 List(Arc::new(Field::new("item", arg_types[0].clone(), true)))
@@ -258,7 +258,7 @@ pub(super) fn array_to_string_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         with_null_string: bool,
     ) -> Result<&mut String> {
         match arr.data_type() {
-            DataType::List(..) => {
+            List(..) => {
                 let list_array = as_list_array(&arr)?;
                 for i in 0..list_array.len() {
                     compute_array_to_string(
@@ -272,7 +272,7 @@ pub(super) fn array_to_string_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 
                 Ok(arg)
             }
-            DataType::LargeList(..) => {
+            LargeList(..) => {
                 let list_array = as_large_list_array(&arr)?;
                 for i in 0..list_array.len() {
                     compute_array_to_string(
@@ -286,7 +286,7 @@ pub(super) fn array_to_string_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 
                 Ok(arg)
             }
-            DataType::Null => Ok(arg),
+            Null => Ok(arg),
             data_type => {
                 macro_rules! array_function {
                     ($ARRAY_TYPE:ident) => {
@@ -339,7 +339,7 @@ pub(super) fn array_to_string_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     let arr_type = arr.data_type();
     let string_arr = match arr_type {
-        DataType::List(_) | DataType::FixedSizeList(_, _) => {
+        List(_) | FixedSizeList(_, _) => {
             let list_array = as_list_array(&arr)?;
             generate_string_array::<i32>(
                 list_array,
@@ -348,7 +348,7 @@ pub(super) fn array_to_string_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
                 with_null_string,
             )?
         }
-        DataType::LargeList(_) => {
+        LargeList(_) => {
             let list_array = as_large_list_array(&arr)?;
             generate_string_array::<i64>(
                 list_array,

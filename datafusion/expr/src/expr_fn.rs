@@ -579,30 +579,15 @@ scalar_expr!(Log, log, base x, "logarithm of a `x` for a particular `base`");
 
 // string functions
 scalar_expr!(
-    BitLength,
-    bit_length,
-    string,
-    "the number of bits in the `string`"
-);
-scalar_expr!(
     CharacterLength,
     character_length,
     string,
     "the number of characters in the `string`"
 );
-scalar_expr!(
-    Chr,
-    chr,
-    code_point,
-    "converts the Unicode code point to a UTF8 character"
-);
 scalar_expr!(InitCap, initcap, string, "converts the first letter of each word in `string` in uppercase and the remaining characters in lowercase");
 scalar_expr!(Left, left, string n, "returns the first `n` characters in the `string`");
-scalar_expr!(Replace, replace, string from to, "replaces all occurrences of `from` with `to` in the `string`");
-scalar_expr!(Repeat, repeat, string n, "repeats the `string` to `n` times");
 scalar_expr!(Reverse, reverse, string, "reverses the `string`");
 scalar_expr!(Right, right, string n, "returns the last `n` characters in the `string`");
-scalar_expr!(SplitPart, split_part, string delimiter index, "splits a string based on a delimiter and picks out the desired field based on the index.");
 scalar_expr!(EndsWith, ends_with, string suffix, "whether the `string` ends with the `suffix`");
 scalar_expr!(Strpos, strpos, string substring, "finds the position from where the `substring` matches the `string`");
 scalar_expr!(Substr, substr, string position, "substring from the `position` to the end");
@@ -1047,22 +1032,17 @@ mod test {
         test_scalar_expr!(Nanvl, nanvl, x, y);
         test_scalar_expr!(Iszero, iszero, input);
 
-        test_scalar_expr!(BitLength, bit_length, string);
         test_scalar_expr!(CharacterLength, character_length, string);
-        test_scalar_expr!(Chr, chr, string);
         test_scalar_expr!(Gcd, gcd, arg_1, arg_2);
         test_scalar_expr!(Lcm, lcm, arg_1, arg_2);
         test_scalar_expr!(InitCap, initcap, string);
         test_scalar_expr!(Left, left, string, count);
         test_nary_scalar_expr!(Lpad, lpad, string, count);
         test_nary_scalar_expr!(Lpad, lpad, string, count, characters);
-        test_scalar_expr!(Replace, replace, string, from, to);
-        test_scalar_expr!(Repeat, repeat, string, count);
         test_scalar_expr!(Reverse, reverse, string);
         test_scalar_expr!(Right, right, string, count);
         test_nary_scalar_expr!(Rpad, rpad, string, count);
         test_nary_scalar_expr!(Rpad, rpad, string, count, characters);
-        test_scalar_expr!(SplitPart, split_part, expr, delimiter, index);
         test_scalar_expr!(EndsWith, ends_with, string, characters);
         test_scalar_expr!(Strpos, strpos, string, substring);
         test_scalar_expr!(Substr, substr, string, position);

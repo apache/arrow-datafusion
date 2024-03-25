@@ -52,13 +52,48 @@ impl Unparser<'_> {
         match expr {
             Expr::InList(InList {
                 expr,
-                list: _,
-                negated: _,
+                list,
+                negated,
             }) => {
-                not_impl_err!("Unsupported expression: {expr:?}")
+                let list_expr = list
+                    .iter()
+                    .map(|e| self.expr_to_sql(e))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(ast::Expr::InList {
+                    expr: Box::new(self.expr_to_sql(expr)?),
+                    list: list_expr,
+                    negated: *negated,
+                })
             }
-            Expr::ScalarFunction(ScalarFunction { .. }) => {
-                not_impl_err!("Unsupported expression: {expr:?}")
+            Expr::ScalarFunction(ScalarFunction { func_def, args }) => {
+                let func_name = func_def.name();
+
+                let args = args
+                    .iter()
+                    .map(|e| {
+                        if matches!(e, Expr::Wildcard { qualifier: None }) {
+                            Ok(FunctionArg::Unnamed(ast::FunctionArgExpr::Wildcard))
+                        } else {
+                            self.expr_to_sql(e).map(|e| {
+                                FunctionArg::Unnamed(ast::FunctionArgExpr::Expr(e))
+                            })
+                        }
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                Ok(ast::Expr::Function(Function {
+                    name: ast::ObjectName(vec![Ident {
+                        value: func_name.to_string(),
+                        quote_style: None,
+                    }]),
+                    args,
+                    filter: None,
+                    null_treatment: None,
+                    over: None,
+                    distinct: false,
+                    special: false,
+                    order_by: vec![],
+                }))
             }
             Expr::Between(Between {
                 expr,
@@ -526,13 +561,53 @@ impl Unparser<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
+
     use datafusion_common::TableReference;
-    use datafusion_expr::{col, expr::AggregateFunction, lit};
+    use datafusion_expr::{
+        col, expr::AggregateFunction, lit, ColumnarValue, ScalarUDF, ScalarUDFImpl,
+        Signature, Volatility,
+    };
 
     use crate::unparser::dialect::CustomDialect;
 
     use super::*;
 
+    /// Mocked UDF
+    #[derive(Debug)]
+    struct DummyUDF {
+        signature: Signature,
+    }
+
+    impl DummyUDF {
+        fn new() -> Self {
+            Self {
+                signature: Signature::variadic_any(Volatility::Immutable),
+            }
+        }
+    }
+
+    impl ScalarUDFImpl for DummyUDF {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn name(&self) -> &str {
+            "dummy_udf"
+        }
+
+        fn signature(&self) -> &Signature {
+            &self.signature
+        }
+
+        fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+            Ok(DataType::Int32)
+        }
+
+        fn invoke(&self, _args: &[ColumnarValue]) -> Result<ColumnarValue> {
+            unimplemented!("DummyUDF::invoke")
+        }
+    }
     // See sql::tests for E2E tests.
 
     #[test]
@@ -560,6 +635,18 @@ mod tests {
                     data_type: DataType::UInt32,
                 }),
                 r#"CAST("a" AS INTEGER UNSIGNED)"#,
+            ),
+            (
+                col("a").in_list(vec![lit(1), lit(2), lit(3)], false),
+                r#""a" IN (1, 2, 3)"#,
+            ),
+            (
+                col("a").in_list(vec![lit(1), lit(2), lit(3)], true),
+                r#""a" NOT IN (1, 2, 3)"#,
+            ),
+            (
+                ScalarUDF::new_from_impl(DummyUDF::new()).call(vec![col("a"), col("b")]),
+                r#"dummy_udf("a", "b")"#,
             ),
             (
                 Expr::Literal(ScalarValue::Date64(Some(0))),

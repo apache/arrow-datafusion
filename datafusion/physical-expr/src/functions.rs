@@ -30,17 +30,15 @@
 //! an argument i32 is passed to a function that supports f64, the
 //! argument is automatically is coerced to f64.
 
-use crate::sort_properties::SortProperties;
-use crate::{
-    conditional_expressions, math_expressions, string_expressions, PhysicalExpr,
-    ScalarFunctionExpr,
-};
+use std::ops::Neg;
+use std::sync::Arc;
+
 use arrow::{
     array::ArrayRef,
-    compute::kernels::length::bit_length,
     datatypes::{DataType, Int32Type, Int64Type, Schema},
 };
 use arrow_array::Array;
+
 use datafusion_common::{exec_err, Result, ScalarValue};
 use datafusion_expr::execution_props::ExecutionProps;
 pub use datafusion_expr::FuncMonotonicity;
@@ -49,8 +47,12 @@ use datafusion_expr::{
     type_coercion::functions::data_types, BuiltinScalarFunction, ColumnarValue,
     ScalarFunctionImplementation,
 };
-use std::ops::Neg;
-use std::sync::Arc;
+
+use crate::sort_properties::SortProperties;
+use crate::{
+    conditional_expressions, math_expressions, string_expressions, PhysicalExpr,
+    ScalarFunctionExpr,
+};
 
 /// Create a physical (function) expression.
 /// This function errors when `args`' can't be coerced to a valid argument type of the function.
@@ -252,18 +254,6 @@ pub fn create_physical_fun(
             Arc::new(|args| make_scalar_function_inner(math_expressions::cot)(args))
         }
         // string functions
-        BuiltinScalarFunction::BitLength => Arc::new(|args| match &args[0] {
-            ColumnarValue::Array(v) => Ok(ColumnarValue::Array(bit_length(v.as_ref())?)),
-            ColumnarValue::Scalar(v) => match v {
-                ScalarValue::Utf8(v) => Ok(ColumnarValue::Scalar(ScalarValue::Int32(
-                    v.as_ref().map(|x| (x.len() * 8) as i32),
-                ))),
-                ScalarValue::LargeUtf8(v) => Ok(ColumnarValue::Scalar(
-                    ScalarValue::Int64(v.as_ref().map(|x| (x.len() * 8) as i64)),
-                )),
-                _ => unreachable!(),
-            },
-        }),
         BuiltinScalarFunction::CharacterLength => {
             Arc::new(|args| match args[0].data_type() {
                 DataType::Utf8 => {
@@ -286,9 +276,6 @@ pub fn create_physical_fun(
                     "Unsupported data type {other:?} for function character_length"
                 ),
             })
-        }
-        BuiltinScalarFunction::Chr => {
-            Arc::new(|args| make_scalar_function_inner(string_expressions::chr)(args))
         }
         BuiltinScalarFunction::Coalesce => Arc::new(conditional_expressions::coalesce),
         BuiltinScalarFunction::Concat => Arc::new(string_expressions::concat),
@@ -328,26 +315,6 @@ pub fn create_physical_fun(
             }
             other => exec_err!("Unsupported data type {other:?} for function lpad"),
         }),
-        BuiltinScalarFunction::Repeat => Arc::new(|args| match args[0].data_type() {
-            DataType::Utf8 => {
-                make_scalar_function_inner(string_expressions::repeat::<i32>)(args)
-            }
-            DataType::LargeUtf8 => {
-                make_scalar_function_inner(string_expressions::repeat::<i64>)(args)
-            }
-            other => exec_err!("Unsupported data type {other:?} for function repeat"),
-        }),
-        BuiltinScalarFunction::Replace => Arc::new(|args| match args[0].data_type() {
-            DataType::Utf8 => {
-                make_scalar_function_inner(string_expressions::replace::<i32>)(args)
-            }
-            DataType::LargeUtf8 => {
-                make_scalar_function_inner(string_expressions::replace::<i64>)(args)
-            }
-            other => {
-                exec_err!("Unsupported data type {other:?} for function replace")
-            }
-        }),
         BuiltinScalarFunction::Reverse => Arc::new(|args| match args[0].data_type() {
             DataType::Utf8 => {
                 let func =
@@ -386,17 +353,6 @@ pub fn create_physical_fun(
                 make_scalar_function_inner(func)(args)
             }
             other => exec_err!("Unsupported data type {other:?} for function rpad"),
-        }),
-        BuiltinScalarFunction::SplitPart => Arc::new(|args| match args[0].data_type() {
-            DataType::Utf8 => {
-                make_scalar_function_inner(string_expressions::split_part::<i32>)(args)
-            }
-            DataType::LargeUtf8 => {
-                make_scalar_function_inner(string_expressions::split_part::<i64>)(args)
-            }
-            other => {
-                exec_err!("Unsupported data type {other:?} for function split_part")
-            }
         }),
         BuiltinScalarFunction::EndsWith => Arc::new(|args| match args[0].data_type() {
             DataType::Utf8 => {
@@ -568,9 +524,6 @@ fn func_order_in_one_dimension(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::expressions::lit;
-    use crate::expressions::try_cast;
     use arrow::{
         array::{
             Array, ArrayRef, BooleanArray, Float32Array, Float64Array, Int32Array,
@@ -579,11 +532,17 @@ mod tests {
         datatypes::Field,
         record_batch::RecordBatch,
     };
+
     use datafusion_common::cast::as_uint64_array;
     use datafusion_common::{exec_err, internal_err, plan_err};
     use datafusion_common::{DataFusionError, Result, ScalarValue};
     use datafusion_expr::type_coercion::functions::data_types;
     use datafusion_expr::Signature;
+
+    use crate::expressions::lit;
+    use crate::expressions::try_cast;
+
+    use super::*;
 
     /// $FUNC function to test
     /// $ARGS arguments (vec) to pass to function
@@ -636,23 +595,6 @@ mod tests {
 
     #[test]
     fn test_functions() -> Result<()> {
-        test_function!(
-            BitLength,
-            &[lit("chars")],
-            Ok(Some(40)),
-            i32,
-            Int32,
-            Int32Array
-        );
-        test_function!(
-            BitLength,
-            &[lit("josé")],
-            Ok(Some(40)),
-            i32,
-            Int32,
-            Int32Array
-        );
-        test_function!(BitLength, &[lit("")], Ok(Some(0)), i32, Int32, Int32Array);
         #[cfg(feature = "unicode_expressions")]
         test_function!(
             CharacterLength,
@@ -699,62 +641,6 @@ mod tests {
             i32,
             Int32,
             Int32Array
-        );
-        test_function!(
-            Chr,
-            &[lit(ScalarValue::Int64(Some(128175)))],
-            Ok(Some("💯")),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Chr,
-            &[lit(ScalarValue::Int64(None))],
-            Ok(None),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Chr,
-            &[lit(ScalarValue::Int64(Some(120)))],
-            Ok(Some("x")),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Chr,
-            &[lit(ScalarValue::Int64(Some(128175)))],
-            Ok(Some("💯")),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Chr,
-            &[lit(ScalarValue::Int64(None))],
-            Ok(None),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Chr,
-            &[lit(ScalarValue::Int64(Some(0)))],
-            exec_err!("null character not permitted."),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Chr,
-            &[lit(ScalarValue::Int64(Some(i64::MAX)))],
-            exec_err!("requested character too large for encoding."),
-            &str,
-            Utf8,
-            StringArray
         );
         test_function!(
             Concat,
@@ -1124,33 +1010,6 @@ mod tests {
             Utf8,
             StringArray
         );
-        test_function!(
-            Repeat,
-            &[lit("Pg"), lit(ScalarValue::Int64(Some(4))),],
-            Ok(Some("PgPgPgPg")),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Repeat,
-            &[
-                lit(ScalarValue::Utf8(None)),
-                lit(ScalarValue::Int64(Some(4))),
-            ],
-            Ok(None),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            Repeat,
-            &[lit("Pg"), lit(ScalarValue::Int64(None)),],
-            Ok(None),
-            &str,
-            Utf8,
-            StringArray
-        );
         #[cfg(feature = "unicode_expressions")]
         test_function!(
             Reverse,
@@ -1443,42 +1302,6 @@ mod tests {
             internal_err!(
                 "function rpad requires compilation with feature flag: unicode_expressions."
             ),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            SplitPart,
-            &[
-                lit("abc~@~def~@~ghi"),
-                lit("~@~"),
-                lit(ScalarValue::Int64(Some(2))),
-            ],
-            Ok(Some("def")),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            SplitPart,
-            &[
-                lit("abc~@~def~@~ghi"),
-                lit("~@~"),
-                lit(ScalarValue::Int64(Some(20))),
-            ],
-            Ok(Some("")),
-            &str,
-            Utf8,
-            StringArray
-        );
-        test_function!(
-            SplitPart,
-            &[
-                lit("abc~@~def~@~ghi"),
-                lit("~@~"),
-                lit(ScalarValue::Int64(Some(-1))),
-            ],
-            exec_err!("field position must be greater than zero"),
             &str,
             Utf8,
             StringArray
@@ -1812,7 +1635,7 @@ mod tests {
         let schema = Schema::new(vec![Field::new("a", DataType::Int32, false)]);
 
         // pick some arbitrary functions to test
-        let funs = [BuiltinScalarFunction::Concat, BuiltinScalarFunction::Repeat];
+        let funs = [BuiltinScalarFunction::Concat];
 
         for fun in funs.iter() {
             let expr = create_physical_expr_with_type_coercion(

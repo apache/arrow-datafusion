@@ -21,9 +21,10 @@ use crate::utils::make_scalar_function;
 use arrow::array::{Capacities, MutableArrayData};
 use arrow_array::{Array, ArrayRef, GenericListArray, OffsetSizeTrait};
 use arrow_buffer::OffsetBuffer;
+use arrow_schema::DataType::{LargeList, List, Null};
 use arrow_schema::{DataType, FieldRef};
 use datafusion_common::cast::{as_large_list_array, as_list_array};
-use datafusion_common::exec_err;
+use datafusion_common::{exec_err, Result};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ColumnarValue, Expr, ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
@@ -56,6 +57,7 @@ impl ScalarUDFImpl for ArrayReverse {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_reverse"
     }
@@ -64,11 +66,11 @@ impl ScalarUDFImpl for ArrayReverse {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         Ok(arg_types[0].clone())
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_reverse_inner)(args)
     }
 
@@ -78,21 +80,21 @@ impl ScalarUDFImpl for ArrayReverse {
 }
 
 /// array_reverse SQL function
-pub fn array_reverse_inner(arg: &[ArrayRef]) -> datafusion_common::Result<ArrayRef> {
+pub fn array_reverse_inner(arg: &[ArrayRef]) -> Result<ArrayRef> {
     if arg.len() != 1 {
         return exec_err!("array_reverse needs one argument");
     }
 
     match &arg[0].data_type() {
-        DataType::List(field) => {
+        List(field) => {
             let array = as_list_array(&arg[0])?;
             general_array_reverse::<i32>(array, field)
         }
-        DataType::LargeList(field) => {
+        LargeList(field) => {
             let array = as_large_list_array(&arg[0])?;
             general_array_reverse::<i64>(array, field)
         }
-        DataType::Null => Ok(arg[0].clone()),
+        Null => Ok(arg[0].clone()),
         array_type => exec_err!("array_reverse does not support type '{array_type:?}'."),
     }
 }
@@ -100,7 +102,7 @@ pub fn array_reverse_inner(arg: &[ArrayRef]) -> datafusion_common::Result<ArrayR
 fn general_array_reverse<O: OffsetSizeTrait>(
     array: &GenericListArray<O>,
     field: &FieldRef,
-) -> datafusion_common::Result<ArrayRef>
+) -> Result<ArrayRef>
 where
     O: TryFrom<i64>,
 {

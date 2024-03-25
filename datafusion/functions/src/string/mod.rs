@@ -22,14 +22,19 @@ use std::sync::Arc;
 use datafusion_expr::ScalarUDF;
 
 mod ascii;
+mod bit_length;
 mod btrim;
+mod chr;
 mod common;
 mod levenshtein;
 mod lower;
 mod ltrim;
 mod octet_length;
 mod overlay;
+mod repeat;
+mod replace;
 mod rtrim;
+mod split_part;
 mod starts_with;
 mod to_hex;
 mod upper;
@@ -37,14 +42,19 @@ mod uuid;
 
 // create UDFs
 make_udf_function!(ascii::AsciiFunc, ASCII, ascii);
+make_udf_function!(bit_length::BitLengthFunc, BIT_LENGTH, bit_length);
 make_udf_function!(btrim::BTrimFunc, BTRIM, btrim);
+make_udf_function!(chr::ChrFunc, CHR, chr);
 make_udf_function!(levenshtein::LevenshteinFunc, LEVENSHTEIN, levenshtein);
 make_udf_function!(ltrim::LtrimFunc, LTRIM, ltrim);
 make_udf_function!(lower::LowerFunc, LOWER, lower);
 make_udf_function!(octet_length::OctetLengthFunc, OCTET_LENGTH, octet_length);
 make_udf_function!(overlay::OverlayFunc, OVERLAY, overlay);
+make_udf_function!(repeat::RepeatFunc, REPEAT, repeat);
+make_udf_function!(replace::ReplaceFunc, REPLACE, replace);
 make_udf_function!(rtrim::RtrimFunc, RTRIM, rtrim);
 make_udf_function!(starts_with::StartsWithFunc, STARTS_WITH, starts_with);
+make_udf_function!(split_part::SplitPartFunc, SPLIT_PART, split_part);
 make_udf_function!(to_hex::ToHexFunc, TO_HEX, to_hex);
 make_udf_function!(upper::UpperFunc, UPPER, upper);
 make_udf_function!(uuid::UuidFunc, UUID, uuid);
@@ -57,9 +67,19 @@ pub mod expr_fn {
         super::ascii().call(vec![arg1])
     }
 
+    #[doc = "Returns the number of bits in the `string`"]
+    pub fn bit_length(arg: Expr) -> Expr {
+        super::bit_length().call(vec![arg])
+    }
+
     #[doc = "Removes all characters, spaces by default, from both sides of a string"]
     pub fn btrim(args: Vec<Expr>) -> Expr {
         super::btrim().call(args)
+    }
+
+    #[doc = "Converts the Unicode code point to a UTF8 character"]
+    pub fn chr(arg: Expr) -> Expr {
+        super::chr().call(vec![arg])
     }
 
     #[doc = "Returns the Levenshtein distance between the two given strings"]
@@ -87,9 +107,24 @@ pub mod expr_fn {
         super::overlay().call(args)
     }
 
+    #[doc = "Repeats the `string` to `n` times"]
+    pub fn repeat(string: Expr, n: Expr) -> Expr {
+        super::repeat().call(vec![string, n])
+    }
+
+    #[doc = "Replaces all occurrences of `from` with `to` in the `string`"]
+    pub fn replace(string: Expr, from: Expr, to: Expr) -> Expr {
+        super::replace().call(vec![string, from, to])
+    }
+
     #[doc = "Removes all characters, spaces by default, from the end of a string"]
     pub fn rtrim(args: Vec<Expr>) -> Expr {
         super::rtrim().call(args)
+    }
+
+    #[doc = "Splits a string based on a delimiter and picks out the desired field based on the index."]
+    pub fn split_part(string: Expr, delimiter: Expr, index: Expr) -> Expr {
+        super::split_part().call(vec![string, delimiter, index])
     }
 
     #[doc = "Returns true if string starts with prefix."]
@@ -122,13 +157,18 @@ pub mod expr_fn {
 pub fn functions() -> Vec<Arc<ScalarUDF>> {
     vec![
         ascii(),
+        bit_length(),
         btrim(),
+        chr(),
         levenshtein(),
         lower(),
         ltrim(),
         octet_length(),
         overlay(),
+        repeat(),
+        replace(),
         rtrim(),
+        split_part(),
         starts_with(),
         to_hex(),
         upper(),

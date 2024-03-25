@@ -23,6 +23,7 @@ use crate::extract::{array_element, array_slice};
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::Transformed;
 use datafusion_common::utils::list_ndims;
+use datafusion_common::Result;
 use datafusion_common::{Column, DFSchema};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::expr_rewriter::FunctionRewrite;
@@ -42,7 +43,7 @@ impl FunctionRewrite for ArrayFunctionRewriter {
         expr: Expr,
         schema: &DFSchema,
         _config: &ConfigOptions,
-    ) -> datafusion_common::Result<Transformed<Expr>> {
+    ) -> Result<Transformed<Expr>> {
         let transformed = match expr {
             // array1 @> array2 -> array_has_all(array1, array2)
             Expr::BinaryExpr(BinaryExpr { left, op, right })

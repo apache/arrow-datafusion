@@ -24,7 +24,7 @@ use arrow_buffer::{BooleanBufferBuilder, NullBuffer, OffsetBuffer};
 use arrow_schema::DataType::{FixedSizeList, LargeList, List};
 use arrow_schema::{DataType, Field, SortOptions};
 use datafusion_common::cast::{as_list_array, as_string_array};
-use datafusion_common::exec_err;
+use datafusion_common::{exec_err, Result};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ColumnarValue, Expr, ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
@@ -57,6 +57,7 @@ impl ScalarUDFImpl for ArraySort {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_sort"
     }
@@ -65,7 +66,7 @@ impl ScalarUDFImpl for ArraySort {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         match &arg_types[0] {
             List(field) | FixedSizeList(field, _) => Ok(List(Arc::new(Field::new(
                 "item",
@@ -83,7 +84,7 @@ impl ScalarUDFImpl for ArraySort {
         }
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_sort_inner)(args)
     }
 
@@ -93,7 +94,7 @@ impl ScalarUDFImpl for ArraySort {
 }
 
 /// Array_sort SQL function
-pub fn array_sort_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRef> {
+pub fn array_sort_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     if args.is_empty() || args.len() > 3 {
         return exec_err!("array_sort expects one to three arguments");
     }
@@ -157,7 +158,7 @@ pub fn array_sort_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRef
     Ok(Arc::new(list_arr))
 }
 
-fn order_desc(modifier: &str) -> datafusion_common::Result<bool> {
+fn order_desc(modifier: &str) -> Result<bool> {
     match modifier.to_uppercase().as_str() {
         "DESC" => Ok(true),
         "ASC" => Ok(false),
@@ -165,7 +166,7 @@ fn order_desc(modifier: &str) -> datafusion_common::Result<bool> {
     }
 }
 
-fn order_nulls_first(modifier: &str) -> datafusion_common::Result<bool> {
+fn order_nulls_first(modifier: &str) -> Result<bool> {
     match modifier.to_uppercase().as_str() {
         "NULLS FIRST" => Ok(true),
         "NULLS LAST" => Ok(false),

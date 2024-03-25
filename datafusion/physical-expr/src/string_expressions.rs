@@ -33,39 +33,10 @@ use arrow::{
 
 use datafusion_common::Result;
 use datafusion_common::{
-    cast::{as_generic_string_array, as_int64_array, as_string_array},
+    cast::{as_generic_string_array, as_string_array},
     exec_err, ScalarValue,
 };
 use datafusion_expr::ColumnarValue;
-
-/// Returns the character with the given code. chr(0) is disallowed because text data types cannot store that character.
-/// chr(65) = 'A'
-pub fn chr(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let integer_array = as_int64_array(&args[0])?;
-
-    // first map is the iterator, second is for the `Option<_>`
-    let result = integer_array
-        .iter()
-        .map(|integer: Option<i64>| {
-            integer
-                .map(|integer| {
-                    if integer == 0 {
-                        exec_err!("null character not permitted.")
-                    } else {
-                        match core::char::from_u32(integer as u32) {
-                            Some(integer) => Ok(integer.to_string()),
-                            None => {
-                                exec_err!("requested character too large for encoding.")
-                            }
-                        }
-                    }
-                })
-                .transpose()
-        })
-        .collect::<Result<StringArray>>()?;
-
-    Ok(Arc::new(result) as ArrayRef)
-}
 
 /// Concatenates the text representations of all the arguments. NULL arguments are ignored.
 /// concat('abcde', 2, NULL, 22) = 'abcde222'
@@ -240,73 +211,6 @@ pub fn instr<T: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<ArrayRef> {
             )
         }
     }
-}
-
-/// Repeats string the specified number of times.
-/// repeat('Pg', 4) = 'PgPgPgPg'
-pub fn repeat<T: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let string_array = as_generic_string_array::<T>(&args[0])?;
-    let number_array = as_int64_array(&args[1])?;
-
-    let result = string_array
-        .iter()
-        .zip(number_array.iter())
-        .map(|(string, number)| match (string, number) {
-            (Some(string), Some(number)) => Some(string.repeat(number as usize)),
-            _ => None,
-        })
-        .collect::<GenericStringArray<T>>();
-
-    Ok(Arc::new(result) as ArrayRef)
-}
-
-/// Replaces all occurrences in string of substring from with substring to.
-/// replace('abcdefabcdef', 'cd', 'XX') = 'abXXefabXXef'
-pub fn replace<T: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let string_array = as_generic_string_array::<T>(&args[0])?;
-    let from_array = as_generic_string_array::<T>(&args[1])?;
-    let to_array = as_generic_string_array::<T>(&args[2])?;
-
-    let result = string_array
-        .iter()
-        .zip(from_array.iter())
-        .zip(to_array.iter())
-        .map(|((string, from), to)| match (string, from, to) {
-            (Some(string), Some(from), Some(to)) => Some(string.replace(from, to)),
-            _ => None,
-        })
-        .collect::<GenericStringArray<T>>();
-
-    Ok(Arc::new(result) as ArrayRef)
-}
-
-/// Splits string at occurrences of delimiter and returns the n'th field (counting from one).
-/// split_part('abc~@~def~@~ghi', '~@~', 2) = 'def'
-pub fn split_part<T: OffsetSizeTrait>(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let string_array = as_generic_string_array::<T>(&args[0])?;
-    let delimiter_array = as_generic_string_array::<T>(&args[1])?;
-    let n_array = as_int64_array(&args[2])?;
-    let result = string_array
-        .iter()
-        .zip(delimiter_array.iter())
-        .zip(n_array.iter())
-        .map(|((string, delimiter), n)| match (string, delimiter, n) {
-            (Some(string), Some(delimiter), Some(n)) => {
-                if n <= 0 {
-                    exec_err!("field position must be greater than zero")
-                } else {
-                    let split_string: Vec<&str> = string.split(delimiter).collect();
-                    match split_string.get(n as usize - 1) {
-                        Some(s) => Ok(Some(*s)),
-                        None => Ok(Some("")),
-                    }
-                }
-            }
-            _ => Ok(None),
-        })
-        .collect::<Result<GenericStringArray<T>>>()?;
-
-    Ok(Arc::new(result) as ArrayRef)
 }
 
 /// Returns true if string starts with prefix.

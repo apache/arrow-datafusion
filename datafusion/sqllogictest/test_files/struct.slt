@@ -58,6 +58,15 @@ select struct(a, b, c) from values;
 {c0: 2, c1: 2.2, c2: b}
 {c0: 3, c1: 3.3, c2: c}
 
+# struct scalar function with columns and scalars
+query ?
+select struct(a, 'foo') from values;
+----
+{c0: 1, c1: foo}
+{c0: 2, c1: foo}
+{c0: 3, c1: foo}
+
+
 # explain struct scalar function with columns #1
 query TT
 explain select struct(a, b, c) from values;

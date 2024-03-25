@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// core array function like `make_array`
+//! [`ScalarUDFImpl`] definitions for `make_array` function.
 
 use std::{any::Any, sync::Arc};
 
@@ -24,9 +24,9 @@ use arrow_array::{
     new_null_array, Array, ArrayRef, GenericListArray, NullArray, OffsetSizeTrait,
 };
 use arrow_buffer::OffsetBuffer;
+use arrow_schema::DataType::{LargeList, List, Null};
 use arrow_schema::{DataType, Field};
-use datafusion_common::Result;
-use datafusion_common::{plan_err, utils::array_into_list_array};
+use datafusion_common::{plan_err, utils::array_into_list_array, Result};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::Expr;
 use datafusion_expr::{
@@ -73,7 +73,7 @@ impl ScalarUDFImpl for MakeArray {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         match arg_types.len() {
             0 => Ok(DataType::List(Arc::new(Field::new(
                 "item",
@@ -89,9 +89,7 @@ impl ScalarUDFImpl for MakeArray {
                     }
                 }
 
-                Ok(DataType::List(Arc::new(Field::new(
-                    "item", expr_type, true,
-                ))))
+                Ok(List(Arc::new(Field::new("item", expr_type, true))))
             }
         }
     }
@@ -109,10 +107,10 @@ impl ScalarUDFImpl for MakeArray {
 /// Constructs an array using the input `data` as `ArrayRef`.
 /// Returns a reference-counted `Array` instance result.
 pub(crate) fn make_array_inner(arrays: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut data_type = DataType::Null;
+    let mut data_type = Null;
     for arg in arrays {
         let arg_data_type = arg.data_type();
-        if !arg_data_type.equals_datatype(&DataType::Null) {
+        if !arg_data_type.equals_datatype(&Null) {
             data_type = arg_data_type.clone();
             break;
         }
@@ -120,12 +118,11 @@ pub(crate) fn make_array_inner(arrays: &[ArrayRef]) -> Result<ArrayRef> {
 
     match data_type {
         // Either an empty array or all nulls:
-        DataType::Null => {
-            let array =
-                new_null_array(&DataType::Null, arrays.iter().map(|a| a.len()).sum());
+        Null => {
+            let array = new_null_array(&Null, arrays.iter().map(|a| a.len()).sum());
             Ok(Arc::new(array_into_list_array(array)))
         }
-        DataType::LargeList(..) => array_array::<i64>(arrays, data_type),
+        LargeList(..) => array_array::<i64>(arrays, data_type),
         _ => array_array::<i32>(arrays, data_type),
     }
 }

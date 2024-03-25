@@ -2862,10 +2862,10 @@ pub enum ScalarFunction {
     Trunc = 19,
     /// 20 was Array
     /// RegexpMatch = 21;
-    BitLength = 22,
+    /// 22 was BitLength
     /// 23 was Btrim
     CharacterLength = 24,
-    Chr = 25,
+    /// 25 was Chr
     Concat = 26,
     ConcatWithSeparator = 27,
     /// 28 was DatePart
@@ -2880,8 +2880,8 @@ pub enum ScalarFunction {
     /// 37 was OctetLength
     Random = 38,
     /// 39 was RegexpReplace
-    Repeat = 40,
-    Replace = 41,
+    /// 40 was Repeat
+    /// 41 was Replace
     Reverse = 42,
     Right = 43,
     Rpad = 44,
@@ -2890,7 +2890,7 @@ pub enum ScalarFunction {
     /// 47 was SHA256
     /// 48 was SHA384
     /// 49 was SHA512
-    SplitPart = 50,
+    /// 50 was SplitPart
     /// StartsWith = 51;
     Strpos = 52,
     Substr = 53,
@@ -3001,21 +3001,16 @@ impl ScalarFunction {
             ScalarFunction::Sin => "Sin",
             ScalarFunction::Sqrt => "Sqrt",
             ScalarFunction::Trunc => "Trunc",
-            ScalarFunction::BitLength => "BitLength",
             ScalarFunction::CharacterLength => "CharacterLength",
-            ScalarFunction::Chr => "Chr",
             ScalarFunction::Concat => "Concat",
             ScalarFunction::ConcatWithSeparator => "ConcatWithSeparator",
             ScalarFunction::InitCap => "InitCap",
             ScalarFunction::Left => "Left",
             ScalarFunction::Lpad => "Lpad",
             ScalarFunction::Random => "Random",
-            ScalarFunction::Repeat => "Repeat",
-            ScalarFunction::Replace => "Replace",
             ScalarFunction::Reverse => "Reverse",
             ScalarFunction::Right => "Right",
             ScalarFunction::Rpad => "Rpad",
-            ScalarFunction::SplitPart => "SplitPart",
             ScalarFunction::Strpos => "Strpos",
             ScalarFunction::Substr => "Substr",
             ScalarFunction::Translate => "Translate",
@@ -3060,21 +3055,16 @@ impl ScalarFunction {
             "Sin" => Some(Self::Sin),
             "Sqrt" => Some(Self::Sqrt),
             "Trunc" => Some(Self::Trunc),
-            "BitLength" => Some(Self::BitLength),
             "CharacterLength" => Some(Self::CharacterLength),
-            "Chr" => Some(Self::Chr),
             "Concat" => Some(Self::Concat),
             "ConcatWithSeparator" => Some(Self::ConcatWithSeparator),
             "InitCap" => Some(Self::InitCap),
             "Left" => Some(Self::Left),
             "Lpad" => Some(Self::Lpad),
             "Random" => Some(Self::Random),
-            "Repeat" => Some(Self::Repeat),
-            "Replace" => Some(Self::Replace),
             "Reverse" => Some(Self::Reverse),
             "Right" => Some(Self::Right),
             "Rpad" => Some(Self::Rpad),
-            "SplitPart" => Some(Self::SplitPart),
             "Strpos" => Some(Self::Strpos),
             "Substr" => Some(Self::Substr),
             "Translate" => Some(Self::Translate),

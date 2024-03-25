@@ -2661,7 +2661,7 @@ PT123456S
 query T
 select to_char(arrow_cast(123456, 'Duration(Second)'), null);
 ----
-PT123456S
+NULL
 
 query error DataFusion error: Execution error: Cast error: Format error
 SELECT to_char(timestamps, '%X%K') from formats;
@@ -2672,13 +2672,21 @@ SELECT to_char('2000-02-03'::date, '%X%K');
 query T
 SELECT to_char(timestamps, null) from formats;
 ----
-2024-01-01T06:00:00Z
-2025-01-01T23:59:58Z
+NULL
+NULL
 
 query T
 SELECT to_char(null, '%d-%m-%Y');
 ----
 (empty)
+
+query T
+SELECT to_char(column1, column2)
+FROM
+(VALUES ('2024-01-01 06:00:00'::timestamp, null), ('2025-01-01 23:59:58'::timestamp, '%d:%m:%Y %H-%M-%S'));
+----
+NULL
+01:01:2025 23-59-58
 
 statement ok
 drop table formats;

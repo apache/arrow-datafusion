@@ -15,15 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! Array Intersection, Union, and Distinct functions
+//! [`ScalarUDFImpl`] definitions for array_union, array_intersect and array_distinct functions.
 
-use crate::core::make_array_inner;
+use crate::make_array::make_array_inner;
 use crate::utils::make_scalar_function;
 use arrow::array::{new_empty_array, Array, ArrayRef, GenericListArray, OffsetSizeTrait};
 use arrow::buffer::OffsetBuffer;
 use arrow::compute;
 use arrow::datatypes::{DataType, Field, FieldRef};
 use arrow::row::{RowConverter, SortField};
+use arrow_schema::DataType::{FixedSizeList, LargeList, List, Null};
 use datafusion_common::cast::{as_large_list_array, as_list_array};
 use datafusion_common::{exec_err, internal_err, Result};
 use datafusion_expr::expr::ScalarFunction;
@@ -48,7 +49,7 @@ make_udf_function!(
     ArrayIntersect,
     array_intersect,
     first_array second_array,
-    "Returns an array of the elements in the intersection of array1 and array2.",
+    "returns an array of the elements in the intersection of array1 and array2.",
     array_intersect_udf
 );
 
@@ -56,7 +57,7 @@ make_udf_function!(
     ArrayDistinct,
     array_distinct,
     array,
-    "return distinct values from the array after removing duplicates.",
+    "returns distinct values from the array after removing duplicates.",
     array_distinct_udf
 );
 
@@ -79,6 +80,7 @@ impl ScalarUDFImpl for ArrayUnion {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_union"
     }
@@ -89,8 +91,8 @@ impl ScalarUDFImpl for ArrayUnion {
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         match (&arg_types[0], &arg_types[1]) {
-            (&DataType::Null, dt) => Ok(dt.clone()),
-            (dt, DataType::Null) => Ok(dt.clone()),
+            (&Null, dt) => Ok(dt.clone()),
+            (dt, Null) => Ok(dt.clone()),
             (dt, _) => Ok(dt.clone()),
         }
     }
@@ -126,6 +128,7 @@ impl ScalarUDFImpl for ArrayIntersect {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_intersect"
     }
@@ -136,12 +139,8 @@ impl ScalarUDFImpl for ArrayIntersect {
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         match (arg_types[0].clone(), arg_types[1].clone()) {
-            (DataType::Null, DataType::Null) | (DataType::Null, _) => Ok(DataType::Null),
-            (_, DataType::Null) => Ok(DataType::List(Arc::new(Field::new(
-                "item",
-                DataType::Null,
-                true,
-            )))),
+            (Null, Null) | (Null, _) => Ok(Null),
+            (_, Null) => Ok(List(Arc::new(Field::new("item", Null, true)))),
             (dt, _) => Ok(dt),
         }
     }
@@ -174,6 +173,7 @@ impl ScalarUDFImpl for ArrayDistinct {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_distinct"
     }
@@ -183,7 +183,6 @@ impl ScalarUDFImpl for ArrayDistinct {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        use DataType::*;
         match &arg_types[0] {
             List(field) | FixedSizeList(field, _) => Ok(List(Arc::new(Field::new(
                 "item",
@@ -218,17 +217,17 @@ fn array_distinct_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     }
 
     // handle null
-    if args[0].data_type() == &DataType::Null {
+    if args[0].data_type() == &Null {
         return Ok(args[0].clone());
     }
 
     // handle for list & largelist
     match args[0].data_type() {
-        DataType::List(field) => {
+        List(field) => {
             let array = as_list_array(&args[0])?;
             general_array_distinct(array, field)
         }
-        DataType::LargeList(field) => {
+        LargeList(field) => {
             let array = as_large_list_array(&args[0])?;
             general_array_distinct(array, field)
         }
@@ -257,10 +256,10 @@ fn generic_set_lists<OffsetSize: OffsetSizeTrait>(
     field: Arc<Field>,
     set_op: SetOp,
 ) -> Result<ArrayRef> {
-    if matches!(l.value_type(), DataType::Null) {
+    if matches!(l.value_type(), Null) {
         let field = Arc::new(Field::new("item", r.value_type(), true));
         return general_array_distinct::<OffsetSize>(r, &field);
-    } else if matches!(r.value_type(), DataType::Null) {
+    } else if matches!(r.value_type(), Null) {
         let field = Arc::new(Field::new("item", l.value_type(), true));
         return general_array_distinct::<OffsetSize>(l, &field);
     }
@@ -331,43 +330,43 @@ fn general_set_op(
     set_op: SetOp,
 ) -> Result<ArrayRef> {
     match (array1.data_type(), array2.data_type()) {
-        (DataType::Null, DataType::List(field)) => {
+        (Null, List(field)) => {
             if set_op == SetOp::Intersect {
-                return Ok(new_empty_array(&DataType::Null));
+                return Ok(new_empty_array(&Null));
             }
             let array = as_list_array(&array2)?;
             general_array_distinct::<i32>(array, field)
         }
 
-        (DataType::List(field), DataType::Null) => {
+        (List(field), Null) => {
             if set_op == SetOp::Intersect {
                 return make_array_inner(&[]);
             }
             let array = as_list_array(&array1)?;
             general_array_distinct::<i32>(array, field)
         }
-        (DataType::Null, DataType::LargeList(field)) => {
+        (Null, LargeList(field)) => {
             if set_op == SetOp::Intersect {
-                return Ok(new_empty_array(&DataType::Null));
+                return Ok(new_empty_array(&Null));
             }
             let array = as_large_list_array(&array2)?;
             general_array_distinct::<i64>(array, field)
         }
-        (DataType::LargeList(field), DataType::Null) => {
+        (LargeList(field), Null) => {
             if set_op == SetOp::Intersect {
                 return make_array_inner(&[]);
             }
             let array = as_large_list_array(&array1)?;
             general_array_distinct::<i64>(array, field)
         }
-        (DataType::Null, DataType::Null) => Ok(new_empty_array(&DataType::Null)),
+        (Null, Null) => Ok(new_empty_array(&Null)),
 
-        (DataType::List(field), DataType::List(_)) => {
+        (List(field), List(_)) => {
             let array1 = as_list_array(&array1)?;
             let array2 = as_list_array(&array2)?;
             generic_set_lists::<i32>(array1, array2, field.clone(), set_op)
         }
-        (DataType::LargeList(field), DataType::LargeList(_)) => {
+        (LargeList(field), LargeList(_)) => {
             let array1 = as_large_list_array(&array1)?;
             let array2 = as_large_list_array(&array2)?;
             generic_set_lists::<i64>(array1, array2, field.clone(), set_op)

@@ -25,6 +25,7 @@ use std::any::Any;
 use crate::utils::make_scalar_function;
 use arrow_array::types::{Date32Type, IntervalMonthDayNanoType};
 use arrow_array::Date32Array;
+use arrow_schema::DataType::{Date32, Int64, Interval, List};
 use arrow_schema::IntervalUnit::MonthDayNano;
 use datafusion_common::cast::{as_date32_array, as_int64_array, as_interval_mdn_array};
 use datafusion_common::{exec_err, not_impl_datafusion_err, Result};
@@ -49,7 +50,6 @@ pub(super) struct Range {
 }
 impl Range {
     pub fn new() -> Self {
-        use DataType::*;
         Self {
             signature: Signature::one_of(
                 vec![
@@ -77,7 +77,6 @@ impl ScalarUDFImpl for Range {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        use DataType::*;
         Ok(List(Arc::new(Field::new(
             "item",
             arg_types[0].clone(),
@@ -87,12 +86,8 @@ impl ScalarUDFImpl for Range {
 
     fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         match args[0].data_type() {
-            DataType::Int64 => {
-                make_scalar_function(|args| gen_range_inner(args, false))(args)
-            }
-            DataType::Date32 => {
-                make_scalar_function(|args| gen_range_date(args, false))(args)
-            }
+            Int64 => make_scalar_function(|args| gen_range_inner(args, false))(args),
+            Date32 => make_scalar_function(|args| gen_range_date(args, false))(args),
             _ => {
                 exec_err!("unsupported type for range")
             }
@@ -118,7 +113,6 @@ pub(super) struct GenSeries {
 }
 impl GenSeries {
     pub fn new() -> Self {
-        use DataType::*;
         Self {
             signature: Signature::one_of(
                 vec![
@@ -146,7 +140,6 @@ impl ScalarUDFImpl for GenSeries {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        use DataType::*;
         Ok(List(Arc::new(Field::new(
             "item",
             arg_types[0].clone(),
@@ -156,12 +149,8 @@ impl ScalarUDFImpl for GenSeries {
 
     fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         match args[0].data_type() {
-            DataType::Int64 => {
-                make_scalar_function(|args| gen_range_inner(args, true))(args)
-            }
-            DataType::Date32 => {
-                make_scalar_function(|args| gen_range_date(args, true))(args)
-            }
+            Int64 => make_scalar_function(|args| gen_range_inner(args, true))(args),
+            Date32 => make_scalar_function(|args| gen_range_date(args, true))(args),
             _ => {
                 exec_err!("unsupported type for range")
             }
@@ -242,7 +231,7 @@ pub(super) fn gen_range_inner(
         };
     }
     let arr = Arc::new(ListArray::try_new(
-        Arc::new(Field::new("item", DataType::Int64, true)),
+        Arc::new(Field::new("item", Int64, true)),
         OffsetBuffer::new(offsets.into()),
         Arc::new(Int64Array::from(values)),
         Some(NullBuffer::new(valid.finish())),
@@ -330,7 +319,7 @@ fn gen_range_date(args: &[ArrayRef], include_upper: bool) -> Result<ArrayRef> {
     }
 
     let arr = Arc::new(ListArray::try_new(
-        Arc::new(Field::new("item", DataType::Date32, true)),
+        Arc::new(Field::new("item", Date32, true)),
         OffsetBuffer::new(offsets.into()),
         Arc::new(Date32Array::from(values)),
         None,

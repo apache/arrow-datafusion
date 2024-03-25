@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! [`ScalarUDFImpl`] definitions for array functions.
+//! [`ScalarUDFImpl`] definitions for array_replace, array_replace_n and array_replace_all functions.
 
 use arrow::array::{
     Array, ArrayRef, AsArray, Capacities, MutableArrayData, OffsetSizeTrait,
@@ -76,6 +76,7 @@ impl ScalarUDFImpl for ArrayReplace {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_replace"
     }
@@ -84,11 +85,11 @@ impl ScalarUDFImpl for ArrayReplace {
         &self.signature
     }
 
-    fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, args: &[DataType]) -> Result<DataType> {
         Ok(args[0].clone())
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_replace_inner)(args)
     }
 
@@ -119,6 +120,7 @@ impl ScalarUDFImpl for ArrayReplaceN {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_replace_n"
     }
@@ -127,11 +129,11 @@ impl ScalarUDFImpl for ArrayReplaceN {
         &self.signature
     }
 
-    fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, args: &[DataType]) -> Result<DataType> {
         Ok(args[0].clone())
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_replace_n_inner)(args)
     }
 
@@ -162,6 +164,7 @@ impl ScalarUDFImpl for ArrayReplaceAll {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_replace_all"
     }
@@ -170,11 +173,11 @@ impl ScalarUDFImpl for ArrayReplaceAll {
         &self.signature
     }
 
-    fn return_type(&self, args: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, args: &[DataType]) -> Result<DataType> {
         Ok(args[0].clone())
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_replace_all_inner)(args)
     }
 
@@ -183,7 +186,7 @@ impl ScalarUDFImpl for ArrayReplaceAll {
     }
 }
 
-/// For each element of `list_array[i]`, replaces up to `arr_n[i]`  occurences
+/// For each element of `list_array[i]`, replaces up to `arr_n[i]`  occurrences
 /// of `from_array[i]`, `to_array[i]`.
 ///
 /// The type of each **element** in `list_array` must be the same as the type of
@@ -299,7 +302,7 @@ pub(crate) fn array_replace_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         return exec_err!("array_replace expects three arguments");
     }
 
-    // replace at most one occurence for each element
+    // replace at most one occurrence for each element
     let arr_n = vec![1; args[0].len()];
     let array = &args[0];
     match array.data_type() {
@@ -320,7 +323,7 @@ pub(crate) fn array_replace_n_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
         return exec_err!("array_replace_n expects four arguments");
     }
 
-    // replace the specified number of occurences
+    // replace the specified number of occurrences
     let arr_n = as_int64_array(&args[3])?.values().to_vec();
     let array = &args[0];
     match array.data_type() {

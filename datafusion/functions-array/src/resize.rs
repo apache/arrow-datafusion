@@ -24,7 +24,7 @@ use arrow_buffer::{ArrowNativeType, OffsetBuffer};
 use arrow_schema::DataType::{FixedSizeList, LargeList, List};
 use arrow_schema::{DataType, FieldRef};
 use datafusion_common::cast::{as_int64_array, as_large_list_array, as_list_array};
-use datafusion_common::{exec_err, internal_datafusion_err, ScalarValue};
+use datafusion_common::{exec_err, internal_datafusion_err, Result, ScalarValue};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ColumnarValue, Expr, ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
@@ -57,6 +57,7 @@ impl ScalarUDFImpl for ArrayResize {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_resize"
     }
@@ -65,7 +66,7 @@ impl ScalarUDFImpl for ArrayResize {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         match &arg_types[0] {
             List(field) | FixedSizeList(field, _) => Ok(List(field.clone())),
             LargeList(field) => Ok(LargeList(field.clone())),
@@ -75,7 +76,7 @@ impl ScalarUDFImpl for ArrayResize {
         }
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_resize_inner)(args)
     }
 
@@ -85,7 +86,7 @@ impl ScalarUDFImpl for ArrayResize {
 }
 
 /// array_resize SQL function
-pub fn array_resize_inner(arg: &[ArrayRef]) -> datafusion_common::Result<ArrayRef> {
+pub(crate) fn array_resize_inner(arg: &[ArrayRef]) -> Result<ArrayRef> {
     if arg.len() < 2 || arg.len() > 3 {
         return exec_err!("array_resize needs two or three arguments");
     }
@@ -98,11 +99,11 @@ pub fn array_resize_inner(arg: &[ArrayRef]) -> datafusion_common::Result<ArrayRe
     };
 
     match &arg[0].data_type() {
-        DataType::List(field) => {
+        List(field) => {
             let array = as_list_array(&arg[0])?;
             general_list_resize::<i32>(array, new_len, field, new_element)
         }
-        DataType::LargeList(field) => {
+        LargeList(field) => {
             let array = as_large_list_array(&arg[0])?;
             general_list_resize::<i64>(array, new_len, field, new_element)
         }
@@ -116,7 +117,7 @@ fn general_list_resize<O: OffsetSizeTrait>(
     count_array: &Int64Array,
     field: &FieldRef,
     default_element: Option<ArrayRef>,
-) -> datafusion_common::Result<ArrayRef>
+) -> Result<ArrayRef>
 where
     O: TryInto<i64>,
 {

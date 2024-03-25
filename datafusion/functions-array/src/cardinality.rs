@@ -22,6 +22,7 @@ use arrow_array::{ArrayRef, GenericListArray, OffsetSizeTrait, UInt64Array};
 use arrow_schema::DataType;
 use arrow_schema::DataType::{FixedSizeList, LargeList, List, UInt64};
 use datafusion_common::cast::{as_large_list_array, as_list_array};
+use datafusion_common::Result;
 use datafusion_common::{exec_err, plan_err};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ColumnarValue, Expr, ScalarUDFImpl, Signature, Volatility};
@@ -62,7 +63,7 @@ impl ScalarUDFImpl for Cardinality {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         Ok(match arg_types[0] {
             List(_) | LargeList(_) | FixedSizeList(_, _) => UInt64,
             _ => {
@@ -71,7 +72,7 @@ impl ScalarUDFImpl for Cardinality {
         })
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(cardinality_inner)(args)
     }
 
@@ -81,7 +82,7 @@ impl ScalarUDFImpl for Cardinality {
 }
 
 /// Cardinality SQL function
-pub fn cardinality_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRef> {
+pub fn cardinality_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     if args.len() != 1 {
         return exec_err!("cardinality expects one argument");
     }
@@ -103,13 +104,13 @@ pub fn cardinality_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRe
 
 fn generic_list_cardinality<O: OffsetSizeTrait>(
     array: &GenericListArray<O>,
-) -> datafusion_common::Result<ArrayRef> {
+) -> Result<ArrayRef> {
     let result = array
         .iter()
         .map(|arr| match crate::utils::compute_array_dims(arr)? {
             Some(vector) => Ok(Some(vector.iter().map(|x| x.unwrap()).product::<u64>())),
             None => Ok(None),
         })
-        .collect::<datafusion_common::Result<UInt64Array>>()?;
+        .collect::<Result<UInt64Array>>()?;
     Ok(Arc::new(result) as ArrayRef)
 }

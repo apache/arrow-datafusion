@@ -326,8 +326,10 @@ pub trait ScalarUDFImpl: Debug + Send + Sync {
     ///
     /// For the best performance, the implementations of `invoke` should handle
     /// the common case when one or more of their arguments are constant values
-    /// (aka  [`ColumnarValue::Scalar`]). Calling [`ColumnarValue::into_array`]
-    /// and treating all arguments as arrays will work, but will be slower.
+    /// (aka  [`ColumnarValue::Scalar`]).
+    ///
+    /// [`ColumnarValue::values_to_arrays`] can be used to convert the arguments
+    /// to arrays, which will likely be simpler code, but be slower.
     fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue>;
 
     /// Returns any aliases (alternate names) for this function.

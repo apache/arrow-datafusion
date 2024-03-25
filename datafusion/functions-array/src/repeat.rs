@@ -28,7 +28,7 @@ use arrow_buffer::OffsetBuffer;
 use arrow_schema::DataType::{LargeList, List};
 use arrow_schema::{DataType, Field};
 use datafusion_common::cast::{as_int64_array, as_large_list_array, as_list_array};
-use datafusion_common::exec_err;
+use datafusion_common::{exec_err, Result};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ColumnarValue, Expr, ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
@@ -60,6 +60,7 @@ impl ScalarUDFImpl for ArrayRepeat {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn name(&self) -> &str {
         "array_repeat"
     }
@@ -68,7 +69,7 @@ impl ScalarUDFImpl for ArrayRepeat {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         Ok(List(Arc::new(Field::new(
             "item",
             arg_types[0].clone(),
@@ -76,7 +77,7 @@ impl ScalarUDFImpl for ArrayRepeat {
         ))))
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_repeat_inner)(args)
     }
 
@@ -86,7 +87,7 @@ impl ScalarUDFImpl for ArrayRepeat {
 }
 
 /// Array_repeat SQL function
-pub fn array_repeat_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRef> {
+pub fn array_repeat_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     if args.len() != 2 {
         return exec_err!("array_repeat expects two arguments");
     }
@@ -122,7 +123,7 @@ pub fn array_repeat_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayR
 fn general_repeat<O: OffsetSizeTrait>(
     array: &ArrayRef,
     count_array: &Int64Array,
-) -> datafusion_common::Result<ArrayRef> {
+) -> Result<ArrayRef> {
     let data_type = array.data_type();
     let mut new_values = vec![];
 
@@ -176,7 +177,7 @@ fn general_repeat<O: OffsetSizeTrait>(
 fn general_list_repeat<O: OffsetSizeTrait>(
     list_array: &GenericListArray<O>,
     count_array: &Int64Array,
-) -> datafusion_common::Result<ArrayRef> {
+) -> Result<ArrayRef> {
     let data_type = list_array.data_type();
     let value_type = list_array.value_type();
     let mut new_values = vec![];

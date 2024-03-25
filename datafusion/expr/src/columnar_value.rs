@@ -26,11 +26,14 @@ use datafusion_common::{internal_err, Result, ScalarValue};
 use std::sync::Arc;
 
 /// Represents the result of evaluating an expression: either a single
-/// `ScalarValue` or an [`ArrayRef`].
+/// [`ScalarValue`] or an [`ArrayRef`].
 ///
 /// While a [`ColumnarValue`] can always be converted into an array
 /// for convenience, it is often much more performant to provide an
 /// optimized path for scalar values.
+///
+/// See [`ColumnarValue::values_to_arrays`] for a function that converts
+/// multiple columnar values into arrays of the same length.
 #[derive(Clone, Debug)]
 pub enum ColumnarValue {
     /// Array of values
@@ -59,8 +62,13 @@ impl ColumnarValue {
         }
     }
 
-    /// Convert a columnar value into an ArrayRef. [`Self::Scalar`] is
-    /// converted by repeating the same scalar multiple times.
+    /// Convert a columnar value into an Arrow [`ArrayRef`] with the specified
+    /// number of rows. [`Self::Scalar`] is converted by repeating the same
+    /// scalar multiple times which is not as efficient as handling the scalar
+    /// directly.
+    ///
+    /// See [`Self::values_to_arrays`] to convert multiple columnar values into
+    /// arrays of the same length.
     ///
     /// # Errors
     ///

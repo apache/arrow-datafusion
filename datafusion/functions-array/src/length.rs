@@ -26,7 +26,7 @@ use arrow_schema::DataType::{FixedSizeList, LargeList, List, UInt64};
 use core::any::type_name;
 use datafusion_common::cast::{as_generic_list_array, as_int64_array};
 use datafusion_common::DataFusionError;
-use datafusion_common::{exec_err, plan_err};
+use datafusion_common::{exec_err, plan_err, Result};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{ColumnarValue, Expr, ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
@@ -66,7 +66,7 @@ impl ScalarUDFImpl for ArrayLength {
         &self.signature
     }
 
-    fn return_type(&self, arg_types: &[DataType]) -> datafusion_common::Result<DataType> {
+    fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         Ok(match arg_types[0] {
             List(_) | LargeList(_) | FixedSizeList(_, _) => UInt64,
             _ => {
@@ -75,7 +75,7 @@ impl ScalarUDFImpl for ArrayLength {
         })
     }
 
-    fn invoke(&self, args: &[ColumnarValue]) -> datafusion_common::Result<ColumnarValue> {
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
         make_scalar_function(array_length_inner)(args)
     }
 
@@ -85,7 +85,7 @@ impl ScalarUDFImpl for ArrayLength {
 }
 
 /// Array_length SQL function
-pub fn array_length_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRef> {
+pub fn array_length_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     if args.len() != 1 && args.len() != 2 {
         return exec_err!("array_length expects one or two arguments");
     }
@@ -98,9 +98,7 @@ pub fn array_length_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayR
 }
 
 /// Dispatch array length computation based on the offset type.
-fn general_array_length<O: OffsetSizeTrait>(
-    array: &[ArrayRef],
-) -> datafusion_common::Result<ArrayRef> {
+fn general_array_length<O: OffsetSizeTrait>(array: &[ArrayRef]) -> Result<ArrayRef> {
     let list_array = as_generic_list_array::<O>(&array[0])?;
     let dimension = if array.len() == 2 {
         as_int64_array(&array[1])?.clone()
@@ -112,7 +110,7 @@ fn general_array_length<O: OffsetSizeTrait>(
         .iter()
         .zip(dimension.iter())
         .map(|(arr, dim)| compute_array_length(arr, dim))
-        .collect::<datafusion_common::Result<UInt64Array>>()?;
+        .collect::<Result<UInt64Array>>()?;
 
     Ok(Arc::new(result) as ArrayRef)
 }
@@ -121,7 +119,7 @@ fn general_array_length<O: OffsetSizeTrait>(
 fn compute_array_length(
     arr: Option<ArrayRef>,
     dimension: Option<i64>,
-) -> datafusion_common::Result<Option<u64>> {
+) -> Result<Option<u64>> {
     let mut current_dimension: i64 = 1;
     let mut value = match arr {
         Some(arr) => arr,

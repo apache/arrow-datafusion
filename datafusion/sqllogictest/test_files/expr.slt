@@ -415,6 +415,12 @@ SELECT chr(CAST(NULL AS int))
 ----
 NULL
 
+statement error DataFusion error: Execution error: null character not permitted.
+SELECT chr(CAST(0 AS int))
+
+statement error DataFusion error: Execution error: requested character too large for encoding.
+SELECT chr(CAST(9223372036854775807 AS bigint))
+
 query T
 SELECT concat('a','b','c')
 ----

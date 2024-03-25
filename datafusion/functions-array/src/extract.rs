@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Array Element and Array Slice
+//! [`ScalarUDFImpl`] definitions for array_element, array_slice, array_pop_front and array_pop_back functions.
 
 use arrow::array::Array;
 use arrow::array::ArrayRef;
@@ -27,15 +27,14 @@ use arrow::array::MutableArrayData;
 use arrow::array::OffsetSizeTrait;
 use arrow::buffer::OffsetBuffer;
 use arrow::datatypes::DataType;
+use arrow_schema::DataType::{FixedSizeList, LargeList, List};
 use arrow_schema::Field;
 use datafusion_common::cast::as_int64_array;
 use datafusion_common::cast::as_large_list_array;
 use datafusion_common::cast::as_list_array;
-use datafusion_common::exec_err;
-use datafusion_common::internal_datafusion_err;
-use datafusion_common::plan_err;
-use datafusion_common::DataFusionError;
-use datafusion_common::Result;
+use datafusion_common::{
+    exec_err, internal_datafusion_err, plan_err, DataFusionError, Result,
+};
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::Expr;
 use datafusion_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
@@ -110,7 +109,6 @@ impl ScalarUDFImpl for ArrayElement {
     }
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
-        use DataType::*;
         match &arg_types[0] {
             List(field)
             | LargeList(field)
@@ -137,18 +135,18 @@ impl ScalarUDFImpl for ArrayElement {
 ///
 /// For example:
 /// > array_element(\[1, 2, 3], 2) -> 2
-fn array_element_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRef> {
+fn array_element_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     if args.len() != 2 {
         return exec_err!("array_element needs two arguments");
     }
 
     match &args[0].data_type() {
-        DataType::List(_) => {
+        List(_) => {
             let array = as_list_array(&args[0])?;
             let indexes = as_int64_array(&args[1])?;
             general_array_element::<i32>(array, indexes)
         }
-        DataType::LargeList(_) => {
+        LargeList(_) => {
             let array = as_large_list_array(&args[0])?;
             let indexes = as_int64_array(&args[1])?;
             general_array_element::<i64>(array, indexes)
@@ -163,7 +161,7 @@ fn array_element_inner(args: &[ArrayRef]) -> datafusion_common::Result<ArrayRef>
 fn general_array_element<O: OffsetSizeTrait>(
     array: &GenericListArray<O>,
     indexes: &Int64Array,
-) -> datafusion_common::Result<ArrayRef>
+) -> Result<ArrayRef>
 where
     i64: TryInto<O>,
 {
@@ -175,10 +173,7 @@ where
     let mut mutable =
         MutableArrayData::with_capacities(vec![&original_data], true, capacity);
 
-    fn adjusted_array_index<O: OffsetSizeTrait>(
-        index: i64,
-        len: O,
-    ) -> datafusion_common::Result<Option<O>>
+    fn adjusted_array_index<O: OffsetSizeTrait>(index: i64, len: O) -> Result<Option<O>>
     where
         i64: TryInto<O>,
     {
@@ -302,11 +297,11 @@ fn array_slice_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     let array_data_type = args[0].data_type();
     match array_data_type {
-        DataType::List(_) => {
+        List(_) => {
             let array = as_list_array(&args[0])?;
             general_array_slice::<i32>(array, from_array, to_array, stride)
         }
-        DataType::LargeList(_) => {
+        LargeList(_) => {
             let array = as_large_list_array(&args[0])?;
             let from_array = as_int64_array(&args[1])?;
             let to_array = as_int64_array(&args[2])?;
@@ -545,11 +540,11 @@ impl ScalarUDFImpl for ArrayPopFront {
 fn array_pop_front_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
     let array_data_type = args[0].data_type();
     match array_data_type {
-        DataType::List(_) => {
+        List(_) => {
             let array = as_list_array(&args[0])?;
             general_pop_front_list::<i32>(array)
         }
-        DataType::LargeList(_) => {
+        LargeList(_) => {
             let array = as_large_list_array(&args[0])?;
             general_pop_front_list::<i64>(array)
         }
@@ -627,11 +622,11 @@ fn array_pop_back_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     let array_data_type = args[0].data_type();
     match array_data_type {
-        DataType::List(_) => {
+        List(_) => {
             let array = as_list_array(&args[0])?;
             general_pop_back_list::<i32>(array)
         }
-        DataType::LargeList(_) => {
+        LargeList(_) => {
             let array = as_large_list_array(&args[0])?;
             general_pop_back_list::<i64>(array)
         }
