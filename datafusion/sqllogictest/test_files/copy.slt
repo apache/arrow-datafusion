@@ -514,10 +514,31 @@ OPTIONS (
 );
 
 
-# Format Options Support with format in OPTIONS i.e. COPY { table_name | query } TO 'file_name' OPTIONS (format <format-name>, ...)
+# Format Options Support with format in OPTIONS
+#
+# i.e. COPY { table_name | query } TO 'file_name' OPTIONS (format <format-name>, ...)
+
+# Ensure that the format is set in the OPTIONS, not extension
+query I
+COPY (select * from (values (1))) to 'test_files/scratch/copy/foo.dat'
+OPTIONS (format parquet);
+----
+1
+
+statement ok
+CREATE EXTERNAL TABLE foo_dat STORED AS PARQUET LOCATION 'test_files/scratch/copy/foo.dat';
 
 query I
-COPY (select * from (values (1))) to 'test_files/scratch/copy/'
+select * from foo_dat;
+----
+1
+
+statement ok
+DROP TABLE foo_dat;
+
+
+query I
+COPY (select * from (values (1))) to 'test_files/scratch/copy'
 OPTIONS (format parquet);
 ----
 1
