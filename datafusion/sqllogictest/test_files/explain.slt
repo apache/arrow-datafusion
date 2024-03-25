@@ -273,12 +273,96 @@ physical_plan
 GlobalLimitExec: skip=0, fetch=10, statistics=[Rows=Inexact(10), Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:)]]
 --CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/example.csv]]}, projection=[a, b, c], limit=10, has_header=true, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:)]]
 
-# Parquet scan with statistics collected
+# Collect statistics
 statement ok
 set datafusion.execution.collect_statistics = true;
 
+# CSV scan
+# query having almost presentative opererators
+query TT
+explain
+SELECT t1.c1, sum(t2.c4)
+FROM aggregate_test_100_with_order as t1, aggregate_test_100_with_order as t2
+WHERE t1.c3 > 10 and t1.c11 != 30.5
+    AND t2.c13 = 'whatever'
+    AND t1.c2 = t2.c2 and t2.c10 < 987654321
+GROUP BY t1.c1
+HAVING sum(t2.c4) > 1
+ORDER BY  t1.c1 ASC
+LIMIT 10;
+----
+physical_plan
+GlobalLimitExec: skip=0, fetch=10, statistics=[Rows=Inexact(10), Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--SortPreservingMergeExec: [c1@0 ASC NULLS LAST], fetch=10, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]: Min=Exact(Utf8(NULL)) Max=Exact(Utf8(NULL))),(Col[1]: Min=Inexact(Int64(2)) Max=Inexact(Int64(NULL)))]]
+----SortExec: TopK(fetch=10), expr=[c1@0 ASC NULLS LAST], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]: Min=Exact(Utf8(NULL)) Max=Exact(Utf8(NULL))),(Col[1]: Min=Inexact(Int64(2)) Max=Inexact(Int64(NULL)))]]
+------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]: Min=Exact(Utf8(NULL)) Max=Exact(Utf8(NULL))),(Col[1]: Min=Inexact(Int64(2)) Max=Inexact(Int64(NULL)))]]
+--------FilterExec: SUM(t2.c4)@1 > 1, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]: Min=Exact(Utf8(NULL)) Max=Exact(Utf8(NULL))),(Col[1]: Min=Inexact(Int64(2)) Max=Inexact(Int64(NULL)))]]
+----------AggregateExec: mode=FinalPartitioned, gby=[c1@0 as c1], aggr=[SUM(t2.c4)], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------------RepartitionExec: partitioning=Hash([c1@0], 4), input_partitions=4, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+----------------AggregateExec: mode=Partial, gby=[c1@0 as c1], aggr=[SUM(t2.c4)], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+------------------ProjectionExec: expr=[c1@0 as c1, c4@3 as c4], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+----------------------HashJoinExec: mode=Partitioned, join_type=Inner, on=[(c2@1, c2@0)], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+------------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------------------------RepartitionExec: partitioning=Hash([c2@1], 4), input_partitions=4, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+----------------------------ProjectionExec: expr=[c1@0 as c1, c2@1 as c2], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+------------------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+--------------------------------FilterExec: c3@2 > 10 AND CAST(c11@3 AS Float64) != 30.5, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+----------------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+------------------------------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/aggregate_test_100_order_by_c1_asc.csv]]}, projection=[c1, c2, c3, c11], output_ordering=[c1@0 ASC NULLS LAST], has_header=true, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+------------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------------------------RepartitionExec: partitioning=Hash([c2@0], 4), input_partitions=4, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+----------------------------ProjectionExec: expr=[c2@0 as c2, c4@1 as c4], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+------------------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+--------------------------------FilterExec: c13@3 = whatever AND c10@2 < 987654321, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+----------------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+------------------------------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/aggregate_test_100_order_by_c1_asc.csv]]}, projection=[c2, c4, c10, c13], has_header=true, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+
+
+# ################################################
+# Parquet
 statement ok
 CREATE EXTERNAL TABLE alltypes_plain STORED AS PARQUET LOCATION '../../parquet-testing/data/alltypes_plain.parquet';
+
+
+# Parquet scan
+# query having almost presentative opererators
+query TT
+explain
+SELECT t1.date_string_col, max(t2.timestamp_col)
+FROM alltypes_plain as t1, alltypes_plain as t2
+WHERE t1.bool_col = true AND t1.string_col != 'whatever'
+    AND t2.double_col < 10.1
+    AND t1.id = t2.id
+GROUP BY t1.date_string_col
+HAVING max(t2.timestamp_col) < '2010-01-01'
+ORDER BY  t1.date_string_col ASC
+LIMIT 10;
+----
+physical_plan
+GlobalLimitExec: skip=0, fetch=10, statistics=[Rows=Inexact(10), Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--SortPreservingMergeExec: [date_string_col@0 ASC NULLS LAST], fetch=10, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+----SortExec: TopK(fetch=10), expr=[date_string_col@0 ASC NULLS LAST], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------FilterExec: MAX(t2.timestamp_col)@1 < 1262304000000000000, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+----------AggregateExec: mode=FinalPartitioned, gby=[date_string_col@0 as date_string_col], aggr=[MAX(t2.timestamp_col)], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------------RepartitionExec: partitioning=Hash([date_string_col@0], 4), input_partitions=4, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+----------------AggregateExec: mode=Partial, gby=[date_string_col@0 as date_string_col], aggr=[MAX(t2.timestamp_col)], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+------------------ProjectionExec: expr=[date_string_col@1 as date_string_col, timestamp_col@3 as timestamp_col], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+----------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(id@0, id@0)], statistics=[Rows=Absent, Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+------------------------ProjectionExec: expr=[id@0 as id, date_string_col@2 as date_string_col], statistics=[Rows=Inexact(1), Bytes=Absent, [(Col[0]:),(Col[1]:)]]
+--------------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Inexact(1), Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+----------------------------FilterExec: bool_col@1 AND string_col@3 != 119,104,97,116,101,118,101,114, statistics=[Rows=Inexact(1), Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+------------------------------ParquetExec: file_groups={1 group: [[WORKSPACE_ROOT/parquet-testing/data/alltypes_plain.parquet]]}, projection=[id, bool_col, date_string_col, string_col], predicate=bool_col@1 AND string_col@9 != 119,104,97,116,101,118,101,114, pruning_predicate=(bool_col_min@0 OR bool_col_max@1) AND (string_col_min@2 != 119,104,97,116,101,118,101,114 OR 119,104,97,116,101,118,101,114 != string_col_max@3), statistics=[Rows=Exact(8), Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:),(Col[3]:)]]
+------------------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1, statistics=[Rows=Inexact(8), Bytes=Absent, [(Col[0]: Min=Exact(Int32(NULL)) Max=Exact(Int32(NULL))),(Col[1]: Min=Exact(TimestampNanosecond(NULL, None)) Max=Exact(TimestampNanosecond(NULL, None)))]]
+--------------------------ProjectionExec: expr=[id@0 as id, timestamp_col@2 as timestamp_col], statistics=[Rows=Inexact(8), Bytes=Absent, [(Col[0]: Min=Exact(Int32(NULL)) Max=Exact(Int32(NULL))),(Col[1]: Min=Exact(TimestampNanosecond(NULL, None)) Max=Exact(TimestampNanosecond(NULL, None)))]]
+----------------------------CoalesceBatchesExec: target_batch_size=8192, statistics=[Rows=Inexact(8), Bytes=Absent, [(Col[0]: Min=Exact(Int32(NULL)) Max=Exact(Int32(NULL))),(Col[1]: Min=Inexact(Float64(NULL)) Max=Inexact(Float64(10.099999999999998))),(Col[2]: Min=Exact(TimestampNanosecond(NULL, None)) Max=Exact(TimestampNanosecond(NULL, None)))]]
+------------------------------FilterExec: double_col@1 < 10.1, statistics=[Rows=Inexact(8), Bytes=Absent, [(Col[0]: Min=Exact(Int32(NULL)) Max=Exact(Int32(NULL))),(Col[1]: Min=Inexact(Float64(NULL)) Max=Inexact(Float64(10.099999999999998))),(Col[2]: Min=Exact(TimestampNanosecond(NULL, None)) Max=Exact(TimestampNanosecond(NULL, None)))]]
+--------------------------------ParquetExec: file_groups={1 group: [[WORKSPACE_ROOT/parquet-testing/data/alltypes_plain.parquet]]}, projection=[id, double_col, timestamp_col], predicate=double_col@7 < 10.1, pruning_predicate=double_col_min@0 < 10.1, statistics=[Rows=Exact(8), Bytes=Absent, [(Col[0]:),(Col[1]:),(Col[2]:)]]
+
 
 query TT
 EXPLAIN SELECT * FROM alltypes_plain limit 10;
