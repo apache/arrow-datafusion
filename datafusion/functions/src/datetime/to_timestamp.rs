@@ -342,25 +342,11 @@ fn to_timestamp_impl<T: ArrowTimestampType + ScalarType<i64>>(
     args: &[ColumnarValue],
     name: &str,
 ) -> Result<ColumnarValue> {
-    let factor = match T::UNIT {
-        Second => 1_000_000_000,
-        Millisecond => 1_000_000,
-        Microsecond => 1_000,
-        Nanosecond => 1,
-    };
-
     match args.len() {
-        1 => handle::<T, _, T>(
-            args,
-            |s| string_to_timestamp_nanos_shim(s).map(|n| n / factor),
-            name,
-        ),
-        n if n >= 2 => handle_multiple::<T, _, T, _>(
-            args,
-            string_to_timestamp_nanos_formatted,
-            |n| n / factor,
-            name,
-        ),
+        1 => handle::<T, _, T>(args, string_to_timestamp::<T>, name),
+        n if n >= 2 => {
+            handle_multiple::<T, _, T>(args, string_to_timestamp_formatted::<T>, name)
+        }
         _ => exec_err!("Unsupported 0 argument count for function {name}"),
     }
 }
@@ -643,7 +629,8 @@ mod tests {
     }
 
     fn parse_timestamp_formatted(s: &str, format: &str) -> Result<i64, DataFusionError> {
-        let result = string_to_timestamp_nanos_formatted(s, format);
+        let result =
+            super::string_to_timestamp_formatted::<TimestampNanosecondType>(s, format);
         if let Err(e) = &result {
             eprintln!("Error parsing timestamp '{s}' using format '{format}': {e:?}");
         }

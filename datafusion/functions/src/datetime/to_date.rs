@@ -17,7 +17,7 @@
 
 use std::any::Any;
 
-use arrow::array::types::Date32Type;
+use arrow::array::types::{Date32Type, TimestampNanosecondType};
 use arrow::datatypes::DataType;
 use arrow::datatypes::DataType::Date32;
 
@@ -42,7 +42,7 @@ impl ToDateFunc {
             1 => handle::<Date32Type, _, Date32Type>(
                 args,
                 |s| {
-                    string_to_timestamp_nanos_shim(s)
+                    string_to_timestamp::<TimestampNanosecondType>(s)
                         .map(|n| n / (1_000_000 * 24 * 60 * 60 * 1_000))
                         .and_then(|v| {
                             v.try_into().map_err(|_| {
@@ -52,10 +52,10 @@ impl ToDateFunc {
                 },
                 "to_date",
             ),
-            n if n >= 2 => handle_multiple::<Date32Type, _, Date32Type, _>(
+            n if n >= 2 => handle_multiple::<Date32Type, _, Date32Type>(
                 args,
                 |s, format| {
-                    string_to_timestamp_nanos_formatted(s, format)
+                    string_to_timestamp_formatted::<TimestampNanosecondType>(s, format)
                         .map(|n| n / (1_000_000 * 24 * 60 * 60 * 1_000))
                         .and_then(|v| {
                             v.try_into().map_err(|_| {
@@ -63,7 +63,6 @@ impl ToDateFunc {
                             })
                         })
                 },
-                |n| n,
                 "to_date",
             ),
             _ => exec_err!("Unsupported 0 argument count for function to_date"),
