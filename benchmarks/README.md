@@ -261,7 +261,7 @@ SUBCOMMANDS:
 
 # Benchmarks
 
-The output of `dfbench` help includes a descripion of each benchmark, which is reproducedd here for convenience
+The output of `dfbench` help includes a description of each benchmark, which is reproduced here for convenience
 
 ## ClickBench
 

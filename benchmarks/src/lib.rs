@@ -16,9 +16,11 @@
 // under the License.
 
 //! DataFusion benchmark runner
+pub mod access_log_gen;
 pub mod clickbench;
 pub mod parquet_filter;
 pub mod sort;
 pub mod tpch;
 mod util;
+
 pub use util::*;
