@@ -18,7 +18,6 @@
 use datafusion_common::{plan_err, Result};
 use datafusion_expr::logical_plan::LogicalPlan;
 use datafusion_expr::{EmptyRelation, JoinType, Projection, Union};
-use std::sync::Arc;
 
 use crate::optimizer::ApplyOrder;
 use crate::{OptimizerConfig, OptimizerRule};
@@ -89,7 +88,7 @@ impl OptimizerRule for PropagateEmptyRelation {
                 let new_inputs = union
                     .inputs
                     .iter()
-                    .filter(|input| match &***input {
+                    .filter(|input| match input {
                         LogicalPlan::EmptyRelation(empty) => empty.produce_one_row,
                         _ => true,
                     })
@@ -104,13 +103,13 @@ impl OptimizerRule for PropagateEmptyRelation {
                         schema: plan.schema().clone(),
                     })));
                 } else if new_inputs.len() == 1 {
-                    let child = (*new_inputs[0]).clone();
+                    let child = new_inputs[0].clone();
                     if child.schema().eq(plan.schema()) {
                         return Ok(Some(child));
                     } else {
                         return Ok(Some(LogicalPlan::Projection(
                             Projection::new_from_schema(
-                                Arc::new(child),
+                                Box::new(child),
                                 plan.schema().clone(),
                             ),
                         )));
@@ -181,6 +180,8 @@ fn empty_child(plan: &LogicalPlan) -> Result<Option<LogicalPlan>> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::eliminate_filter::EliminateFilter;
     use crate::eliminate_nested_union::EliminateNestedUnion;
     use crate::test::{

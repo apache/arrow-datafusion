@@ -21,7 +21,6 @@ use crate::{OptimizerConfig, OptimizerRule};
 use datafusion_common::Result;
 use datafusion_expr::expr_rewriter::coerce_plan_expr_for_schema;
 use datafusion_expr::{Distinct, LogicalPlan, Union};
-use std::sync::Arc;
 
 #[derive(Default)]
 /// An optimization rule that replaces nested unions with a single union.
@@ -60,7 +59,7 @@ impl OptimizerRule for EliminateNestedUnion {
                         .flat_map(extract_plans_from_union)
                         .collect::<Vec<_>>();
 
-                    Ok(Some(LogicalPlan::Distinct(Distinct::All(Arc::new(
+                    Ok(Some(LogicalPlan::Distinct(Distinct::All(Box::new(
                         LogicalPlan::Union(Union {
                             inputs,
                             schema: schema.clone(),
@@ -82,25 +81,27 @@ impl OptimizerRule for EliminateNestedUnion {
     }
 }
 
-fn extract_plans_from_union(plan: &Arc<LogicalPlan>) -> Vec<Arc<LogicalPlan>> {
-    match plan.as_ref() {
+fn extract_plans_from_union(plan: &LogicalPlan) -> Vec<LogicalPlan> {
+    match plan {
         LogicalPlan::Union(Union { inputs, schema }) => inputs
             .iter()
-            .map(|plan| Arc::new(coerce_plan_expr_for_schema(plan, schema).unwrap()))
+            .map(|plan| coerce_plan_expr_for_schema(plan, schema).unwrap())
             .collect::<Vec<_>>(),
         _ => vec![plan.clone()],
     }
 }
 
-fn extract_plan_from_distinct(plan: &Arc<LogicalPlan>) -> &Arc<LogicalPlan> {
-    match plan.as_ref() {
-        LogicalPlan::Distinct(Distinct::All(plan)) => plan,
+fn extract_plan_from_distinct(plan: &LogicalPlan) -> &LogicalPlan {
+    match plan {
+        LogicalPlan::Distinct(Distinct::All(plan)) => plan.as_ref(),
         _ => plan,
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::test::*;
     use arrow::datatypes::{DataType, Field, Schema};

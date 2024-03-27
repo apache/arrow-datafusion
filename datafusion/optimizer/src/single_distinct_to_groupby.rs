@@ -272,14 +272,14 @@ impl OptimizerRule for SingleDistinctToGroupBy {
                         .collect();
 
                     let outer_aggr = LogicalPlan::Aggregate(Aggregate::try_new(
-                        Arc::new(inner_agg),
+                        Box::new(inner_agg),
                         outer_group_exprs,
                         outer_aggr_exprs,
                     )?);
 
                     Ok(Some(LogicalPlan::Projection(Projection::try_new(
                         alias_expr,
-                        Arc::new(outer_aggr),
+                        Box::new(outer_aggr),
                     )?)))
                 } else {
                     Ok(None)

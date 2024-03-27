@@ -224,7 +224,7 @@ impl CommonSubexprEliminate {
                     new_window_expr.alias_if_changed(original_name)
                 })
                 .collect::<Result<Vec<_>>>()?;
-            plan = LogicalPlan::Window(Window::try_new(new_window_expr, Arc::new(plan))?);
+            plan = LogicalPlan::Window(Window::try_new(new_window_expr, Box::new(plan))?);
         }
 
         Ok(plan)
@@ -293,7 +293,7 @@ impl CommonSubexprEliminate {
                 })
                 .collect::<Result<Vec<Expr>>>()?;
             // Since group_epxr changes, schema changes also. Use try_new method.
-            Aggregate::try_new(Arc::new(new_input), new_group_expr, new_aggr_expr)
+            Aggregate::try_new(Box::new(new_input), new_group_expr, new_aggr_expr)
                 .map(LogicalPlan::Aggregate)
         } else {
             let mut agg_exprs = vec![];
@@ -335,14 +335,14 @@ impl CommonSubexprEliminate {
             }
 
             let agg = LogicalPlan::Aggregate(Aggregate::try_new(
-                Arc::new(new_input),
+                Box::new(new_input),
                 new_group_expr,
                 agg_exprs,
             )?);
 
             Ok(LogicalPlan::Projection(Projection::try_new(
                 proj_exprs,
-                Arc::new(agg),
+                Box::new(agg),
             )?))
         }
     }
@@ -501,7 +501,7 @@ fn build_common_expr_project_plan(
 
     Ok(LogicalPlan::Projection(Projection::try_new(
         project_exprs,
-        Arc::new(input),
+        Box::new(input),
     )?))
 }
 
@@ -520,7 +520,7 @@ fn build_recover_project_plan(
         .collect();
     Ok(LogicalPlan::Projection(Projection::try_new(
         col_exprs,
-        Arc::new(input),
+        Box::new(input),
     )?))
 }
 

@@ -41,7 +41,7 @@ impl OptimizerRule for EliminateOneUnion {
     ) -> Result<Option<LogicalPlan>> {
         match plan {
             LogicalPlan::Union(Union { inputs, .. }) if inputs.len() == 1 => {
-                Ok(inputs.first().map(|input| input.as_ref().clone()))
+                Ok(inputs.first().cloned())
             }
             _ => Ok(None),
         }
@@ -108,7 +108,7 @@ mod tests {
         )?;
         let schema = table_plan.schema().clone();
         let single_union_plan = LogicalPlan::Union(Union {
-            inputs: vec![Arc::new(table_plan)],
+            inputs: vec![table_plan],
             schema,
         });
 

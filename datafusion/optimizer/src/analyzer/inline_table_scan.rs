@@ -17,7 +17,6 @@
 
 //! Analyzed rule to replace TableScan references
 //! such as DataFrames and Views and inlines the LogicalPlan.
-use std::sync::Arc;
 
 use crate::analyzer::AnalyzerRule;
 
@@ -87,7 +86,7 @@ fn rewrite_subquery(expr: Expr) -> Result<Transformed<Expr>> {
         Expr::Exists(Exists { subquery, negated }) => {
             let plan = subquery.subquery.as_ref().clone();
             let new_plan = plan.transform_up(&analyze_internal).data()?;
-            let subquery = subquery.with_plan(Arc::new(new_plan));
+            let subquery = subquery.with_plan(Box::new(new_plan));
             Ok(Transformed::yes(Expr::Exists(Exists { subquery, negated })))
         }
         Expr::InSubquery(InSubquery {
@@ -97,7 +96,7 @@ fn rewrite_subquery(expr: Expr) -> Result<Transformed<Expr>> {
         }) => {
             let plan = subquery.subquery.as_ref().clone();
             let new_plan = plan.transform_up(&analyze_internal).data()?;
-            let subquery = subquery.with_plan(Arc::new(new_plan));
+            let subquery = subquery.with_plan(Box::new(new_plan));
             Ok(Transformed::yes(Expr::InSubquery(InSubquery::new(
                 expr, subquery, negated,
             ))))
@@ -105,7 +104,7 @@ fn rewrite_subquery(expr: Expr) -> Result<Transformed<Expr>> {
         Expr::ScalarSubquery(subquery) => {
             let plan = subquery.subquery.as_ref().clone();
             let new_plan = plan.transform_up(&analyze_internal).data()?;
-            let subquery = subquery.with_plan(Arc::new(new_plan));
+            let subquery = subquery.with_plan(Box::new(new_plan));
             Ok(Transformed::yes(Expr::ScalarSubquery(subquery)))
         }
         _ => Ok(Transformed::no(expr)),

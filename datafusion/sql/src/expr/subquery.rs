@@ -22,7 +22,6 @@ use datafusion_expr::expr::InSubquery;
 use datafusion_expr::{Expr, Subquery};
 use sqlparser::ast::Expr as SQLExpr;
 use sqlparser::ast::Query;
-use std::sync::Arc;
 
 impl<'a, S: ContextProvider> SqlToRel<'a, S> {
     pub(super) fn parse_exists_subquery(
@@ -39,7 +38,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         planner_context.set_outer_query_schema(old_outer_query_schema);
         Ok(Expr::Exists(Exists {
             subquery: Subquery {
-                subquery: Arc::new(sub_plan),
+                subquery: Box::new(sub_plan),
                 outer_ref_columns,
             },
             negated,
@@ -63,7 +62,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         Ok(Expr::InSubquery(InSubquery::new(
             expr,
             Subquery {
-                subquery: Arc::new(sub_plan),
+                subquery: Box::new(sub_plan),
                 outer_ref_columns,
             },
             negated,
@@ -82,7 +81,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         let outer_ref_columns = sub_plan.all_out_ref_exprs();
         planner_context.set_outer_query_schema(old_outer_query_schema);
         Ok(Expr::ScalarSubquery(Subquery {
-            subquery: Arc::new(sub_plan),
+            subquery: Box::new(sub_plan),
             outer_ref_columns,
         }))
     }

@@ -529,8 +529,7 @@ impl SessionContext {
             column_defaults,
         } = cmd;
 
-        let input = Arc::try_unwrap(input).unwrap_or_else(|e| e.as_ref().clone());
-        let input = self.state().optimize(&input)?;
+        let input = self.state().optimize(input.as_ref())?;
         let table = self.table(&name).await;
         match (if_not_exists, or_replace, table) {
             (true, false, Ok(_)) => self.return_empty_dataframe(),
@@ -1886,7 +1885,7 @@ impl SessionState {
                 },
             );
             let (plan, logical_optimization_succeeded) = match optimized_plan {
-                Ok(plan) => (Arc::new(plan), true),
+                Ok(plan) => (Box::new(plan), true),
                 Err(DataFusionError::Context(optimizer_name, err)) => {
                     let plan_type = PlanType::OptimizedLogicalPlan { optimizer_name };
                     stringified_plans

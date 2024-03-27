@@ -97,8 +97,8 @@ impl OptimizerRule for EliminateOuterJoin {
                         join.join_type
                     };
                     let new_join = LogicalPlan::Join(Join {
-                        left: Arc::new((*join.left).clone()),
-                        right: Arc::new((*join.right).clone()),
+                        left: Box::new((*join.left).clone()),
+                        right: Box::new((*join.right).clone()),
                         join_type: new_join_type,
                         join_constraint: join.join_constraint,
                         on: join.on.clone(),

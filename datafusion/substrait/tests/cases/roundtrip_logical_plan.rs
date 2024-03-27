@@ -766,7 +766,7 @@ async fn roundtrip_repartition_roundrobin() -> Result<()> {
     let ctx = create_context().await?;
     let scan_plan = ctx.sql("SELECT * FROM data").await?.into_optimized_plan()?;
     let plan = LogicalPlan::Repartition(Repartition {
-        input: Arc::new(scan_plan),
+        input: Box::new(scan_plan),
         partitioning_scheme: Partitioning::RoundRobinBatch(8),
     });
 
@@ -783,7 +783,7 @@ async fn roundtrip_repartition_hash() -> Result<()> {
     let ctx = create_context().await?;
     let scan_plan = ctx.sql("SELECT * FROM data").await?.into_optimized_plan()?;
     let plan = LogicalPlan::Repartition(Repartition {
-        input: Arc::new(scan_plan),
+        input: Box::new(scan_plan),
         partitioning_scheme: Partitioning::Hash(vec![col("data.a")], 8),
     });
 

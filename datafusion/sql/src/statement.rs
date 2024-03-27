@@ -263,7 +263,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                             CreateMemoryTable {
                                 name: self.object_name_to_table_reference(name)?,
                                 constraints,
-                                input: Arc::new(plan),
+                                input: Box::new(plan),
                                 if_not_exists,
                                 or_replace,
                                 column_defaults,
@@ -286,7 +286,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                             CreateMemoryTable {
                                 name: self.object_name_to_table_reference(name)?,
                                 constraints,
-                                input: Arc::new(plan),
+                                input: Box::new(plan),
                                 if_not_exists,
                                 or_replace,
                                 column_defaults,
@@ -322,7 +322,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
 
                 Ok(LogicalPlan::Ddl(DdlStatement::CreateView(CreateView {
                     name: self.object_name_to_table_reference(name)?,
-                    input: Arc::new(plan),
+                    input: Box::new(plan),
                     or_replace,
                     definition: sql,
                 })))
@@ -431,7 +431,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 Ok(LogicalPlan::Prepare(Prepare {
                     name: ident_to_string(&name),
                     data_types,
-                    input: Arc::new(plan),
+                    input: Box::new(plan),
                 }))
             }
 
@@ -903,7 +903,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             .collect();
 
         Ok(LogicalPlan::Copy(CopyTo {
-            input: Arc::new(input),
+            input: Box::new(input),
             output_url: statement.target,
             format_options: file_type.into(),
             partition_by,
@@ -1031,7 +1031,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         if matches!(plan, LogicalPlan::Explain(_)) {
             return plan_err!("Nested EXPLAINs are not supported");
         }
-        let plan = Arc::new(plan);
+        let plan = Box::new(plan);
         let schema = LogicalPlan::explain_schema();
         let schema = schema.to_dfschema_ref()?;
 
@@ -1187,7 +1187,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     &[&[&schema]],
                     &[using_columns],
                 )?;
-                LogicalPlan::Filter(Filter::try_new(filter_expr, Arc::new(scan))?)
+                LogicalPlan::Filter(Filter::try_new(filter_expr, Box::new(scan))?)
             }
         };
 
@@ -1195,7 +1195,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             table_name: table_ref,
             table_schema: schema.into(),
             op: WriteOp::Delete,
-            input: Arc::new(source),
+            input: Box::new(source),
         });
         Ok(plan)
     }
@@ -1257,7 +1257,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     &[&[scan.schema()]],
                     &[using_columns],
                 )?;
-                LogicalPlan::Filter(Filter::try_new(filter_expr, Arc::new(scan))?)
+                LogicalPlan::Filter(Filter::try_new(filter_expr, Box::new(scan))?)
             }
         };
 
@@ -1306,7 +1306,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             table_name,
             table_schema,
             op: WriteOp::Update,
-            input: Arc::new(source),
+            input: Box::new(source),
         });
         Ok(plan)
     }
@@ -1430,7 +1430,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
             table_name,
             table_schema: Arc::new(table_schema),
             op,
-            input: Arc::new(source),
+            input: Box::new(source),
         });
         Ok(plan)
     }

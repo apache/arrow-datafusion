@@ -19,7 +19,6 @@
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use crate::expr::{Alias, Sort, WindowFunction};
 use crate::expr_rewriter::strip_outer_reference;
@@ -1165,7 +1164,7 @@ pub fn add_filter(plan: LogicalPlan, predicates: &[&Expr]) -> Result<LogicalPlan
 
     Ok(LogicalPlan::Filter(Filter::try_new(
         predicate,
-        Arc::new(plan),
+        Box::new(plan),
     )?))
 }
 

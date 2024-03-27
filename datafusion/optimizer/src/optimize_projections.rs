@@ -257,7 +257,7 @@ fn optimize_projections(
             // Create a new aggregate plan with the updated input and only the
             // absolutely necessary fields:
             return Aggregate::try_new(
-                Arc::new(aggregate_input),
+                Box::new(aggregate_input),
                 new_group_bys,
                 new_aggr_expr,
             )
@@ -304,7 +304,7 @@ fn optimize_projections(
                     get_required_exprs(window.input.schema(), &required_indices);
                 let (window_child, _) =
                     add_projection_on_top_if_helpful(window_child, required_exprs)?;
-                Window::try_new(new_window_expr, Arc::new(window_child))
+                Window::try_new(new_window_expr, Box::new(window_child))
                     .map(|window| Some(LogicalPlan::Window(window)))
             };
         }
@@ -834,7 +834,7 @@ fn add_projection_on_top_if_helpful(
     if project_exprs.len() >= plan.schema().fields().len() {
         Ok((plan, false))
     } else {
-        Projection::try_new(project_exprs, Arc::new(plan))
+        Projection::try_new(project_exprs, Box::new(plan))
             .map(|proj| (LogicalPlan::Projection(proj), true))
     }
 }
@@ -870,7 +870,7 @@ fn rewrite_projection_given_requirements(
         if is_projection_unnecessary(&input, &exprs_used)? {
             Ok(Some(input))
         } else {
-            Projection::try_new(exprs_used, Arc::new(input))
+            Projection::try_new(exprs_used, Box::new(input))
                 .map(|proj| Some(LogicalPlan::Projection(proj)))
         }
     } else if exprs_used.len() < proj.expr.len() {

@@ -539,7 +539,7 @@ mod tests {
         let opt = Optimizer::with_rules(vec![Arc::new(GetTableScanRule {})]);
         let config = OptimizerContext::new().with_skip_failing_rules(false);
 
-        let input = Arc::new(test_table_scan()?);
+        let input = Box::new(test_table_scan()?);
         let input_schema = input.schema().clone();
 
         let plan = LogicalPlan::Projection(Projection::try_new_with_schema(

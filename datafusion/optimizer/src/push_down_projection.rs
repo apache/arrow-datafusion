@@ -365,7 +365,7 @@ mod tests {
         // relation is `None`). PlanBuilder resolves the expressions
         let expr = vec![col("test.a"), col("test.b")];
         let plan =
-            LogicalPlan::Projection(Projection::try_new(expr, Arc::new(table_scan))?);
+            LogicalPlan::Projection(Projection::try_new(expr, Box::new(table_scan))?);
 
         assert_fields_eq(&plan, vec!["a", "b"]);
 

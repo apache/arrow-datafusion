@@ -26,7 +26,6 @@ use datafusion_common::Result;
 use datafusion_expr::{
     and, logical_plan::Filter, logical_plan::JoinType, Expr, ExprSchemable, LogicalPlan,
 };
-use std::sync::Arc;
 
 /// The FilterNullJoinKeys rule will identify inner joins with equi-join conditions
 /// where the join key is nullable on one side and non-nullable on the other side
@@ -71,14 +70,14 @@ impl OptimizerRule for FilterNullJoinKeys {
 
                 if !left_filters.is_empty() {
                     let predicate = create_not_null_predicate(left_filters);
-                    join.left = Arc::new(LogicalPlan::Filter(Filter::try_new(
+                    join.left = Box::new(LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         join.left.clone(),
                     )?));
                 }
                 if !right_filters.is_empty() {
                     let predicate = create_not_null_predicate(right_filters);
-                    join.right = Arc::new(LogicalPlan::Filter(Filter::try_new(
+                    join.right = Box::new(LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         join.right.clone(),
                     )?));
@@ -112,6 +111,8 @@ fn create_not_null_predicate(filters: Vec<Expr>) -> Expr {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::test::assert_optimized_plan_eq;
     use arrow::datatypes::{DataType, Field, Schema};

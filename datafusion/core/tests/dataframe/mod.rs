@@ -102,7 +102,7 @@ async fn test_count_wildcard_on_where_in() -> Result<()> {
         .await?
         .filter(in_subquery(
             col("a"),
-            Arc::new(
+            Box::new(
                 ctx.table("t2")
                     .await?
                     .aggregate(vec![], vec![count(wildcard())])?
@@ -139,7 +139,7 @@ async fn test_count_wildcard_on_where_exist() -> Result<()> {
     let df_results = ctx
         .table("t1")
         .await?
-        .filter(exists(Arc::new(
+        .filter(exists(Box::new(
             ctx.table("t2")
                 .await?
                 .aggregate(vec![], vec![count(wildcard())])?
@@ -251,7 +251,7 @@ async fn test_count_wildcard_on_where_scalar_subquery() -> Result<()> {
         .table("t1")
         .await?
         .filter(
-            scalar_subquery(Arc::new(
+            scalar_subquery(Box::new(
                 ctx.table("t2")
                     .await?
                     .filter(out_ref_col(DataType::UInt32, "t1.a").eq(col("t2.a")))?

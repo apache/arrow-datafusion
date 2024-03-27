@@ -377,7 +377,7 @@ pub fn approx_percentile_cont_with_weight(
 }
 
 /// Create an EXISTS subquery expression
-pub fn exists(subquery: Arc<LogicalPlan>) -> Expr {
+pub fn exists(subquery: Box<LogicalPlan>) -> Expr {
     let outer_ref_columns = subquery.all_out_ref_exprs();
     Expr::Exists(Exists {
         subquery: Subquery {
@@ -389,7 +389,7 @@ pub fn exists(subquery: Arc<LogicalPlan>) -> Expr {
 }
 
 /// Create a NOT EXISTS subquery expression
-pub fn not_exists(subquery: Arc<LogicalPlan>) -> Expr {
+pub fn not_exists(subquery: Box<LogicalPlan>) -> Expr {
     let outer_ref_columns = subquery.all_out_ref_exprs();
     Expr::Exists(Exists {
         subquery: Subquery {
@@ -401,7 +401,7 @@ pub fn not_exists(subquery: Arc<LogicalPlan>) -> Expr {
 }
 
 /// Create an IN subquery expression
-pub fn in_subquery(expr: Expr, subquery: Arc<LogicalPlan>) -> Expr {
+pub fn in_subquery(expr: Expr, subquery: Box<LogicalPlan>) -> Expr {
     let outer_ref_columns = subquery.all_out_ref_exprs();
     Expr::InSubquery(InSubquery::new(
         Box::new(expr),
@@ -414,7 +414,7 @@ pub fn in_subquery(expr: Expr, subquery: Arc<LogicalPlan>) -> Expr {
 }
 
 /// Create a NOT IN subquery expression
-pub fn not_in_subquery(expr: Expr, subquery: Arc<LogicalPlan>) -> Expr {
+pub fn not_in_subquery(expr: Expr, subquery: Box<LogicalPlan>) -> Expr {
     let outer_ref_columns = subquery.all_out_ref_exprs();
     Expr::InSubquery(InSubquery::new(
         Box::new(expr),
@@ -427,7 +427,7 @@ pub fn not_in_subquery(expr: Expr, subquery: Arc<LogicalPlan>) -> Expr {
 }
 
 /// Create a scalar subquery expression
-pub fn scalar_subquery(subquery: Arc<LogicalPlan>) -> Expr {
+pub fn scalar_subquery(subquery: Box<LogicalPlan>) -> Expr {
     let outer_ref_columns = subquery.all_out_ref_exprs();
     Expr::ScalarSubquery(Subquery {
         subquery,

@@ -385,9 +385,7 @@ impl LogicalPlan {
             LogicalPlan::Subquery(Subquery { subquery, .. }) => vec![subquery],
             LogicalPlan::SubqueryAlias(SubqueryAlias { input, .. }) => vec![input],
             LogicalPlan::Extension(extension) => extension.node.inputs(),
-            LogicalPlan::Union(Union { inputs, .. }) => {
-                inputs.iter().map(|arc| arc.as_ref()).collect()
-            }
+            LogicalPlan::Union(Union { inputs, .. }) => inputs.iter().collect(),
             LogicalPlan::Distinct(
                 Distinct::All(input) | Distinct::On(DistinctOn { input, .. }),
             ) => vec![input],
@@ -553,7 +551,7 @@ impl LogicalPlan {
             // Since expr may be different than the previous expr, schema of the projection
             // may change. We need to use try_new method instead of try_new_with_schema method.
             LogicalPlan::Projection(Projection { .. }) => {
-                Projection::try_new(expr, Arc::new(inputs.swap_remove(0)))
+                Projection::try_new(expr, Box::new(inputs.swap_remove(0)))
                     .map(LogicalPlan::Projection)
             }
             LogicalPlan::Dml(DmlStatement {
@@ -565,7 +563,7 @@ impl LogicalPlan {
                 table_name: table_name.clone(),
                 table_schema: table_schema.clone(),
                 op: op.clone(),
-                input: Arc::new(inputs.swap_remove(0)),
+                input: Box::new(inputs.swap_remove(0)),
             })),
             LogicalPlan::Copy(CopyTo {
                 input: _,
@@ -574,7 +572,7 @@ impl LogicalPlan {
                 options,
                 partition_by,
             }) => Ok(LogicalPlan::Copy(CopyTo {
-                input: Arc::new(inputs.swap_remove(0)),
+                input: Box::new(inputs.swap_remove(0)),
                 output_url: output_url.clone(),
                 format_options: format_options.clone(),
                 options: options.clone(),
@@ -624,7 +622,7 @@ impl LogicalPlan {
                     })
                     .data()?;
 
-                Filter::try_new(predicate, Arc::new(inputs.swap_remove(0)))
+                Filter::try_new(predicate, Box::new(inputs.swap_remove(0)))
                     .map(LogicalPlan::Filter)
             }
             LogicalPlan::Repartition(Repartition {
@@ -634,35 +632,35 @@ impl LogicalPlan {
                 Partitioning::RoundRobinBatch(n) => {
                     Ok(LogicalPlan::Repartition(Repartition {
                         partitioning_scheme: Partitioning::RoundRobinBatch(*n),
-                        input: Arc::new(inputs.swap_remove(0)),
+                        input: Box::new(inputs.swap_remove(0)),
                     }))
                 }
                 Partitioning::Hash(_, n) => Ok(LogicalPlan::Repartition(Repartition {
                     partitioning_scheme: Partitioning::Hash(expr, *n),
-                    input: Arc::new(inputs.swap_remove(0)),
+                    input: Box::new(inputs.swap_remove(0)),
                 })),
                 Partitioning::DistributeBy(_) => {
                     Ok(LogicalPlan::Repartition(Repartition {
                         partitioning_scheme: Partitioning::DistributeBy(expr),
-                        input: Arc::new(inputs.swap_remove(0)),
+                        input: Box::new(inputs.swap_remove(0)),
                     }))
                 }
             },
             LogicalPlan::Window(Window { window_expr, .. }) => {
                 assert_eq!(window_expr.len(), expr.len());
-                Window::try_new(expr, Arc::new(inputs.swap_remove(0)))
+                Window::try_new(expr, Box::new(inputs.swap_remove(0)))
                     .map(LogicalPlan::Window)
             }
             LogicalPlan::Aggregate(Aggregate { group_expr, .. }) => {
                 // group exprs are the first expressions
                 let agg_expr = expr.split_off(group_expr.len());
 
-                Aggregate::try_new(Arc::new(inputs.swap_remove(0)), expr, agg_expr)
+                Aggregate::try_new(Box::new(inputs.swap_remove(0)), expr, agg_expr)
                     .map(LogicalPlan::Aggregate)
             }
             LogicalPlan::Sort(Sort { fetch, .. }) => Ok(LogicalPlan::Sort(Sort {
                 expr,
-                input: Arc::new(inputs.swap_remove(0)),
+                input: Box::new(inputs.swap_remove(0)),
                 fetch: *fetch,
             })),
             LogicalPlan::Join(Join {
@@ -702,8 +700,8 @@ impl LogicalPlan {
                 }).collect::<Result<Vec<(Expr, Expr)>>>()?;
 
                 Ok(LogicalPlan::Join(Join {
-                    left: Arc::new(inputs.swap_remove(0)),
-                    right: Arc::new(inputs.swap_remove(0)),
+                    left: Box::new(inputs.swap_remove(0)),
+                    right: Box::new(inputs.swap_remove(0)),
                     join_type: *join_type,
                     join_constraint: *join_constraint,
                     on: new_on,
@@ -722,19 +720,19 @@ impl LogicalPlan {
             }) => {
                 let subquery = LogicalPlanBuilder::from(inputs.swap_remove(0)).build()?;
                 Ok(LogicalPlan::Subquery(Subquery {
-                    subquery: Arc::new(subquery),
+                    subquery: Box::new(subquery),
                     outer_ref_columns: outer_ref_columns.clone(),
                 }))
             }
             LogicalPlan::SubqueryAlias(SubqueryAlias { alias, .. }) => {
-                SubqueryAlias::try_new(Arc::new(inputs.swap_remove(0)), alias.clone())
+                SubqueryAlias::try_new(Box::new(inputs.swap_remove(0)), alias.clone())
                     .map(LogicalPlan::SubqueryAlias)
             }
             LogicalPlan::Limit(Limit { skip, fetch, .. }) => {
                 Ok(LogicalPlan::Limit(Limit {
                     skip: *skip,
                     fetch: *fetch,
-                    input: Arc::new(inputs.swap_remove(0)),
+                    input: Box::new(inputs.swap_remove(0)),
                 }))
             }
             LogicalPlan::Ddl(DdlStatement::CreateMemoryTable(CreateMemoryTable {
@@ -745,7 +743,7 @@ impl LogicalPlan {
                 ..
             })) => Ok(LogicalPlan::Ddl(DdlStatement::CreateMemoryTable(
                 CreateMemoryTable {
-                    input: Arc::new(inputs.swap_remove(0)),
+                    input: Box::new(inputs.swap_remove(0)),
                     constraints: Constraints::empty(),
                     name: name.clone(),
                     if_not_exists: *if_not_exists,
@@ -759,7 +757,7 @@ impl LogicalPlan {
                 definition,
                 ..
             })) => Ok(LogicalPlan::Ddl(DdlStatement::CreateView(CreateView {
-                input: Arc::new(inputs.swap_remove(0)),
+                input: Box::new(inputs.swap_remove(0)),
                 name: name.clone(),
                 or_replace: *or_replace,
                 definition: definition.clone(),
@@ -776,13 +774,13 @@ impl LogicalPlan {
                     input_schema.clone()
                 };
                 Ok(LogicalPlan::Union(Union {
-                    inputs: inputs.into_iter().map(Arc::new).collect(),
+                    inputs: inputs.into_iter().collect(),
                     schema,
                 }))
             }
             LogicalPlan::Distinct(distinct) => {
                 let distinct = match distinct {
-                    Distinct::All(_) => Distinct::All(Arc::new(inputs.swap_remove(0))),
+                    Distinct::All(_) => Distinct::All(Box::new(inputs.swap_remove(0))),
                     Distinct::On(DistinctOn {
                         on_expr,
                         select_expr,
@@ -798,7 +796,7 @@ impl LogicalPlan {
                             } else {
                                 None
                             },
-                            Arc::new(inputs.swap_remove(0)),
+                            Box::new(inputs.swap_remove(0)),
                         )?)
                     }
                 };
@@ -808,8 +806,8 @@ impl LogicalPlan {
                 name, is_distinct, ..
             }) => Ok(LogicalPlan::RecursiveQuery(RecursiveQuery {
                 name: name.clone(),
-                static_term: Arc::new(inputs.swap_remove(0)),
-                recursive_term: Arc::new(inputs.swap_remove(0)),
+                static_term: Box::new(inputs.swap_remove(0)),
+                recursive_term: Box::new(inputs.swap_remove(0)),
                 is_distinct: *is_distinct,
             })),
             LogicalPlan::Analyze(a) => {
@@ -818,7 +816,7 @@ impl LogicalPlan {
                 Ok(LogicalPlan::Analyze(Analyze {
                     verbose: a.verbose,
                     schema: a.schema.clone(),
-                    input: Arc::new(inputs.swap_remove(0)),
+                    input: Box::new(inputs.swap_remove(0)),
                 }))
             }
             LogicalPlan::Explain(e) => {
@@ -829,7 +827,7 @@ impl LogicalPlan {
                 assert_eq!(inputs.len(), 1, "Invalid EXPLAIN command. Inputs are empty");
                 Ok(LogicalPlan::Explain(Explain {
                     verbose: e.verbose,
-                    plan: Arc::new(inputs.swap_remove(0)),
+                    plan: Box::new(inputs.swap_remove(0)),
                     stringified_plans: e.stringified_plans.clone(),
                     schema: e.schema.clone(),
                     logical_optimization_succeeded: e.logical_optimization_succeeded,
@@ -840,7 +838,7 @@ impl LogicalPlan {
             }) => Ok(LogicalPlan::Prepare(Prepare {
                 name: name.clone(),
                 data_types: data_types.clone(),
-                input: Arc::new(inputs.swap_remove(0)),
+                input: Box::new(inputs.swap_remove(0)),
             })),
             LogicalPlan::TableScan(ts) => {
                 assert!(inputs.is_empty(), "{self:?}  should have no inputs");
@@ -865,7 +863,7 @@ impl LogicalPlan {
                 ..
             }) => {
                 // Update schema with unnested column type.
-                let input = Arc::new(inputs.swap_remove(0));
+                let input = Box::new(inputs.swap_remove(0));
                 let nested_field = input.schema().field_from_column(column)?;
                 let unnested_field = schema.field_from_column(column)?;
                 let fields = input
@@ -1200,7 +1198,7 @@ impl LogicalPlan {
                 }
                 Expr::ScalarSubquery(qry) => {
                     let subquery =
-                        Arc::new(qry.subquery.replace_params_with_values(param_values)?);
+                        Box::new(qry.subquery.replace_params_with_values(param_values)?);
                     Ok(Transformed::yes(Expr::ScalarSubquery(Subquery {
                         subquery,
                         outer_ref_columns: qry.outer_ref_columns.clone(),
@@ -1723,10 +1721,10 @@ pub struct RecursiveQuery {
     /// Name of the query
     pub name: String,
     /// The static term (initial contents of the working table)
-    pub static_term: Arc<LogicalPlan>,
+    pub static_term: Box<LogicalPlan>,
     /// The recursive term (evaluated on the contents of the working table until
     /// it returns an empty set)
-    pub recursive_term: Arc<LogicalPlan>,
+    pub recursive_term: Box<LogicalPlan>,
     /// Should the output of the recursive term be deduplicated (`UNION`) or
     /// not (`UNION ALL`).
     pub is_distinct: bool,
@@ -1752,22 +1750,22 @@ pub struct Projection {
     /// The list of expressions
     pub expr: Vec<Expr>,
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The schema description of the output
     pub schema: DFSchemaRef,
 }
 
 impl Projection {
     /// Create a new Projection
-    pub fn try_new(expr: Vec<Expr>, input: Arc<LogicalPlan>) -> Result<Self> {
-        let projection_schema = projection_schema(&input, &expr)?;
+    pub fn try_new(expr: Vec<Expr>, input: Box<LogicalPlan>) -> Result<Self> {
+        let projection_schema = projection_schema(input.as_ref(), &expr)?;
         Self::try_new_with_schema(expr, input, projection_schema)
     }
 
     /// Create a new Projection using the specified output schema
     pub fn try_new_with_schema(
         expr: Vec<Expr>,
-        input: Arc<LogicalPlan>,
+        input: Box<LogicalPlan>,
         schema: DFSchemaRef,
     ) -> Result<Self> {
         if expr.len() != schema.fields().len() {
@@ -1781,7 +1779,7 @@ impl Projection {
     }
 
     /// Create a new Projection using the specified output schema
-    pub fn new_from_schema(input: Arc<LogicalPlan>, schema: DFSchemaRef) -> Self {
+    pub fn new_from_schema(input: Box<LogicalPlan>, schema: DFSchemaRef) -> Self {
         let expr: Vec<Expr> = schema
             .fields()
             .iter()
@@ -1826,7 +1824,7 @@ pub fn projection_schema(input: &LogicalPlan, exprs: &[Expr]) -> Result<Arc<DFSc
 #[non_exhaustive]
 pub struct SubqueryAlias {
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The alias for the input relation
     pub alias: OwnedTableReference,
     /// The schema with qualified field names
@@ -1835,7 +1833,7 @@ pub struct SubqueryAlias {
 
 impl SubqueryAlias {
     pub fn try_new(
-        plan: Arc<LogicalPlan>,
+        plan: Box<LogicalPlan>,
         alias: impl Into<OwnedTableReference>,
     ) -> Result<Self> {
         let alias = alias.into();
@@ -1874,12 +1872,12 @@ pub struct Filter {
     /// The predicate expression, which must have Boolean type.
     pub predicate: Expr,
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
 }
 
 impl Filter {
     /// Create a new filter operator.
-    pub fn try_new(predicate: Expr, input: Arc<LogicalPlan>) -> Result<Self> {
+    pub fn try_new(predicate: Expr, input: Box<LogicalPlan>) -> Result<Self> {
         // Filter predicates must return a boolean value so we try and validate that here.
         // Note that it is not always possible to resolve the predicate expression during plan
         // construction (such as with correlated subqueries) so we make a best effort here and
@@ -1976,7 +1974,7 @@ impl Filter {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Window {
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The window function expression
     pub window_expr: Vec<Expr>,
     /// The schema description of the window output
@@ -1985,7 +1983,7 @@ pub struct Window {
 
 impl Window {
     /// Create a new window operator.
-    pub fn try_new(window_expr: Vec<Expr>, input: Arc<LogicalPlan>) -> Result<Self> {
+    pub fn try_new(window_expr: Vec<Expr>, input: Box<LogicalPlan>) -> Result<Self> {
         let fields = input.schema().fields();
         let input_len = fields.len();
         let mut window_fields = fields.clone();
@@ -2148,9 +2146,9 @@ impl TableScan {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct CrossJoin {
     /// Left input
-    pub left: Arc<LogicalPlan>,
+    pub left: Box<LogicalPlan>,
     /// Right input
-    pub right: Arc<LogicalPlan>,
+    pub right: Box<LogicalPlan>,
     /// The output schema, containing fields from the left and right inputs
     pub schema: DFSchemaRef,
 }
@@ -2159,7 +2157,7 @@ pub struct CrossJoin {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Repartition {
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The partitioning scheme
     pub partitioning_scheme: Partitioning,
 }
@@ -2168,7 +2166,7 @@ pub struct Repartition {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Union {
     /// Inputs to merge
-    pub inputs: Vec<Arc<LogicalPlan>>,
+    pub inputs: Vec<LogicalPlan>,
     /// Union schema. Should be the same for all inputs.
     pub schema: DFSchemaRef,
 }
@@ -2182,7 +2180,7 @@ pub struct Prepare {
     /// Data types of the parameters ([`Expr::Placeholder`])
     pub data_types: Vec<DataType>,
     /// The logical plan of the statements
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
 }
 
 /// Describe the schema of table
@@ -2222,7 +2220,7 @@ pub struct Explain {
     /// Should extra (detailed, intermediate plans) be included?
     pub verbose: bool,
     /// The logical plan that is being EXPLAIN'd
-    pub plan: Arc<LogicalPlan>,
+    pub plan: Box<LogicalPlan>,
     /// Represent the various stages plans have gone through
     pub stringified_plans: Vec<StringifiedPlan>,
     /// The output schema of the explain (2 columns of text)
@@ -2238,7 +2236,7 @@ pub struct Analyze {
     /// Should extra detail be included?
     pub verbose: bool,
     /// The logical plan that is being EXPLAIN ANALYZE'd
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The output schema of the explain (2 columns of text)
     pub schema: DFSchemaRef,
 }
@@ -2272,14 +2270,14 @@ pub struct Limit {
     /// None means fetching all rows
     pub fetch: Option<usize>,
     /// The logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
 }
 
 /// Removes duplicate rows from the input
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Distinct {
     /// Plain `DISTINCT` referencing all selection expressions
-    All(Arc<LogicalPlan>),
+    All(Box<LogicalPlan>),
     /// The `Postgres` addition, allowing separate control over DISTINCT'd and selected columns
     On(DistinctOn),
 }
@@ -2296,7 +2294,7 @@ pub struct DistinctOn {
     /// additional info pertaining to the sorting procedure (i.e. ASC/DESC, and NULLS FIRST/LAST).
     pub sort_expr: Option<Vec<Expr>>,
     /// The logical plan that is being DISTINCT'd
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The schema description of the DISTINCT ON output
     pub schema: DFSchemaRef,
 }
@@ -2307,7 +2305,7 @@ impl DistinctOn {
         on_expr: Vec<Expr>,
         select_expr: Vec<Expr>,
         sort_expr: Option<Vec<Expr>>,
-        input: Arc<LogicalPlan>,
+        input: Box<LogicalPlan>,
     ) -> Result<Self> {
         if on_expr.is_empty() {
             return plan_err!("No `ON` expressions provided");
@@ -2373,7 +2371,7 @@ impl DistinctOn {
 #[non_exhaustive]
 pub struct Aggregate {
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// Grouping expressions
     pub group_expr: Vec<Expr>,
     /// Aggregate expressions
@@ -2385,7 +2383,7 @@ pub struct Aggregate {
 impl Aggregate {
     /// Create a new aggregate operator.
     pub fn try_new(
-        input: Arc<LogicalPlan>,
+        input: Box<LogicalPlan>,
         group_expr: Vec<Expr>,
         aggr_expr: Vec<Expr>,
     ) -> Result<Self> {
@@ -2419,7 +2417,7 @@ impl Aggregate {
     /// This method should only be called when you are absolutely sure that the schema being
     /// provided is correct for the aggregate. If in doubt, call [try_new](Self::try_new) instead.
     pub fn try_new_with_schema(
-        input: Arc<LogicalPlan>,
+        input: Box<LogicalPlan>,
         group_expr: Vec<Expr>,
         aggr_expr: Vec<Expr>,
         schema: DFSchemaRef,
@@ -2531,7 +2529,7 @@ pub struct Sort {
     /// The sort expressions
     pub expr: Vec<Expr>,
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// Optional fetch limit
     pub fetch: Option<usize>,
 }
@@ -2540,9 +2538,9 @@ pub struct Sort {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Join {
     /// Left input
-    pub left: Arc<LogicalPlan>,
+    pub left: Box<LogicalPlan>,
     /// Right input
-    pub right: Arc<LogicalPlan>,
+    pub right: Box<LogicalPlan>,
     /// Equijoin clause expressed as pairs of (left, right) join expressions
     pub on: Vec<(Expr, Expr)>,
     /// Filters applied during join (non-equi conditions)
@@ -2561,8 +2559,8 @@ impl Join {
     /// Create Join with input which wrapped with projection, this method is used to help create physical join.
     pub fn try_new_with_project_input(
         original: &LogicalPlan,
-        left: Arc<LogicalPlan>,
-        right: Arc<LogicalPlan>,
+        left: Box<LogicalPlan>,
+        right: Box<LogicalPlan>,
         column_on: (Vec<Column>, Vec<Column>),
     ) -> Result<Self> {
         let original_join = match original {
@@ -2596,7 +2594,7 @@ impl Join {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Subquery {
     /// The subquery
-    pub subquery: Arc<LogicalPlan>,
+    pub subquery: Box<LogicalPlan>,
     /// The outer references used in the subquery
     pub outer_ref_columns: Vec<Expr>,
 }
@@ -2610,7 +2608,7 @@ impl Subquery {
         }
     }
 
-    pub fn with_plan(&self, plan: Arc<LogicalPlan>) -> Subquery {
+    pub fn with_plan(&self, plan: Box<LogicalPlan>) -> Subquery {
         Subquery {
             subquery: plan,
             outer_ref_columns: self.outer_ref_columns.clone(),
@@ -2641,7 +2639,7 @@ pub enum Partitioning {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Unnest {
     /// The incoming logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The column to unnest
     pub column: Column,
     /// The output schema, containing the unnested field column.
@@ -2681,7 +2679,7 @@ mod tests {
             .build()?;
 
         table_scan(Some("employee_csv"), &employee_schema(), Some(vec![0, 3]))?
-            .filter(in_subquery(col("state"), Arc::new(plan1)))?
+            .filter(in_subquery(col("state"), Box::new(plan1)))?
             .project(vec![col("id")])?
             .build()
     }
@@ -2718,7 +2716,7 @@ mod tests {
     fn test_display_subquery_alias() -> Result<()> {
         let plan1 = table_scan(Some("employee_csv"), &employee_schema(), Some(vec![3]))?
             .build()?;
-        let plan1 = Arc::new(plan1);
+        let plan1 = Box::new(plan1);
 
         let plan =
             table_scan(Some("employee_csv"), &employee_schema(), Some(vec![0, 3]))?
@@ -3005,7 +3003,7 @@ digraph {
         let empty_schema = Arc::new(DFSchema::new_with_metadata(vec![], HashMap::new())?);
         let p = Projection::try_new_with_schema(
             vec![col("a")],
-            Arc::new(LogicalPlan::EmptyRelation(EmptyRelation {
+            Box::new(LogicalPlan::EmptyRelation(EmptyRelation {
                 produce_one_row: false,
                 schema: empty_schema.clone(),
             })),
@@ -3168,7 +3166,7 @@ digraph {
             )
             .unwrap(),
         );
-        let scan = Arc::new(LogicalPlan::TableScan(TableScan {
+        let scan = Box::new(LogicalPlan::TableScan(TableScan {
             table_name: TableReference::bare("tab"),
             source: source.clone(),
             projection: None,
@@ -3198,7 +3196,7 @@ digraph {
                 )
                 .unwrap(),
         );
-        let scan = Arc::new(LogicalPlan::TableScan(TableScan {
+        let scan = Box::new(LogicalPlan::TableScan(TableScan {
             table_name: TableReference::bare("tab"),
             source,
             projection: None,
@@ -3240,7 +3238,7 @@ digraph {
                 LogicalPlan::TableScan(table) => {
                     let filter = Filter::try_new(
                         external_filter.clone(),
-                        Arc::new(LogicalPlan::TableScan(table)),
+                        Box::new(LogicalPlan::TableScan(table)),
                     )
                     .unwrap();
                     Ok(Transformed::yes(LogicalPlan::Filter(filter)))

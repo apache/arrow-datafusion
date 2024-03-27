@@ -16,7 +16,6 @@
 // under the License.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::{
     fmt::{self, Display},
     hash::{Hash, Hasher},
@@ -243,7 +242,7 @@ pub struct CreateMemoryTable {
     /// The list of constraints in the schema, such as primary key, unique, etc.
     pub constraints: Constraints,
     /// The logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// Option to not error if table already exists
     pub if_not_exists: bool,
     /// Option to replace table content if table already exists
@@ -258,7 +257,7 @@ pub struct CreateView {
     /// The table name
     pub name: OwnedTableReference,
     /// The logical plan
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// Option to not error if table already exists
     pub or_replace: bool,
     /// SQL used to create the view, if available
