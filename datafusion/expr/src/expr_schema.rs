@@ -28,8 +28,8 @@ use crate::{utils, LogicalPlan, Projection, Subquery};
 use arrow::compute::can_cast_types;
 use arrow::datatypes::{DataType, Field};
 use datafusion_common::{
-    internal_err, not_impl_err, plan_datafusion_err, plan_err, Column, DFField,
-    ExprSchema, Result,
+    internal_err, not_impl_err, plan_datafusion_err, plan_err, Column, ExprSchema,
+    OwnedTableReference, Result,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -46,7 +46,10 @@ pub trait ExprSchemable {
     fn metadata(&self, schema: &dyn ExprSchema) -> Result<HashMap<String, String>>;
 
     /// convert to a field with respect to a schema
-    fn to_field(&self, input_schema: &dyn ExprSchema) -> Result<DFField>;
+    fn to_field(
+        &self,
+        input_schema: &dyn ExprSchema,
+    ) -> Result<(Option<OwnedTableReference>, Arc<Field>)>;
 
     /// cast to a type with respect to a schema
     fn cast_to(self, cast_to_type: &DataType, schema: &dyn ExprSchema) -> Result<Expr>;
@@ -70,21 +73,20 @@ impl ExprSchemable for Expr {
     /// ## and Float32 results in Float32 type
     ///
     /// ```
-    /// # use arrow::datatypes::DataType;
-    /// # use datafusion_common::{DFField, DFSchema};
+    /// # use arrow::datatypes::{DataType, Field};
+    /// # use datafusion_common::DFSchema;
     /// # use datafusion_expr::{col, ExprSchemable};
     /// # use std::collections::HashMap;
     ///
     /// fn main() {
     ///   let expr = col("c1") + col("c2");
-    ///   let schema = DFSchema::new_with_metadata(
+    ///   let schema = DFSchema::from_unqualifed_fields(
     ///     vec![
-    ///       DFField::new_unqualified("c1", DataType::Int32, true),
-    ///       DFField::new_unqualified("c2", DataType::Float32, true),
-    ///       ],
+    ///       Field::new("c1", DataType::Int32, true),
+    ///       Field::new("c2", DataType::Float32, true),
+    ///       ].into(),
     ///       HashMap::new(),
-    ///   )
-    ///   .unwrap();
+    ///   ).unwrap();
     ///   assert_eq!("Float32", format!("{}", expr.get_type(&schema).unwrap()));
     /// }
     /// ```
@@ -437,26 +439,37 @@ impl ExprSchemable for Expr {
     ///
     /// So for example, a projected expression `col(c1) + col(c2)` is
     /// placed in an output field **named** col("c1 + c2")
-    fn to_field(&self, input_schema: &dyn ExprSchema) -> Result<DFField> {
+    fn to_field(
+        &self,
+        input_schema: &dyn ExprSchema,
+    ) -> Result<(Option<OwnedTableReference>, Arc<Field>)> {
         match self {
             Expr::Column(c) => {
                 let (data_type, nullable) = self.data_type_and_nullable(input_schema)?;
-                Ok(
-                    DFField::new(c.relation.clone(), &c.name, data_type, nullable)
-                        .with_metadata(self.metadata(input_schema)?),
-                )
+                Ok((
+                    c.relation.clone(),
+                    Field::new(&c.name, data_type, nullable)
+                        .with_metadata(self.metadata(input_schema)?)
+                        .into(),
+                ))
             }
             Expr::Alias(Alias { relation, name, .. }) => {
                 let (data_type, nullable) = self.data_type_and_nullable(input_schema)?;
-                Ok(DFField::new(relation.clone(), name, data_type, nullable)
-                    .with_metadata(self.metadata(input_schema)?))
+                Ok((
+                    relation.clone(),
+                    Field::new(name, data_type, nullable)
+                        .with_metadata(self.metadata(input_schema)?)
+                        .into(),
+                ))
             }
             _ => {
                 let (data_type, nullable) = self.data_type_and_nullable(input_schema)?;
-                Ok(
-                    DFField::new_unqualified(&self.display_name()?, data_type, nullable)
-                        .with_metadata(self.metadata(input_schema)?),
-                )
+                Ok((
+                    None,
+                    Field::new(self.display_name()?, data_type, nullable)
+                        .with_metadata(self.metadata(input_schema)?)
+                        .into(),
+                ))
             }
         }
     }
@@ -535,7 +548,7 @@ pub fn cast_subquery(subquery: Subquery, cast_to_type: &DataType) -> Result<Subq
             )?)
         }
         _ => {
-            let cast_expr = Expr::Column(plan.schema().field(0).qualified_column())
+            let cast_expr = Expr::Column(Column::from(plan.schema().qualified_field(0)))
                 .cast_to(cast_to_type, subquery.subquery.schema())?;
             LogicalPlan::Projection(Projection::try_new(
                 vec![cast_expr],
@@ -553,8 +566,8 @@ pub fn cast_subquery(subquery: Subquery, cast_to_type: &DataType) -> Result<Subq
 mod tests {
     use super::*;
     use crate::{col, lit};
-    use arrow::datatypes::{DataType, Fields};
-    use datafusion_common::{Column, DFSchema, ScalarValue, TableReference};
+    use arrow::datatypes::{DataType, Fields, SchemaBuilder};
+    use datafusion_common::{Column, DFSchema, ScalarValue};
 
     macro_rules! test_is_expr_nullable {
         ($EXPR_TYPE:ident) => {{
@@ -679,23 +692,22 @@ mod tests {
                 .unwrap()
         );
 
-        let schema = DFSchema::new_with_metadata(
-            vec![DFField::new_unqualified("foo", DataType::Int32, true)
-                .with_metadata(meta.clone())],
+        let schema = DFSchema::from_unqualifed_fields(
+            vec![Field::new("foo", DataType::Int32, true).with_metadata(meta.clone())]
+                .into(),
             HashMap::new(),
         )
         .unwrap();
 
         // verify to_field method populates metadata
-        assert_eq!(&meta, expr.to_field(&schema).unwrap().metadata());
+        assert_eq!(&meta, expr.to_field(&schema).unwrap().1.metadata());
     }
 
     #[test]
     fn test_nested_schema_nullability() {
-        let fields = DFField::new(
-            Some(TableReference::Bare {
-                table: "table_name".into(),
-            }),
+        let mut builder = SchemaBuilder::new();
+        builder.push(Field::new("foo", DataType::Int32, true));
+        builder.push(Field::new(
             "parent",
             DataType::Struct(Fields::from(vec![Field::new(
                 "child",
@@ -703,12 +715,17 @@ mod tests {
                 false,
             )])),
             true,
-        );
+        ));
+        let schema = builder.finish();
 
-        let schema = DFSchema::new_with_metadata(vec![fields], HashMap::new()).unwrap();
+        let dfschema = DFSchema::from_field_specific_qualified_schema(
+            vec![Some("table_name"), None],
+            &Arc::new(schema),
+        )
+        .unwrap();
 
         let expr = col("parent").field("child");
-        assert!(expr.nullable(&schema).unwrap());
+        assert!(expr.nullable(&dfschema).unwrap());
     }
 
     #[derive(Debug)]

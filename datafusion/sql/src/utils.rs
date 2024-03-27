@@ -24,7 +24,7 @@ use arrow_schema::{
 };
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{
-    exec_err, internal_err, plan_err, DataFusionError, Result, ScalarValue,
+    exec_err, internal_err, plan_err, Column, DataFusionError, Result, ScalarValue,
 };
 use datafusion_expr::expr::{Alias, GroupingSet, WindowFunction};
 use datafusion_expr::utils::{expr_as_column_expr, find_column_exprs};
@@ -37,8 +37,11 @@ pub(crate) fn resolve_columns(expr: &Expr, plan: &LogicalPlan) -> Result<Expr> {
         .transform_up(&|nested_expr| {
             match nested_expr {
                 Expr::Column(col) => {
-                    let field = plan.schema().field_from_column(&col)?;
-                    Ok(Transformed::yes(Expr::Column(field.qualified_column())))
+                    let (qualifier, field) =
+                        plan.schema().qualified_field_from_column(&col)?;
+                    Ok(Transformed::yes(Expr::Column(Column::from((
+                        qualifier, field,
+                    )))))
                 }
                 _ => {
                     // keep recursing

@@ -18,7 +18,7 @@
 use crate::optimizer::{ApplyOrder, ApplyOrder::BottomUp};
 use crate::{OptimizerConfig, OptimizerRule};
 
-use datafusion_common::Result;
+use datafusion_common::{Column, Result};
 use datafusion_expr::utils::expand_wildcard;
 use datafusion_expr::{
     aggregate_function::AggregateFunction as AggregateFunctionFunc, col,
@@ -122,15 +122,12 @@ impl OptimizerRule for ReplaceDistinctWithAggregate {
                 // expressions, for `DISTINCT ON` we only need to emit the original selection expressions.
                 let project_exprs = plan
                     .schema()
-                    .fields()
                     .iter()
                     .skip(on_expr.len())
-                    .zip(schema.fields().iter())
-                    .map(|(new_field, old_field)| {
-                        Ok(col(new_field.qualified_column()).alias_qualified(
-                            old_field.qualifier().cloned(),
-                            old_field.name(),
-                        ))
+                    .zip(schema.iter())
+                    .map(|((new_qualifier, new_field), (old_qualifier, old_field))| {
+                        Ok(col(Column::from((new_qualifier, new_field.as_ref())))
+                            .alias_qualified(old_qualifier.cloned(), old_field.name()))
                     })
                     .collect::<Result<Vec<Expr>>>()?;
 

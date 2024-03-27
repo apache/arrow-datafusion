@@ -49,7 +49,7 @@ use datafusion_common::tree_node::{
 };
 use datafusion_common::{
     aggregate_functional_dependencies, internal_err, plan_err, Column, Constraints,
-    DFField, DFSchema, DFSchemaRef, DataFusionError, Dependency, FunctionalDependence,
+    DFSchema, DFSchemaRef, DataFusionError, Dependency, FunctionalDependence,
     FunctionalDependencies, OwnedTableReference, ParamValues, Result, UnnestOptions,
 };
 
@@ -486,12 +486,12 @@ impl LogicalPlan {
             LogicalPlan::RecursiveQuery(RecursiveQuery { static_term, .. }) => {
                 static_term.head_output_expr()
             }
-            LogicalPlan::Union(union) => Ok(Some(Expr::Column(
-                union.schema.fields()[0].qualified_column(),
-            ))),
-            LogicalPlan::TableScan(table) => Ok(Some(Expr::Column(
-                table.projected_schema.fields()[0].qualified_column(),
-            ))),
+            LogicalPlan::Union(union) => Ok(Some(Expr::Column(Column::from(
+                union.schema.qualified_field(0),
+            )))),
+            LogicalPlan::TableScan(table) => Ok(Some(Expr::Column(Column::from(
+                table.projected_schema.qualified_field(0),
+            )))),
             LogicalPlan::SubqueryAlias(subquery_alias) => {
                 let expr_opt = subquery_alias.input.head_output_expr()?;
                 expr_opt
@@ -866,24 +866,30 @@ impl LogicalPlan {
             }) => {
                 // Update schema with unnested column type.
                 let input = Arc::new(inputs.swap_remove(0));
-                let nested_field = input.schema().field_from_column(column)?;
-                let unnested_field = schema.field_from_column(column)?;
-                let fields = input
+                let (nested_qualifier, nested_field) =
+                    input.schema().qualified_field_from_column(column)?;
+                let (unnested_qualifier, unnested_field) =
+                    schema.qualified_field_from_column(column)?;
+                let qualifiers_and_fields = input
                     .schema()
-                    .fields()
                     .iter()
-                    .map(|f| {
-                        if f == nested_field {
-                            unnested_field.clone()
+                    .map(|(qualifier, field)| {
+                        if qualifier.eq(&nested_qualifier)
+                            && field.as_ref() == nested_field
+                        {
+                            (
+                                unnested_qualifier.cloned(),
+                                Arc::new(unnested_field.clone()),
+                            )
                         } else {
-                            f.clone()
+                            (qualifier.cloned(), field.clone())
                         }
                     })
                     .collect::<Vec<_>>();
 
                 let schema = Arc::new(
                     DFSchema::new_with_metadata(
-                        fields,
+                        qualifiers_and_fields,
                         input.schema().metadata().clone(),
                     )?
                     // We can use the existing functional dependencies as is:
@@ -1782,12 +1788,7 @@ impl Projection {
 
     /// Create a new Projection using the specified output schema
     pub fn new_from_schema(input: Arc<LogicalPlan>, schema: DFSchemaRef) -> Self {
-        let expr: Vec<Expr> = schema
-            .fields()
-            .iter()
-            .map(|field| field.qualified_column())
-            .map(Expr::Column)
-            .collect();
+        let expr: Vec<Expr> = schema.columns().into_iter().map(Expr::Column).collect();
         Self {
             expr,
             input,
@@ -1839,9 +1840,10 @@ impl SubqueryAlias {
         alias: impl Into<OwnedTableReference>,
     ) -> Result<Self> {
         let alias = alias.into();
-        let fields = change_redundant_column(plan.schema().fields().clone());
+        let fields = change_redundant_column(plan.schema().fields());
         let meta_data = plan.schema().as_ref().metadata().clone();
-        let schema: Schema = DFSchema::new_with_metadata(fields, meta_data)?.into();
+        let schema: Schema =
+            DFSchema::from_unqualifed_fields(fields.into(), meta_data)?.into();
         // Since schema is the same, other than qualifier, we can use existing
         // functional dependencies:
         let func_dependencies = plan.schema().functional_dependencies().clone();
@@ -1986,9 +1988,13 @@ pub struct Window {
 impl Window {
     /// Create a new window operator.
     pub fn try_new(window_expr: Vec<Expr>, input: Arc<LogicalPlan>) -> Result<Self> {
-        let fields = input.schema().fields();
+        let fields: Vec<(Option<OwnedTableReference>, Arc<Field>)> = input
+            .schema()
+            .iter()
+            .map(|(q, f)| (q.cloned(), f.clone()))
+            .collect();
         let input_len = fields.len();
-        let mut window_fields = fields.clone();
+        let mut window_fields = fields;
         let expr_fields = exprlist_to_fields(window_expr.as_slice(), &input)?;
         window_fields.extend_from_slice(expr_fields.as_slice());
         let metadata = input.schema().metadata().clone();
@@ -2113,16 +2119,14 @@ impl TableScan {
             .map(|p| {
                 let projected_func_dependencies =
                     func_dependencies.project_functional_dependencies(p, p.len());
+
                 let df_schema = DFSchema::new_with_metadata(
                     p.iter()
                         .map(|i| {
-                            DFField::from_qualified(
-                                table_name.clone(),
-                                schema.field(*i).clone(),
-                            )
+                            (Some(table_name.clone()), Arc::new(schema.field(*i).clone()))
                         })
                         .collect(),
-                    schema.metadata().clone(),
+                    schema.metadata.clone(),
                 )?;
                 df_schema.with_functional_dependencies(projected_func_dependencies)
             })
@@ -2314,9 +2318,12 @@ impl DistinctOn {
         }
 
         let on_expr = normalize_cols(on_expr, input.as_ref())?;
+        let qualified_fields = exprlist_to_fields(select_expr.as_slice(), &input)?
+            .into_iter()
+            .collect();
 
-        let schema = DFSchema::new_with_metadata(
-            exprlist_to_fields(select_expr.as_slice(), &input)?,
+        let dfschema = DFSchema::new_with_metadata(
+            qualified_fields,
             input.schema().metadata().clone(),
         )?;
 
@@ -2325,7 +2332,7 @@ impl DistinctOn {
             select_expr,
             sort_expr: None,
             input,
-            schema: Arc::new(schema),
+            schema: Arc::new(dfschema),
         };
 
         if let Some(sort_expr) = sort_expr {
@@ -2395,20 +2402,19 @@ impl Aggregate {
 
         let grouping_expr: Vec<Expr> = grouping_set_to_exprlist(group_expr.as_slice())?;
 
-        let mut fields = exprlist_to_fields(grouping_expr.as_slice(), &input)?;
+        let mut qualified_fields = exprlist_to_fields(grouping_expr.as_slice(), &input)?;
 
         // Even columns that cannot be null will become nullable when used in a grouping set.
         if is_grouping_set {
-            fields = fields
+            qualified_fields = qualified_fields
                 .into_iter()
-                .map(|field| field.with_nullable(true))
+                .map(|(q, f)| (q, f.as_ref().clone().with_nullable(true).into()))
                 .collect::<Vec<_>>();
         }
 
-        fields.extend(exprlist_to_fields(aggr_expr.as_slice(), &input)?);
+        qualified_fields.extend(exprlist_to_fields(aggr_expr.as_slice(), &input)?);
 
-        let schema =
-            DFSchema::new_with_metadata(fields, input.schema().metadata().clone())?;
+        let schema = DFSchema::new_with_metadata(qualified_fields, HashMap::new())?;
 
         Self::try_new_with_schema(input, group_expr, aggr_expr, Arc::new(schema))
     }
@@ -2503,7 +2509,7 @@ fn calc_func_dependencies_for_project(
     exprs: &[Expr],
     input: &LogicalPlan,
 ) -> Result<FunctionalDependencies> {
-    let input_fields = input.schema().fields();
+    let input_fields = input.schema().field_names();
     // Calculate expression indices (if present) in the input schema.
     let proj_indices = exprs
         .iter()
@@ -2514,9 +2520,7 @@ fn calc_func_dependencies_for_project(
                 }
                 _ => format!("{}", expr),
             };
-            input_fields
-                .iter()
-                .position(|item| item.qualified_name() == expr_name)
+            input_fields.iter().position(|item| *item == expr_name)
         })
         .collect::<Vec<_>>();
     Ok(input
@@ -2652,7 +2656,6 @@ pub struct Unnest {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::sync::Arc;
 
     use super::*;
@@ -3002,7 +3005,7 @@ digraph {
 
     #[test]
     fn projection_expr_schema_mismatch() -> Result<()> {
-        let empty_schema = Arc::new(DFSchema::new_with_metadata(vec![], HashMap::new())?);
+        let empty_schema = Arc::new(DFSchema::empty());
         let p = Projection::try_new_with_schema(
             vec![col("a")],
             Arc::new(LogicalPlan::EmptyRelation(EmptyRelation {
@@ -3176,10 +3179,10 @@ digraph {
             filters: vec![],
             fetch: None,
         }));
-        let col = schema.field(0).qualified_column();
+        let col = schema.field_names()[0].clone();
 
         let filter = Filter::try_new(
-            Expr::Column(col).eq(Expr::Literal(ScalarValue::Int32(Some(1)))),
+            Expr::Column(col.into()).eq(Expr::Literal(ScalarValue::Int32(Some(1)))),
             scan,
         )
         .unwrap();
@@ -3206,10 +3209,10 @@ digraph {
             filters: vec![],
             fetch: None,
         }));
-        let col = schema.field(0).qualified_column();
+        let col = schema.field_names()[0].clone();
 
         let filter = Filter::try_new(
-            Expr::Column(col).eq(Expr::Literal(ScalarValue::Int32(Some(1)))),
+            Expr::Column(col.into()).eq(Expr::Literal(ScalarValue::Int32(Some(1)))),
             scan,
         )
         .unwrap();

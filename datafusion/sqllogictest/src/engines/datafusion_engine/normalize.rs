@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use arrow::datatypes::Fields;
 use arrow::util::display::ArrayFormatter;
 use arrow::{array, array::ArrayRef, datatypes::DataType, record_batch::RecordBatch};
 use datafusion_common::format::DEFAULT_FORMAT_OPTIONS;
-use datafusion_common::DFField;
 use datafusion_common::DataFusionError;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -239,7 +239,7 @@ pub fn cell_to_string(col: &ArrayRef, row: usize) -> Result<String> {
 }
 
 /// Converts columns to a result as expected by sqllogicteset.
-pub(crate) fn convert_schema_to_types(columns: &[DFField]) -> Vec<DFColumnType> {
+pub(crate) fn convert_schema_to_types(columns: &Fields) -> Vec<DFColumnType> {
     columns
         .iter()
         .map(|f| f.data_type())

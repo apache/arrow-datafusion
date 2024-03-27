@@ -73,16 +73,14 @@ impl Constraints {
                     is_primary,
                     ..
                 } => {
+                    let field_names = df_schema.field_names();
                     // Get primary key and/or unique indices in the schema:
                     let indices = columns
                         .iter()
                         .map(|pk| {
-                            let idx = df_schema
-                                .fields()
+                            let idx = field_names
                                 .iter()
-                                .position(|item| {
-                                    item.qualified_name() == pk.value.clone()
-                                })
+                                .position(|item| *item == pk.value)
                                 .ok_or_else(|| {
                                     DataFusionError::Execution(
                                         "Primary key doesn't exist".to_string(),
@@ -452,7 +450,7 @@ pub fn aggregate_functional_dependencies(
     aggr_schema: &DFSchema,
 ) -> FunctionalDependencies {
     let mut aggregate_func_dependencies = vec![];
-    let aggr_input_fields = aggr_input_schema.fields();
+    let aggr_input_fields = aggr_input_schema.field_names();
     let aggr_fields = aggr_schema.fields();
     // Association covers the whole table:
     let target_indices = (0..aggr_schema.fields().len()).collect::<Vec<_>>();
@@ -470,14 +468,14 @@ pub fn aggregate_functional_dependencies(
         let mut new_source_field_names = vec![];
         let source_field_names = source_indices
             .iter()
-            .map(|&idx| aggr_input_fields[idx].qualified_name())
+            .map(|&idx| &aggr_input_fields[idx])
             .collect::<Vec<_>>();
 
         for (idx, group_by_expr_name) in group_by_expr_names.iter().enumerate() {
             // When one of the input determinant expressions matches with
             // the GROUP BY expression, add the index of the GROUP BY
             // expression as a new determinant key:
-            if source_field_names.contains(group_by_expr_name) {
+            if source_field_names.contains(&group_by_expr_name) {
                 new_source_indices.push(idx);
                 new_source_field_names.push(group_by_expr_name.clone());
             }
@@ -538,11 +536,7 @@ pub fn get_target_functional_dependencies(
 ) -> Option<Vec<usize>> {
     let mut combined_target_indices = HashSet::new();
     let dependencies = schema.functional_dependencies();
-    let field_names = schema
-        .fields()
-        .iter()
-        .map(|item| item.qualified_name())
-        .collect::<Vec<_>>();
+    let field_names = schema.field_names();
     for FunctionalDependence {
         source_indices,
         target_indices,
@@ -551,7 +545,7 @@ pub fn get_target_functional_dependencies(
     {
         let source_key_names = source_indices
             .iter()
-            .map(|id_key_idx| field_names[*id_key_idx].clone())
+            .map(|id_key_idx| &field_names[*id_key_idx])
             .collect::<Vec<_>>();
         // If the GROUP BY expression contains a determinant key, we can use
         // the associated fields after aggregation even if they are not part
@@ -577,11 +571,7 @@ pub fn get_required_group_by_exprs_indices(
     group_by_expr_names: &[String],
 ) -> Option<Vec<usize>> {
     let dependencies = schema.functional_dependencies();
-    let field_names = schema
-        .fields()
-        .iter()
-        .map(|item| item.qualified_name())
-        .collect::<Vec<_>>();
+    let field_names = schema.field_names();
     let mut groupby_expr_indices = group_by_expr_names
         .iter()
         .map(|group_by_expr_name| {

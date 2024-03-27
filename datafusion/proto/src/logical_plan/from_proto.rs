@@ -41,8 +41,8 @@ use arrow::{
 use datafusion::execution::registry::FunctionRegistry;
 use datafusion_common::{
     arrow_datafusion_err, internal_err, plan_datafusion_err, Column, Constraint,
-    Constraints, DFField, DFSchema, DFSchemaRef, DataFusionError, OwnedTableReference,
-    Result, ScalarValue,
+    Constraints, DFSchema, DFSchemaRef, DataFusionError, OwnedTableReference, Result,
+    ScalarValue,
 };
 use datafusion_expr::expr::Unnest;
 use datafusion_expr::expr::{Alias, Placeholder};
@@ -170,13 +170,24 @@ impl TryFrom<&protobuf::DfSchema> for DFSchema {
     type Error = Error;
 
     fn try_from(df_schema: &protobuf::DfSchema) -> Result<Self, Self::Error> {
-        let fields = df_schema
-            .columns
-            .iter()
-            .map(|c| c.try_into())
-            .collect::<Result<Vec<DFField>, _>>()?;
+        let df_fields = df_schema.columns.clone();
+        let qualifiers_and_fields: Vec<(Option<OwnedTableReference>, Arc<Field>)> =
+            df_fields
+                .iter()
+                .map(|df_field| {
+                    let field: Field = df_field.field.as_ref().required("field")?;
+                    Ok((
+                        df_field
+                            .qualifier
+                            .as_ref()
+                            .map(|q| q.relation.clone().into()),
+                        Arc::new(field),
+                    ))
+                })
+                .collect::<Result<Vec<_>, Error>>()?;
+
         Ok(DFSchema::new_with_metadata(
-            fields,
+            qualifiers_and_fields,
             df_schema.metadata.clone(),
         )?)
     }
@@ -188,19 +199,6 @@ impl TryFrom<protobuf::DfSchema> for DFSchemaRef {
     fn try_from(df_schema: protobuf::DfSchema) -> Result<Self, Self::Error> {
         let dfschema: DFSchema = (&df_schema).try_into()?;
         Ok(Arc::new(dfschema))
-    }
-}
-
-impl TryFrom<&protobuf::DfField> for DFField {
-    type Error = Error;
-
-    fn try_from(df_field: &protobuf::DfField) -> Result<Self, Self::Error> {
-        let field: Field = df_field.field.as_ref().required("field")?;
-
-        Ok(match &df_field.qualifier {
-            Some(q) => DFField::from_qualified(q.relation.clone(), field),
-            None => DFField::from(field),
-        })
     }
 }
 

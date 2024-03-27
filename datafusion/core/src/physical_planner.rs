@@ -1022,10 +1022,9 @@ impl DefaultPhysicalPlanner {
                         // Remove temporary projected columns
                         let join_plan = if added_project {
                             let final_join_result = join_schema
-                                .fields()
                                 .iter()
-                                .map(|field| {
-                                    Expr::Column(field.qualified_column())
+                                .map(|(qualifier, field)| {
+                                    Expr::Column(datafusion_common::Column::from((qualifier, field.as_ref())))
                                 })
                                 .collect::<Vec<_>>();
                             let projection =
@@ -1089,18 +1088,19 @@ impl DefaultPhysicalPlanner {
                             let (filter_df_fields, filter_fields): (Vec<_>, Vec<_>) = left_field_indices.clone()
                                 .into_iter()
                                 .map(|i| (
-                                    left_df_schema.field(i).clone(),
+                                    left_df_schema.qualified_field(i),
                                     physical_left.schema().field(i).clone(),
                                 ))
                                 .chain(
                                     right_field_indices.clone()
                                         .into_iter()
                                         .map(|i| (
-                                            right_df_schema.field(i).clone(),
+                                            right_df_schema.qualified_field(i),
                                             physical_right.schema().field(i).clone(),
                                         ))
                                 )
                                 .unzip();
+                            let filter_df_fields = filter_df_fields.into_iter().map(|(qualifier, field)| (qualifier.cloned(), Arc::new(field.clone()))).collect();
 
                             // Construct intermediate schemas used for filtering data and
                             // convert logical expression to physical according to filter schema
@@ -2012,9 +2012,7 @@ mod tests {
     use arrow::array::{ArrayRef, DictionaryArray, Int32Array};
     use arrow::datatypes::{DataType, Field, Int32Type, SchemaRef};
     use arrow::record_batch::RecordBatch;
-    use datafusion_common::{
-        assert_contains, DFField, DFSchema, DFSchemaRef, TableReference,
-    };
+    use datafusion_common::{assert_contains, DFSchema, DFSchemaRef, TableReference};
     use datafusion_execution::runtime_env::RuntimeEnv;
     use datafusion_execution::TaskContext;
     use datafusion_expr::{
@@ -2257,25 +2255,23 @@ mod tests {
             .await;
 
         let expected_error: &str = "Error during planning: \
-        Extension planner for NoOp created an ExecutionPlan with mismatched schema. \
-        LogicalPlan schema: DFSchema { fields: [\
-            DFField { qualifier: None, field: Field { \
-                name: \"a\", \
+            Extension planner for NoOp created an ExecutionPlan with mismatched schema. \
+            LogicalPlan schema: \
+            DFSchema { inner: Schema { fields: \
+                [Field { name: \"a\", \
                 data_type: Int32, \
                 nullable: false, \
                 dict_id: 0, \
-                dict_is_ordered: false, \
-                metadata: {} } }\
-        ], metadata: {}, functional_dependencies: FunctionalDependencies { deps: [] } }, \
-        ExecutionPlan schema: Schema { fields: [\
-            Field { \
-                name: \"b\", \
+                dict_is_ordered: false, metadata: {} }], \
+                metadata: {} }, field_qualifiers: [None], \
+                functional_dependencies: FunctionalDependencies { deps: [] } }, \
+            ExecutionPlan schema: Schema { fields: \
+                [Field { name: \"b\", \
                 data_type: Int32, \
                 nullable: false, \
                 dict_id: 0, \
-                dict_is_ordered: false, \
-                metadata: {} }\
-        ], metadata: {} }";
+                dict_is_ordered: false, metadata: {} }], \
+                metadata: {} }";
         match plan {
             Ok(_) => panic!("Expected planning failure"),
             Err(e) => assert!(
@@ -2539,8 +2535,8 @@ mod tests {
         fn default() -> Self {
             Self {
                 schema: DFSchemaRef::new(
-                    DFSchema::new_with_metadata(
-                        vec![DFField::new_unqualified("a", DataType::Int32, false)],
+                    DFSchema::from_unqualifed_fields(
+                        vec![Field::new("a", DataType::Int32, false)].into(),
                         HashMap::new(),
                     )
                     .unwrap(),

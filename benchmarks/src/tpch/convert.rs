@@ -86,10 +86,11 @@ impl ConvertOpt {
             // Select all apart from the padding column
             let selection = csv
                 .schema()
-                .fields()
                 .iter()
                 .take(schema.fields.len() - 1)
-                .map(|d| Expr::Column(d.qualified_column()))
+                .map(|(qualifier, field)| {
+                    Expr::Column(Column::from((qualifier, field.as_ref())))
+                })
                 .collect();
 
             csv = csv.select(selection)?;

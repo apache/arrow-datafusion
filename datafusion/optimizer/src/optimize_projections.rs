@@ -638,10 +638,9 @@ fn outer_columns_helper_multi<'a>(
 ///
 /// A vector of `Expr::Column` expressions residing at `indices` of the `input_schema`.
 fn get_required_exprs(input_schema: &Arc<DFSchema>, indices: &[usize]) -> Vec<Expr> {
-    let fields = input_schema.fields();
     indices
         .iter()
-        .map(|&idx| Expr::Column(fields[idx].qualified_column()))
+        .map(|&idx| Expr::Column(Column::from(input_schema.qualified_field(idx))))
         .collect()
 }
 

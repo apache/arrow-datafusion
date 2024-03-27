@@ -90,7 +90,7 @@ fn rewrite_in_terms_of_projection(
             let col = Expr::Column(
                 found
                     .to_field(input.schema())
-                    .map(|f| f.qualified_column())?,
+                    .map(|(qualifier, field)| Column::new(qualifier, field.name()))?,
             );
             return Ok(Transformed::yes(col));
         }

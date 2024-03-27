@@ -18,7 +18,7 @@
 use async_recursion::async_recursion;
 use datafusion::arrow::datatypes::{DataType, Field, TimeUnit};
 use datafusion::common::{
-    not_impl_err, substrait_datafusion_err, substrait_err, DFField, DFSchema, DFSchemaRef,
+    not_impl_err, substrait_datafusion_err, substrait_err, DFSchema, DFSchemaRef,
 };
 
 use datafusion::execution::FunctionRegistry;
@@ -484,9 +484,14 @@ pub async fn from_substrait_rel(
                                 .collect();
                             match &t {
                                 LogicalPlan::TableScan(scan) => {
-                                    let fields: Vec<DFField> = column_indices
+                                    let fields = column_indices
                                         .iter()
-                                        .map(|i| scan.projected_schema.field(*i).clone())
+                                        .map(|i| {
+                                            scan.projected_schema.qualified_field(*i)
+                                        })
+                                        .map(|(qualifier, field)| {
+                                            (qualifier.cloned(), Arc::new(field.clone()))
+                                        })
                                         .collect();
                                     let mut scan = scan.clone();
                                     scan.projection = Some(column_indices);
@@ -1389,13 +1394,9 @@ fn from_substrait_field_reference(
                 Some(_) => not_impl_err!(
                     "Direct reference StructField with child is not supported"
                 ),
-                None => {
-                    let column = input_schema.field(x.field as usize).qualified_column();
-                    Ok(Expr::Column(Column {
-                        relation: column.relation,
-                        name: column.name,
-                    }))
-                }
+                None => Ok(Expr::Column(Column::from(
+                    input_schema.qualified_field(x.field as usize),
+                ))),
             },
             _ => not_impl_err!(
                 "Direct reference with types other than StructField is not supported"

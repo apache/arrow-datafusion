@@ -31,13 +31,15 @@ use arrow::{
     record_batch::RecordBatch,
 };
 use arrow_schema::Fields;
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
-use datafusion_common::{internal_err, Column, DFField, DFSchema, DataFusionError};
 use datafusion_expr::execution_props::ExecutionProps;
+use futures::stream::FuturesUnordered;
+use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use log::{debug, trace};
+
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::{internal_err, Column, DFSchema, DataFusionError};
 use datafusion_expr::{Expr, ScalarFunctionDefinition, Volatility};
 use datafusion_physical_expr::create_physical_expr;
-use futures::stream::{BoxStream, FuturesUnordered, StreamExt, TryStreamExt};
-use log::{debug, trace};
 use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStore};
 
@@ -267,10 +269,10 @@ async fn prune_partitions(
         .collect();
     let schema = Arc::new(Schema::new(fields));
 
-    let df_schema = DFSchema::new_with_metadata(
+    let df_schema = DFSchema::from_unqualifed_fields(
         partition_cols
             .iter()
-            .map(|(n, d)| DFField::new_unqualified(n, d.clone(), true))
+            .map(|(n, d)| Field::new(n, d.clone(), true))
             .collect(),
         Default::default(),
     )?;

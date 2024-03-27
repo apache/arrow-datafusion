@@ -756,9 +756,9 @@ mod test {
     };
     use crate::test::assert_analyzed_plan_eq;
 
-    use arrow::datatypes::{DataType, TimeUnit};
+    use arrow::datatypes::{DataType, Field, TimeUnit};
     use datafusion_common::tree_node::{TransformedResult, TreeNode};
-    use datafusion_common::{DFField, DFSchema, DFSchemaRef, Result, ScalarValue};
+    use datafusion_common::{DFSchema, DFSchemaRef, Result, ScalarValue};
     use datafusion_expr::expr::{self, InSubquery, Like, ScalarFunction};
     use datafusion_expr::logical_plan::{EmptyRelation, Projection};
     use datafusion_expr::{
@@ -781,8 +781,8 @@ mod test {
         Arc::new(LogicalPlan::EmptyRelation(EmptyRelation {
             produce_one_row: false,
             schema: Arc::new(
-                DFSchema::new_with_metadata(
-                    vec![DFField::new_unqualified("a", data_type, true)],
+                DFSchema::from_unqualifed_fields(
+                    vec![Field::new("a", data_type, true)].into(),
                     std::collections::HashMap::new(),
                 )
                 .unwrap(),
@@ -1042,12 +1042,8 @@ mod test {
         let expr = col("a").in_list(vec![lit(1_i32), lit(4_i8), lit(8_i64)], false);
         let empty = Arc::new(LogicalPlan::EmptyRelation(EmptyRelation {
             produce_one_row: false,
-            schema: Arc::new(DFSchema::new_with_metadata(
-                vec![DFField::new_unqualified(
-                    "a",
-                    DataType::Decimal128(12, 4),
-                    true,
-                )],
+            schema: Arc::new(DFSchema::from_unqualifed_fields(
+                vec![Field::new("a", DataType::Decimal128(12, 4), true)].into(),
                 std::collections::HashMap::new(),
             )?),
         }));
@@ -1251,8 +1247,8 @@ mod test {
     #[test]
     fn test_type_coercion_rewrite() -> Result<()> {
         // gt
-        let schema = Arc::new(DFSchema::new_with_metadata(
-            vec![DFField::new_unqualified("a", DataType::Int64, true)],
+        let schema = Arc::new(DFSchema::from_unqualifed_fields(
+            vec![Field::new("a", DataType::Int64, true)].into(),
             std::collections::HashMap::new(),
         )?);
         let mut rewriter = TypeCoercionRewriter { schema };
@@ -1262,8 +1258,8 @@ mod test {
         assert_eq!(expected, result);
 
         // eq
-        let schema = Arc::new(DFSchema::new_with_metadata(
-            vec![DFField::new_unqualified("a", DataType::Int64, true)],
+        let schema = Arc::new(DFSchema::from_unqualifed_fields(
+            vec![Field::new("a", DataType::Int64, true)].into(),
             std::collections::HashMap::new(),
         )?);
         let mut rewriter = TypeCoercionRewriter { schema };
@@ -1273,8 +1269,8 @@ mod test {
         assert_eq!(expected, result);
 
         // lt
-        let schema = Arc::new(DFSchema::new_with_metadata(
-            vec![DFField::new_unqualified("a", DataType::Int64, true)],
+        let schema = Arc::new(DFSchema::from_unqualifed_fields(
+            vec![Field::new("a", DataType::Int64, true)].into(),
             std::collections::HashMap::new(),
         )?);
         let mut rewriter = TypeCoercionRewriter { schema };
@@ -1346,26 +1342,27 @@ mod test {
 
     #[test]
     fn test_case_expression_coercion() -> Result<()> {
-        let schema = Arc::new(DFSchema::new_with_metadata(
+        let schema = Arc::new(DFSchema::from_unqualifed_fields(
             vec![
-                DFField::new_unqualified("boolean", DataType::Boolean, true),
-                DFField::new_unqualified("integer", DataType::Int32, true),
-                DFField::new_unqualified("float", DataType::Float32, true),
-                DFField::new_unqualified(
+                Field::new("boolean", DataType::Boolean, true),
+                Field::new("integer", DataType::Int32, true),
+                Field::new("float", DataType::Float32, true),
+                Field::new(
                     "timestamp",
                     DataType::Timestamp(TimeUnit::Nanosecond, None),
                     true,
                 ),
-                DFField::new_unqualified("date", DataType::Date32, true),
-                DFField::new_unqualified(
+                Field::new("date", DataType::Date32, true),
+                Field::new(
                     "interval",
                     DataType::Interval(arrow::datatypes::IntervalUnit::MonthDayNano),
                     true,
                 ),
-                DFField::new_unqualified("binary", DataType::Binary, true),
-                DFField::new_unqualified("string", DataType::Utf8, true),
-                DFField::new_unqualified("decimal", DataType::Decimal128(10, 10), true),
-            ],
+                Field::new("binary", DataType::Binary, true),
+                Field::new("string", DataType::Utf8, true),
+                Field::new("decimal", DataType::Decimal128(10, 10), true),
+            ]
+            .into(),
             std::collections::HashMap::new(),
         )?);
 

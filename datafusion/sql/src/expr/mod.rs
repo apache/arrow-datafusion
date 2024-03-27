@@ -135,20 +135,16 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         match expr {
             Expr::Column(col) => match &col.relation {
                 Some(q) => {
-                    match schema
-                        .fields()
-                        .iter()
-                        .find(|field| match field.qualifier() {
-                            Some(field_q) => {
-                                field.name() == &col.name
-                                    && field_q.to_string().ends_with(&format!(".{q}"))
-                            }
-                            _ => false,
-                        }) {
-                        Some(df_field) => Expr::Column(Column {
-                            relation: df_field.qualifier().cloned(),
-                            name: df_field.name().clone(),
-                        }),
+                    match schema.iter().find(|(qualifier, field)| match qualifier {
+                        Some(field_q) => {
+                            field.name() == &col.name
+                                && field_q.to_string().ends_with(&format!(".{q}"))
+                        }
+                        _ => false,
+                    }) {
+                        Some((qualifier, df_field)) => {
+                            Expr::Column(Column::from((qualifier, df_field.as_ref())))
+                        }
                         None => Expr::Column(col),
                     }
                 }

@@ -195,11 +195,15 @@ impl DataFrame {
     pub fn select_columns(self, columns: &[&str]) -> Result<DataFrame> {
         let fields = columns
             .iter()
-            .map(|name| self.plan.schema().field_with_unqualified_name(name))
+            .map(|name| {
+                self.plan
+                    .schema()
+                    .qualified_field_with_unqualified_name(name)
+            })
             .collect::<Result<Vec<_>>>()?;
         let expr: Vec<Expr> = fields
-            .iter()
-            .map(|f| Expr::Column(f.qualified_column()))
+            .into_iter()
+            .map(|(qualifier, field)| Expr::Column(Column::from((qualifier, field))))
             .collect();
         self.select(expr)
     }
@@ -1240,14 +1244,13 @@ impl DataFrame {
         let mut col_exists = false;
         let mut fields: Vec<Expr> = plan
             .schema()
-            .fields()
             .iter()
-            .map(|f| {
-                if f.name() == name {
+            .map(|(qualifier, field)| {
+                if field.name() == name {
                     col_exists = true;
                     new_column.clone()
                 } else {
-                    col(f.qualified_column())
+                    col(Column::from((qualifier, field.as_ref())))
                 }
             })
             .collect();
@@ -1298,24 +1301,25 @@ impl DataFrame {
             Column::from_qualified_name_ignore_case(old_name)
         };
 
-        let field_to_rename = match self.plan.schema().field_from_column(&old_column) {
-            Ok(field) => field,
-            // no-op if field not found
-            Err(DataFusionError::SchemaError(SchemaError::FieldNotFound { .. }, _)) => {
-                return Ok(self)
-            }
-            Err(err) => return Err(err),
-        };
+        let (qualifier_rename, field_rename) =
+            match self.plan.schema().qualified_field_from_column(&old_column) {
+                Ok(qualifier_and_field) => qualifier_and_field,
+                // no-op if field not found
+                Err(DataFusionError::SchemaError(
+                    SchemaError::FieldNotFound { .. },
+                    _,
+                )) => return Ok(self),
+                Err(err) => return Err(err),
+            };
         let projection = self
             .plan
             .schema()
-            .fields()
             .iter()
-            .map(|f| {
-                if f == field_to_rename {
-                    col(f.qualified_column()).alias(new_name)
+            .map(|(qualifier, field)| {
+                if qualifier.eq(&qualifier_rename) && field.as_ref() == field_rename {
+                    col(Column::from((qualifier, field.as_ref()))).alias(new_name)
                 } else {
-                    col(f.qualified_column())
+                    col(Column::from((qualifier, field.as_ref())))
                 }
             })
             .collect::<Vec<_>>();
