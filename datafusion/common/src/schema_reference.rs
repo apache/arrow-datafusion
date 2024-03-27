@@ -15,16 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, marker::PhantomData, sync::Arc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SchemaReference<'a> {
+    X {
+        phantom: PhantomData<&'a bool>
+    },
     Bare {
-        schema: Cow<'a, str>,
+        schema: Arc<String>,
     },
     Full {
-        schema: Cow<'a, str>,
-        catalog: Cow<'a, str>,
+        schema: Arc<String>,
+        catalog: Arc<String>,
     },
 }
 
@@ -34,6 +37,7 @@ impl SchemaReference<'_> {
         match self {
             SchemaReference::Bare { schema } => schema,
             SchemaReference::Full { schema, catalog: _ } => schema,
+            SchemaReference::X { phantom } => todo!(),
         }
     }
 }
@@ -45,20 +49,13 @@ impl std::fmt::Display for SchemaReference<'_> {
         match self {
             Self::Bare { schema } => write!(f, "{schema}"),
             Self::Full { schema, catalog } => write!(f, "{catalog}.{schema}"),
+            _ => todo!()
         }
     }
 }
 
 impl<'a> From<&'a OwnedSchemaReference> for SchemaReference<'a> {
     fn from(value: &'a OwnedSchemaReference) -> Self {
-        match value {
-            SchemaReference::Bare { schema } => SchemaReference::Bare {
-                schema: Cow::Borrowed(schema),
-            },
-            SchemaReference::Full { schema, catalog } => SchemaReference::Full {
-                schema: Cow::Borrowed(schema),
-                catalog: Cow::Borrowed(catalog),
-            },
-        }
+        value.clone()
     }
 }

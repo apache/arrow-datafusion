@@ -1553,6 +1553,10 @@ impl From<OwnedTableReference> for protobuf::OwnedTableReference {
                 schema: schema.to_string(),
                 table: table.to_string(),
             }),
+            datafusion_common::TableReference::X { phantom } => todo!(),
+            datafusion_common::TableReference::Bare { table } => todo!(),
+            datafusion_common::TableReference::Partial { schema, table } => todo!(),
+            datafusion_common::TableReference::Full { catalog, schema, table } => todo!(),
         };
 
         protobuf::OwnedTableReference {

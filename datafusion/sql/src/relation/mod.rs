@@ -55,7 +55,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                         .get_table_function_source(&tbl_func_name, args)?;
                     let plan = LogicalPlanBuilder::scan(
                         TableReference::Bare {
-                            table: std::borrow::Cow::Borrowed("tmp_table"),
+                            table: String::from("tmp_table").into(),
                         },
                         provider,
                         None,
