@@ -372,7 +372,7 @@ pub fn to_substrait_rel(
             let input_rels = union
                 .inputs
                 .iter()
-                .map(|input| to_substrait_rel(input.as_ref(), ctx, extension_info))
+                .map(|input| to_substrait_rel(input, ctx, extension_info))
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
                 .map(|ptr| *ptr)

@@ -26,7 +26,6 @@ use datafusion_common::Result;
 use datafusion_expr::{
     and, logical_plan::Filter, logical_plan::JoinType, Expr, ExprSchemable, LogicalPlan,
 };
-use std::sync::Arc;
 
 /// The FilterNullJoinKeys rule will identify inner joins with equi-join conditions
 /// where the join key is nullable on one side and non-nullable on the other side
@@ -71,14 +70,14 @@ impl OptimizerRule for FilterNullJoinKeys {
 
                 if !left_filters.is_empty() {
                     let predicate = create_not_null_predicate(left_filters);
-                    join.left = Arc::new(LogicalPlan::Filter(Filter::try_new(
+                    join.left = Box::new(LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         join.left.clone(),
                     )?));
                 }
                 if !right_filters.is_empty() {
                     let predicate = create_not_null_predicate(right_filters);
-                    join.right = Arc::new(LogicalPlan::Filter(Filter::try_new(
+                    join.right = Box::new(LogicalPlan::Filter(Filter::try_new(
                         predicate,
                         join.right.clone(),
                     )?));
@@ -112,6 +111,8 @@ fn create_not_null_predicate(filters: Vec<Expr>) -> Expr {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::test::assert_optimized_plan_eq;
     use arrow::datatypes::{DataType, Field, Schema};
@@ -119,7 +120,7 @@ mod tests {
     use datafusion_expr::logical_plan::table_scan;
     use datafusion_expr::{col, lit, logical_plan::JoinType, LogicalPlanBuilder};
 
-    fn assert_optimized_plan_equal(plan: &LogicalPlan, expected: &str) -> Result<()> {
+    fn assert_optimized_plan_equal(plan: LogicalPlan, expected: &str) -> Result<()> {
         assert_optimized_plan_eq(Arc::new(FilterNullJoinKeys {}), plan, expected)
     }
 
@@ -131,7 +132,7 @@ mod tests {
         \n  Filter: t1.optional_id IS NOT NULL\
         \n    TableScan: t1\
         \n  TableScan: t2";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -142,7 +143,7 @@ mod tests {
         \n  Filter: t1.optional_id IS NOT NULL\
         \n    TableScan: t1\
         \n  TableScan: t2";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -179,7 +180,7 @@ mod tests {
         \n    Filter: t1.optional_id IS NOT NULL\
         \n      TableScan: t1\
         \n    TableScan: t2";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -200,7 +201,7 @@ mod tests {
         \n  Filter: t1.optional_id + UInt32(1) IS NOT NULL\
         \n    TableScan: t1\
         \n  TableScan: t2";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -221,7 +222,7 @@ mod tests {
         \n  TableScan: t1\
         \n  Filter: t2.optional_id + UInt32(1) IS NOT NULL\
         \n    TableScan: t2";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -244,7 +245,7 @@ mod tests {
         \n    TableScan: t1\
         \n  Filter: t2.optional_id + UInt32(1) IS NOT NULL\
         \n    TableScan: t2";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     fn build_plan(

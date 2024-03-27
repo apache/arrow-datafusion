@@ -19,7 +19,9 @@
 
 use std::sync::Arc;
 
-use datafusion_common::{DFSchema, DFSchemaRef, Result};
+use datafusion_common::{
+    internal_err, tree_node::Transformed, DFSchema, DFSchemaRef, Result,
+};
 use datafusion_expr::execution_props::ExecutionProps;
 use datafusion_expr::logical_plan::LogicalPlan;
 use datafusion_expr::simplify::SimplifyContext;
@@ -52,23 +54,35 @@ impl OptimizerRule for SimplifyExpressions {
 
     fn try_optimize(
         &self,
-        plan: &LogicalPlan,
-        config: &dyn OptimizerConfig,
+        _plan: &LogicalPlan,
+        _config: &dyn OptimizerConfig,
     ) -> Result<Option<LogicalPlan>> {
+        internal_err!("SimplifyExpressions implements `try_optimize_owned`")
+    }
+
+    fn support_owned(&self) -> bool {
+        true
+    }
+
+    fn try_optimize_owned(
+        &self,
+        plan: LogicalPlan,
+        config: &dyn OptimizerConfig,
+    ) -> Result<Transformed<LogicalPlan>> {
         let mut execution_props = ExecutionProps::new();
         execution_props.query_execution_start_time = config.query_execution_start_time();
-        Ok(Some(Self::optimize_internal(plan, &execution_props)?))
+        Self::optimize_internal(plan, &execution_props)
     }
 }
 
 impl SimplifyExpressions {
     fn optimize_internal(
-        plan: &LogicalPlan,
+        plan: LogicalPlan,
         execution_props: &ExecutionProps,
-    ) -> Result<LogicalPlan> {
+    ) -> Result<Transformed<LogicalPlan>> {
         let schema = if !plan.inputs().is_empty() {
             DFSchemaRef::new(merge_schema(plan.inputs()))
-        } else if let LogicalPlan::TableScan(scan) = plan {
+        } else if let LogicalPlan::TableScan(scan) = &plan {
             // When predicates are pushed into a table scan, there is no input
             // schema to resolve predicates against, so it must be handled specially
             //
@@ -88,11 +102,15 @@ impl SimplifyExpressions {
         };
         let info = SimplifyContext::new(execution_props).with_schema(schema);
 
-        let new_inputs = plan
-            .inputs()
-            .iter()
-            .map(|input| Self::optimize_internal(input, execution_props))
-            .collect::<Result<Vec<_>>>()?;
+        let mut is_transformed = false;
+
+        let plan = plan.rewrite_inputs(|input| {
+            let t = Self::optimize_internal(input, execution_props)?;
+            if t.transformed {
+                is_transformed = true;
+            }
+            Ok(t.data)
+        })?;
 
         let simplifier = ExprSimplifier::new(info);
 
@@ -109,18 +127,34 @@ impl SimplifyExpressions {
             simplifier
         };
 
-        let exprs = plan
-            .expressions()
-            .into_iter()
-            .map(|e| {
-                // TODO: unify with `rewrite_preserving_name`
-                let original_name = e.name_for_alias()?;
-                let new_e = simplifier.simplify(e)?;
-                new_e.alias_if_changed(original_name)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let has_no_alias = matches!(plan, LogicalPlan::Filter(_));
 
-        plan.with_new_exprs(exprs, new_inputs)
+        let plan = plan.rewrite_exprs(|e| {
+            if has_no_alias {
+                // no aliasing for filters
+                return simplifier.simplify(e);
+            }
+
+            // TODO: unify with `rewrite_preserving_name`
+            let original_name = e.name_for_alias()?;
+            // TODO: Track if `simplify` transform the expression
+            let new_e = simplifier.simplify(e)?;
+
+            // alias if the name has changed
+            let new_name = new_e.name_for_alias()?;
+            Ok(if new_name == original_name {
+                new_e
+            } else {
+                is_transformed = true;
+                new_e.alias(original_name)
+            })
+        })?;
+
+        if is_transformed {
+            Ok(Transformed::yes(plan))
+        } else {
+            Ok(Transformed::no(plan))
+        }
     }
 }
 

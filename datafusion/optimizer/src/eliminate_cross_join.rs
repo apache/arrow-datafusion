@@ -116,7 +116,7 @@ impl OptimizerRule for EliminateCrossJoin {
 
         if plan.schema() != left.schema() {
             left = LogicalPlan::Projection(Projection::new_from_schema(
-                Arc::new(left),
+                Box::new(left),
                 plan.schema().clone(),
             ));
         }
@@ -127,12 +127,12 @@ impl OptimizerRule for EliminateCrossJoin {
 
         // If there are no join keys then do nothing:
         if all_join_keys.is_empty() {
-            Filter::try_new(predicate.clone(), Arc::new(left))
+            Filter::try_new(predicate.clone(), Box::new(left))
                 .map(|f| Some(LogicalPlan::Filter(f)))
         } else {
             // Remove join expressions from filter:
             match remove_join_expressions(predicate, &all_join_keys)? {
-                Some(filter_expr) => Filter::try_new(filter_expr, Arc::new(left))
+                Some(filter_expr) => Filter::try_new(filter_expr, Box::new(left))
                     .map(|f| Some(LogicalPlan::Filter(f))),
                 _ => Ok(Some(left)),
             }
@@ -225,8 +225,8 @@ fn find_inner_join(
             )?);
 
             return Ok(LogicalPlan::Join(Join {
-                left: Arc::new(left_input.clone()),
-                right: Arc::new(right_input),
+                left: Box::new(left_input.clone()),
+                right: Box::new(right_input),
                 join_type: JoinType::Inner,
                 join_constraint: JoinConstraint::On,
                 on: join_keys,
@@ -244,8 +244,8 @@ fn find_inner_join(
     )?);
 
     Ok(LogicalPlan::CrossJoin(CrossJoin {
-        left: Arc::new(left_input.clone()),
-        right: Arc::new(right),
+        left: Box::new(left_input.clone()),
+        right: Box::new(right),
         schema: join_schema,
     }))
 }

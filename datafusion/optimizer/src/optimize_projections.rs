@@ -257,7 +257,7 @@ fn optimize_projections(
             // Create a new aggregate plan with the updated input and only the
             // absolutely necessary fields:
             return Aggregate::try_new(
-                Arc::new(aggregate_input),
+                Box::new(aggregate_input),
                 new_group_bys,
                 new_aggr_expr,
             )
@@ -304,7 +304,7 @@ fn optimize_projections(
                     get_required_exprs(window.input.schema(), &required_indices);
                 let (window_child, _) =
                     add_projection_on_top_if_helpful(window_child, required_exprs)?;
-                Window::try_new(new_window_expr, Arc::new(window_child))
+                Window::try_new(new_window_expr, Box::new(window_child))
                     .map(|window| Some(LogicalPlan::Window(window)))
             };
         }
@@ -834,7 +834,7 @@ fn add_projection_on_top_if_helpful(
     if project_exprs.len() >= plan.schema().fields().len() {
         Ok((plan, false))
     } else {
-        Projection::try_new(project_exprs, Arc::new(plan))
+        Projection::try_new(project_exprs, Box::new(plan))
             .map(|proj| (LogicalPlan::Projection(proj), true))
     }
 }
@@ -870,7 +870,7 @@ fn rewrite_projection_given_requirements(
         if is_projection_unnecessary(&input, &exprs_used)? {
             Ok(Some(input))
         } else {
-            Projection::try_new(exprs_used, Arc::new(input))
+            Projection::try_new(exprs_used, Box::new(input))
                 .map(|proj| Some(LogicalPlan::Projection(proj)))
         }
     } else if exprs_used.len() < proj.expr.len() {
@@ -910,7 +910,7 @@ mod tests {
         table_scan, try_cast, when, Expr, Like, LogicalPlan, Operator,
     };
 
-    fn assert_optimized_plan_equal(plan: &LogicalPlan, expected: &str) -> Result<()> {
+    fn assert_optimized_plan_equal(plan: LogicalPlan, expected: &str) -> Result<()> {
         assert_optimized_plan_eq(Arc::new(OptimizeProjections::new()), plan, expected)
     }
 
@@ -924,7 +924,7 @@ mod tests {
 
         let expected = "Projection: Int32(1) + test.a\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -938,7 +938,7 @@ mod tests {
 
         let expected = "Projection: Int32(1) + test.a\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -951,7 +951,7 @@ mod tests {
 
         let expected = "Projection: test.a AS alias\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -964,7 +964,7 @@ mod tests {
 
         let expected = "Projection: test.a AS alias\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -986,7 +986,7 @@ mod tests {
         \n  Projection: \
         \n    Aggregate: groupBy=[[]], aggr=[[COUNT(Int32(1))]]\
         \n      TableScan: ?table? projection=[]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1009,7 +1009,7 @@ mod tests {
             .build()?;
         let expected = "Projection: (?table?.s)[x]\
         \n  TableScan: ?table? projection=[s]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1021,7 +1021,7 @@ mod tests {
 
         let expected = "Projection: (- test.a)\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1033,7 +1033,7 @@ mod tests {
 
         let expected = "Projection: test.a IS NULL\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1045,7 +1045,7 @@ mod tests {
 
         let expected = "Projection: test.a IS NOT NULL\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1057,7 +1057,7 @@ mod tests {
 
         let expected = "Projection: test.a IS TRUE\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1069,7 +1069,7 @@ mod tests {
 
         let expected = "Projection: test.a IS NOT TRUE\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1081,7 +1081,7 @@ mod tests {
 
         let expected = "Projection: test.a IS FALSE\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1093,7 +1093,7 @@ mod tests {
 
         let expected = "Projection: test.a IS NOT FALSE\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1105,7 +1105,7 @@ mod tests {
 
         let expected = "Projection: test.a IS UNKNOWN\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1117,7 +1117,7 @@ mod tests {
 
         let expected = "Projection: test.a IS NOT UNKNOWN\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1129,7 +1129,7 @@ mod tests {
 
         let expected = "Projection: NOT test.a\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1141,7 +1141,7 @@ mod tests {
 
         let expected = "Projection: TRY_CAST(test.a AS Float64)\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1157,7 +1157,7 @@ mod tests {
 
         let expected = "Projection: test.a SIMILAR TO Utf8(\"[0-9]\")\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -1169,7 +1169,7 @@ mod tests {
 
         let expected = "Projection: test.a BETWEEN Int32(1) AND Int32(3)\
         \n  TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     // Test outer projection isn't discarded despite the same schema as inner
@@ -1190,6 +1190,6 @@ mod tests {
         let expected = "Projection: test.a, CASE WHEN test.a = Int32(1) THEN Int32(10) ELSE d END AS d\
         \n  Projection: test.a, Int32(0) AS d\
         \n    TableScan: test projection=[a]";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 }

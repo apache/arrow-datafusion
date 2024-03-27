@@ -919,7 +919,7 @@ impl DefaultPhysicalPlanner {
                     Ok(Arc::new(filter.with_default_selectivity(selectivity)?))
                 }
                 LogicalPlan::Union(Union { inputs, schema: _ }) => {
-                    let physical_plans = self.create_initial_plan_multi(inputs.iter().map(|lp| lp.as_ref()), session_state).await?;
+                    let physical_plans = self.create_initial_plan_multi(inputs.iter(), session_state).await?;
 
                     Ok(Arc::new(UnionExec::new(physical_plans)))
                 }
@@ -1020,8 +1020,8 @@ impl DefaultPhysicalPlanner {
                         let join_plan =
                             LogicalPlan::Join(Join::try_new_with_project_input(
                                 logical_plan,
-                                Arc::new(left),
-                                Arc::new(right),
+                                Box::new(left),
+                                Box::new(right),
                                 column_on,
                             )?);
 
@@ -1037,7 +1037,7 @@ impl DefaultPhysicalPlanner {
                             let projection =
                                 Projection::try_new(
                                     final_join_result,
-                                    Arc::new(join_plan),
+                                    Box::new(join_plan),
                                 )?;
                             LogicalPlan::Projection(projection)
                         } else {

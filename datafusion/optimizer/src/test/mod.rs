@@ -152,9 +152,10 @@ pub fn assert_analyzer_check_err(
 }
 pub fn assert_optimized_plan_eq(
     rule: Arc<dyn OptimizerRule + Send + Sync>,
-    plan: &LogicalPlan,
+    plan: LogicalPlan,
     expected: &str,
 ) -> Result<()> {
+    let prev_schema = plan.schema().clone();
     let optimizer = Optimizer::with_rules(vec![rule.clone()]);
     let optimized_plan = optimizer
         .optimize_recursively(
@@ -162,10 +163,10 @@ pub fn assert_optimized_plan_eq(
             plan,
             &OptimizerContext::new(),
         )?
-        .unwrap_or_else(|| plan.clone());
+        .data;
 
     // Ensure schemas always match after an optimization
-    assert_schema_is_the_same(rule.name(), plan, &optimized_plan)?;
+    assert_schema_is_the_same(rule.name(), prev_schema, &optimized_plan)?;
     let formatted_plan = format!("{optimized_plan:?}");
     assert_eq!(formatted_plan, expected);
 
@@ -174,9 +175,11 @@ pub fn assert_optimized_plan_eq(
 
 pub fn assert_optimized_plan_eq_with_rules(
     rules: Vec<Arc<dyn OptimizerRule + Send + Sync>>,
-    plan: &LogicalPlan,
+    plan: LogicalPlan,
     expected: &str,
 ) -> Result<()> {
+    let plan_schema = plan.schema().clone();
+
     fn observe(_plan: &LogicalPlan, _rule: &dyn OptimizerRule) {}
     let config = &mut OptimizerContext::new()
         .with_max_passes(1)
@@ -184,16 +187,17 @@ pub fn assert_optimized_plan_eq_with_rules(
     let optimizer = Optimizer::with_rules(rules);
     let optimized_plan = optimizer
         .optimize(plan, config, observe)
-        .expect("failed to optimize plan");
+        .expect("failed to optimize plan")
+        .data;
     let formatted_plan = format!("{optimized_plan:?}");
     assert_eq!(formatted_plan, expected);
-    assert_eq!(plan.schema(), optimized_plan.schema());
+    assert_eq!(&plan_schema, optimized_plan.schema());
     Ok(())
 }
 
 pub fn assert_optimized_plan_eq_display_indent(
     rule: Arc<dyn OptimizerRule + Send + Sync>,
-    plan: &LogicalPlan,
+    plan: LogicalPlan,
     expected: &str,
 ) {
     let optimizer = Optimizer::with_rules(vec![rule]);
@@ -204,7 +208,7 @@ pub fn assert_optimized_plan_eq_display_indent(
             &OptimizerContext::new(),
         )
         .expect("failed to optimize plan")
-        .unwrap_or_else(|| plan.clone());
+        .data;
     let formatted_plan = optimized_plan.display_indent_schema().to_string();
     assert_eq!(formatted_plan, expected);
 }
@@ -218,9 +222,9 @@ pub fn assert_multi_rules_optimized_plan_eq_display_indent(
     let mut optimized_plan = plan.clone();
     for rule in &optimizer.rules {
         optimized_plan = optimizer
-            .optimize_recursively(rule, &optimized_plan, &OptimizerContext::new())
+            .optimize_recursively(rule, optimized_plan, &OptimizerContext::new())
             .expect("failed to optimize plan")
-            .unwrap_or_else(|| optimized_plan.clone());
+            .data;
     }
     let formatted_plan = optimized_plan.display_indent_schema().to_string();
     assert_eq!(formatted_plan, expected);
@@ -228,7 +232,7 @@ pub fn assert_multi_rules_optimized_plan_eq_display_indent(
 
 pub fn assert_optimizer_err(
     rule: Arc<dyn OptimizerRule + Send + Sync>,
-    plan: &LogicalPlan,
+    plan: LogicalPlan,
     expected: &str,
 ) {
     let optimizer = Optimizer::with_rules(vec![rule]);
@@ -238,7 +242,10 @@ pub fn assert_optimizer_err(
         &OptimizerContext::new(),
     );
     match res {
-        Ok(plan) => assert_eq!(format!("{}", plan.unwrap().display_indent()), "An error"),
+        Ok(plan) => {
+            assert!(plan.transformed);
+            assert_eq!(format!("{}", plan.data.display_indent()), "An error");
+        }
         Err(ref e) => {
             let actual = format!("{e}");
             if expected.is_empty() || !actual.contains(expected) {
@@ -250,19 +257,20 @@ pub fn assert_optimizer_err(
 
 pub fn assert_optimization_skipped(
     rule: Arc<dyn OptimizerRule + Send + Sync>,
-    plan: &LogicalPlan,
+    plan: LogicalPlan,
 ) -> Result<()> {
     let optimizer = Optimizer::with_rules(vec![rule]);
+
+    let displayed_plan = format!("{}", plan.display_indent());
+
     let new_plan = optimizer
         .optimize_recursively(
             optimizer.rules.first().unwrap(),
             plan,
             &OptimizerContext::new(),
         )?
-        .unwrap_or_else(|| plan.clone());
-    assert_eq!(
-        format!("{}", plan.display_indent()),
-        format!("{}", new_plan.display_indent())
-    );
+        .data;
+
+    assert_eq!(displayed_plan, format!("{}", new_plan.display_indent()));
     Ok(())
 }

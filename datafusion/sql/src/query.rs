@@ -197,7 +197,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 LogicalPlan::Ddl(DdlStatement::CreateMemoryTable(CreateMemoryTable {
                     name: self.object_name_to_table_reference(select_into.name)?,
                     constraints: Constraints::empty(),
-                    input: Arc::new(plan),
+                    input: Box::new(plan),
                     if_not_exists: false,
                     or_replace: false,
                     column_defaults: vec![],

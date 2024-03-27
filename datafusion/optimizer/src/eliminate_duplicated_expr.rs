@@ -114,7 +114,7 @@ mod tests {
     use datafusion_expr::{col, logical_plan::builder::LogicalPlanBuilder};
     use std::sync::Arc;
 
-    fn assert_optimized_plan_eq(plan: &LogicalPlan, expected: &str) -> Result<()> {
+    fn assert_optimized_plan_eq(plan: LogicalPlan, expected: &str) -> Result<()> {
         crate::test::assert_optimized_plan_eq(
             Arc::new(EliminateDuplicatedExpr::new()),
             plan,
@@ -132,7 +132,7 @@ mod tests {
         let expected = "Limit: skip=5, fetch=10\
         \n  Sort: test.a, test.b, test.c\
         \n    TableScan: test";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 
     #[test]
@@ -151,6 +151,6 @@ mod tests {
         let expected = "Limit: skip=5, fetch=10\
         \n  Sort: test.a ASC NULLS FIRST, test.b ASC NULLS LAST\
         \n    TableScan: test";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 }

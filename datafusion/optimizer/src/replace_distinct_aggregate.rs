@@ -174,7 +174,7 @@ mod tests {
 
         assert_optimized_plan_eq(
             Arc::new(ReplaceDistinctWithAggregate::new()),
-            &plan,
+            plan,
             expected,
         )
     }
@@ -197,7 +197,7 @@ mod tests {
 
         assert_optimized_plan_eq(
             Arc::new(ReplaceDistinctWithAggregate::new()),
-            &plan,
+            plan,
             expected,
         )
     }

@@ -15,8 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::sync::Arc;
-
 use crate::analyzer::AnalyzerRule;
 
 use datafusion_common::config::ConfigOptions;
@@ -182,7 +180,7 @@ impl TreeNodeRewriter for CountWildcardRewriter {
                 .transform_down(&analyze_internal)?
                 .update_data(|new_plan| {
                     ScalarSubquery(Subquery {
-                        subquery: Arc::new(new_plan),
+                        subquery: Box::new(new_plan),
                         outer_ref_columns,
                     })
                 }),
@@ -199,7 +197,7 @@ impl TreeNodeRewriter for CountWildcardRewriter {
                     Expr::InSubquery(InSubquery::new(
                         expr,
                         Subquery {
-                            subquery: Arc::new(new_plan),
+                            subquery: Box::new(new_plan),
                             outer_ref_columns: subquery.outer_ref_columns,
                         },
                         negated,
@@ -213,7 +211,7 @@ impl TreeNodeRewriter for CountWildcardRewriter {
                 .update_data(|new_plan| {
                     Expr::Exists(expr::Exists {
                         subquery: Subquery {
-                            subquery: Arc::new(new_plan),
+                            subquery: Box::new(new_plan),
                             outer_ref_columns: subquery.outer_ref_columns,
                         },
                         negated,
@@ -226,6 +224,8 @@ impl TreeNodeRewriter for CountWildcardRewriter {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::test::*;
     use arrow::datatypes::DataType;
@@ -268,7 +268,7 @@ mod tests {
         let plan = LogicalPlanBuilder::from(table_scan_t1)
             .filter(in_subquery(
                 col("a"),
-                Arc::new(
+                Box::new(
                     LogicalPlanBuilder::from(table_scan_t2)
                         .aggregate(Vec::<Expr>::new(), vec![count(wildcard())])?
                         .project(vec![count(wildcard())])?
@@ -292,7 +292,7 @@ mod tests {
         let table_scan_t2 = test_table_scan_with_name("t2")?;
 
         let plan = LogicalPlanBuilder::from(table_scan_t1)
-            .filter(exists(Arc::new(
+            .filter(exists(Box::new(
                 LogicalPlanBuilder::from(table_scan_t2)
                     .aggregate(Vec::<Expr>::new(), vec![count(wildcard())])?
                     .project(vec![count(wildcard())])?
@@ -316,7 +316,7 @@ mod tests {
 
         let plan = LogicalPlanBuilder::from(table_scan_t1)
             .filter(
-                scalar_subquery(Arc::new(
+                scalar_subquery(Box::new(
                     LogicalPlanBuilder::from(table_scan_t2)
                         .filter(out_ref_col(DataType::UInt32, "t1.a").eq(col("t2.a")))?
                         .aggregate(

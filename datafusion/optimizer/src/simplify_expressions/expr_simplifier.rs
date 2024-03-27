@@ -3415,7 +3415,7 @@ mod tests {
             col("c1").not_eq(lit(1)).and(col("c1").not_eq(lit(2)))
         );
 
-        let subquery = Arc::new(test_table_scan_with_name("test").unwrap());
+        let subquery = Box::new(test_table_scan_with_name("test").unwrap());
         assert_eq!(
             simplify(in_list(
                 col("c1"),
@@ -3434,9 +3434,9 @@ mod tests {
         );
 
         let subquery1 =
-            scalar_subquery(Arc::new(test_table_scan_with_name("test1").unwrap()));
+            scalar_subquery(Box::new(test_table_scan_with_name("test1").unwrap()));
         let subquery2 =
-            scalar_subquery(Arc::new(test_table_scan_with_name("test2").unwrap()));
+            scalar_subquery(Box::new(test_table_scan_with_name("test2").unwrap()));
 
         // c1 NOT IN (<subquery1>, <subquery2>) -> c1 != <subquery1> AND c1 != <subquery2>
         assert_eq!(

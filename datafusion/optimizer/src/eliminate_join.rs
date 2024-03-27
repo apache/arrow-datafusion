@@ -82,7 +82,7 @@ mod tests {
     use datafusion_expr::{logical_plan::builder::LogicalPlanBuilder, Expr, LogicalPlan};
     use std::sync::Arc;
 
-    fn assert_optimized_plan_equal(plan: &LogicalPlan, expected: &str) -> Result<()> {
+    fn assert_optimized_plan_equal(plan: LogicalPlan, expected: &str) -> Result<()> {
         assert_optimized_plan_eq(Arc::new(EliminateJoin::new()), plan, expected)
     }
 
@@ -97,7 +97,7 @@ mod tests {
             .build()?;
 
         let expected = "EmptyRelation";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -114,6 +114,6 @@ mod tests {
         CrossJoin:\
         \n  EmptyRelation\
         \n  EmptyRelation";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 }

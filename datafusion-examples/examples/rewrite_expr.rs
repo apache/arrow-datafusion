@@ -59,7 +59,7 @@ pub fn main() -> Result<()> {
 
     // then run the optimizer with our custom rule
     let optimizer = Optimizer::with_rules(vec![Arc::new(MyOptimizerRule {})]);
-    let optimized_plan = optimizer.optimize(&analyzed_plan, &config, observe)?;
+    let optimized_plan = optimizer.optimize(analyzed_plan, &config, observe)?.data;
     println!(
         "Optimized Logical Plan:\n\n{}\n",
         optimized_plan.display_indent()

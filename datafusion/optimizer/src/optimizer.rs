@@ -48,7 +48,8 @@ use crate::utils::log_plan;
 use datafusion_common::alias::AliasGenerator;
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::instant::Instant;
-use datafusion_common::{DataFusionError, Result};
+use datafusion_common::tree_node::Transformed;
+use datafusion_common::{DFSchemaRef, DataFusionError, Result};
 use datafusion_expr::logical_plan::LogicalPlan;
 
 use chrono::{DateTime, Utc};
@@ -76,6 +77,19 @@ pub trait OptimizerRule {
         config: &dyn OptimizerConfig,
     ) -> Result<Option<LogicalPlan>>;
 
+    fn try_optimize_owned(
+        &self,
+        plan: LogicalPlan,
+        config: &dyn OptimizerConfig,
+    ) -> Result<Transformed<LogicalPlan>> {
+        let optimized_plan = self.try_optimize(&plan, config)?;
+        if let Some(optimized_plan) = optimized_plan {
+            Ok(Transformed::yes(optimized_plan))
+        } else {
+            Ok(Transformed::no(plan))
+        }
+    }
+
     /// A human readable name for this optimizer rule
     fn name(&self) -> &str;
 
@@ -84,6 +98,10 @@ pub trait OptimizerRule {
     /// If a rule use default None, it should traverse recursively plan inside itself
     fn apply_order(&self) -> Option<ApplyOrder> {
         None
+    }
+
+    fn support_owned(&self) -> bool {
+        false
     }
 }
 
@@ -279,72 +297,88 @@ impl Optimizer {
     /// invoking observer function after each call
     pub fn optimize<F>(
         &self,
-        plan: &LogicalPlan,
+        plan: LogicalPlan,
         config: &dyn OptimizerConfig,
         mut observer: F,
-    ) -> Result<LogicalPlan>
+    ) -> Result<Transformed<LogicalPlan>>
     where
         F: FnMut(&LogicalPlan, &dyn OptimizerRule),
     {
         let options = config.options();
-        let mut new_plan = plan.clone();
+        let mut cur_plan = plan.clone();
 
         let start_time = Instant::now();
 
+        let mut is_transformed = false;
         let mut previous_plans = HashSet::with_capacity(16);
-        previous_plans.insert(LogicalPlanSignature::new(&new_plan));
+        previous_plans.insert(LogicalPlanSignature::new(&cur_plan));
 
         let mut i = 0;
         while i < options.optimizer.max_passes {
-            log_plan(&format!("Optimizer input (pass {i})"), &new_plan);
+            log_plan(&format!("Optimizer input (pass {i})"), &cur_plan);
 
             for rule in &self.rules {
+                let prev_plan = if options.optimizer.skip_failed_rules {
+                    Some(cur_plan.clone())
+                } else {
+                    None
+                };
+
+                let prev_schema = cur_plan.schema().clone();
+
                 let result =
-                    self.optimize_recursively(rule, &new_plan, config)
+                    self.optimize_recursively(rule, cur_plan, config)
                         .and_then(|plan| {
-                            if let Some(plan) = &plan {
-                                assert_schema_is_the_same(rule.name(), plan, &new_plan)?;
-                            }
+                            assert_schema_is_the_same(
+                                rule.name(),
+                                prev_schema,
+                                &plan.data,
+                            )?;
                             Ok(plan)
                         });
-                match result {
-                    Ok(Some(plan)) => {
-                        new_plan = plan;
-                        observer(&new_plan, rule.as_ref());
-                        log_plan(rule.name(), &new_plan);
+
+                match (result, prev_plan) {
+                    (Ok(t), _) if t.transformed => {
+                        is_transformed = true;
+                        cur_plan = t.data;
+                        observer(&cur_plan, rule.as_ref());
+                        log_plan(rule.name(), &cur_plan);
                     }
-                    Ok(None) => {
-                        observer(&new_plan, rule.as_ref());
+
+                    (Ok(t), _) => {
+                        cur_plan = t.data;
+                        observer(&cur_plan, rule.as_ref());
                         debug!(
                             "Plan unchanged by optimizer rule '{}' (pass {})",
                             rule.name(),
                             i
                         );
                     }
-                    Err(e) => {
-                        if options.optimizer.skip_failed_rules {
-                            // Note to future readers: if you see this warning it signals a
-                            // bug in the DataFusion optimizer. Please consider filing a ticket
-                            // https://github.com/apache/arrow-datafusion
-                            warn!(
+                    (Err(e), Some(prev_plan)) => {
+                        // Note to future readers: if you see this warning it signals a
+                        // bug in the DataFusion optimizer. Please consider filing a ticket
+                        // https://github.com/apache/arrow-datafusion
+                        warn!(
                             "Skipping optimizer rule '{}' due to unexpected error: {}",
                             rule.name(),
                             e
                         );
-                        } else {
-                            return Err(DataFusionError::Context(
-                                format!("Optimizer rule '{}' failed", rule.name(),),
-                                Box::new(e),
-                            ));
-                        }
+
+                        cur_plan = prev_plan;
+                    }
+                    (Err(e), None) => {
+                        return Err(DataFusionError::Context(
+                            format!("Optimizer rule '{}' failed", rule.name(),),
+                            Box::new(e),
+                        ));
                     }
                 }
             }
-            log_plan(&format!("Optimized plan (pass {i})"), &new_plan);
+            log_plan(&format!("Optimized plan (pass {i})"), &cur_plan);
 
             // HashSet::insert returns, whether the value was newly inserted.
             let plan_is_fresh =
-                previous_plans.insert(LogicalPlanSignature::new(&new_plan));
+                previous_plans.insert(LogicalPlanSignature::new(&cur_plan));
             if !plan_is_fresh {
                 // plan did not change, so no need to continue trying to optimize
                 debug!("optimizer pass {} did not make changes", i);
@@ -352,47 +386,56 @@ impl Optimizer {
             }
             i += 1;
         }
-        log_plan("Final optimized plan", &new_plan);
+        log_plan("Final optimized plan", &cur_plan);
         debug!("Optimizer took {} ms", start_time.elapsed().as_millis());
-        Ok(new_plan)
+
+        Ok(if is_transformed {
+            Transformed::yes(cur_plan)
+        } else {
+            Transformed::no(cur_plan)
+        })
     }
 
     fn optimize_node(
         &self,
         rule: &Arc<dyn OptimizerRule + Send + Sync>,
-        plan: &LogicalPlan,
+        plan: LogicalPlan,
         config: &dyn OptimizerConfig,
-    ) -> Result<Option<LogicalPlan>> {
+    ) -> Result<Transformed<LogicalPlan>> {
         // TODO: future feature: We can do Batch optimize
-        rule.try_optimize(plan, config)
+        if rule.support_owned() {
+            rule.try_optimize_owned(plan, config)
+        } else {
+            rule.try_optimize(&plan, config).map(|opt_plan| {
+                if let Some(opt_plan) = opt_plan {
+                    Transformed::yes(opt_plan)
+                } else {
+                    Transformed::no(plan)
+                }
+            })
+        }
     }
 
     fn optimize_inputs(
         &self,
         rule: &Arc<dyn OptimizerRule + Send + Sync>,
-        plan: &LogicalPlan,
+        plan: LogicalPlan,
         config: &dyn OptimizerConfig,
-    ) -> Result<Option<LogicalPlan>> {
-        let inputs = plan.inputs();
-        let result = inputs
-            .iter()
-            .map(|sub_plan| self.optimize_recursively(rule, sub_plan, config))
-            .collect::<Result<Vec<_>>>()?;
-        if result.is_empty() || result.iter().all(|o| o.is_none()) {
-            return Ok(None);
+    ) -> Result<Transformed<LogicalPlan>> {
+        let mut is_transformed = false;
+        let inputs = plan.rewrite_inputs(|child| {
+            let t = self.optimize_recursively(rule, child, config)?;
+            if t.transformed {
+                is_transformed = true;
+            }
+            Ok(t.data)
+        })?;
+
+        if is_transformed {
+            Ok(Transformed::yes(inputs))
+        } else {
+            Ok(Transformed::no(inputs))
         }
-
-        let new_inputs = result
-            .into_iter()
-            .zip(inputs)
-            .map(|(new_plan, old_plan)| match new_plan {
-                Some(plan) => plan,
-                None => old_plan.clone(),
-            })
-            .collect();
-
-        let exprs = plan.expressions();
-        plan.with_new_exprs(exprs, new_inputs).map(Some)
     }
 
     /// Use a rule to optimize the whole plan.
@@ -400,33 +443,35 @@ impl Optimizer {
     pub fn optimize_recursively(
         &self,
         rule: &Arc<dyn OptimizerRule + Send + Sync>,
-        plan: &LogicalPlan,
+        plan: LogicalPlan,
         config: &dyn OptimizerConfig,
-    ) -> Result<Option<LogicalPlan>> {
+    ) -> Result<Transformed<LogicalPlan>> {
         match rule.apply_order() {
             Some(order) => match order {
                 ApplyOrder::TopDown => {
-                    let optimize_self_opt = self.optimize_node(rule, plan, config)?;
-                    let optimize_inputs_opt = match &optimize_self_opt {
-                        Some(optimized_plan) => {
-                            self.optimize_inputs(rule, optimized_plan, config)?
-                        }
-                        _ => self.optimize_inputs(rule, plan, config)?,
-                    };
-                    Ok(optimize_inputs_opt.or(optimize_self_opt))
+                    let optimizied_node = self.optimize_node(rule, plan, config)?;
+                    let optimized_inputs =
+                        self.optimize_inputs(rule, optimizied_node.data, config)?;
+
+                    if optimizied_node.transformed || optimized_inputs.transformed {
+                        Ok(Transformed::yes(optimized_inputs.data))
+                    } else {
+                        Ok(Transformed::no(optimized_inputs.data))
+                    }
                 }
                 ApplyOrder::BottomUp => {
-                    let optimize_inputs_opt = self.optimize_inputs(rule, plan, config)?;
-                    let optimize_self_opt = match &optimize_inputs_opt {
-                        Some(optimized_plan) => {
-                            self.optimize_node(rule, optimized_plan, config)?
-                        }
-                        _ => self.optimize_node(rule, plan, config)?,
-                    };
-                    Ok(optimize_self_opt.or(optimize_inputs_opt))
+                    let optimized_inputs = self.optimize_inputs(rule, plan, config)?;
+                    let optimized_node =
+                        self.optimize_node(rule, optimized_inputs.data, config)?;
+
+                    if optimized_node.transformed || optimized_inputs.transformed {
+                        Ok(Transformed::yes(optimized_node.data))
+                    } else {
+                        Ok(Transformed::no(optimized_node.data))
+                    }
                 }
             },
-            _ => rule.try_optimize(plan, config),
+            _ => self.optimize_node(rule, plan, config),
         }
     }
 }
@@ -436,17 +481,17 @@ impl Optimizer {
 /// It ignores metadata and nullability.
 pub(crate) fn assert_schema_is_the_same(
     rule_name: &str,
-    prev_plan: &LogicalPlan,
+    prev_schema: DFSchemaRef,
     new_plan: &LogicalPlan,
 ) -> Result<()> {
     let equivalent = new_plan
         .schema()
-        .equivalent_names_and_types(prev_plan.schema());
+        .equivalent_names_and_types(prev_schema.as_ref());
 
     if !equivalent {
         let e = DataFusionError::Internal(format!(
             "Failed due to a difference in schemas, original schema: {:?}, new schema: {:?}",
-            prev_plan.schema(),
+            prev_schema,
             new_plan.schema()
         ));
         Err(DataFusionError::Context(
@@ -479,7 +524,7 @@ mod tests {
             produce_one_row: false,
             schema: Arc::new(DFSchema::empty()),
         });
-        opt.optimize(&plan, &config, &observe).unwrap();
+        opt.optimize(plan, &config, &observe).unwrap();
     }
 
     #[test]
@@ -490,7 +535,7 @@ mod tests {
             produce_one_row: false,
             schema: Arc::new(DFSchema::empty()),
         });
-        let err = opt.optimize(&plan, &config, &observe).unwrap_err();
+        let err = opt.optimize(plan, &config, &observe).unwrap_err();
         assert_eq!(
             "Optimizer rule 'bad rule' failed\ncaused by\n\
             Error during planning: rule failed",
@@ -506,7 +551,7 @@ mod tests {
             produce_one_row: false,
             schema: Arc::new(DFSchema::empty()),
         });
-        let err = opt.optimize(&plan, &config, &observe).unwrap_err();
+        let err = opt.optimize(plan, &config, &observe).unwrap_err();
         assert_eq!(
             "Optimizer rule 'get table_scan rule' failed\ncaused by\nget table_scan rule\ncaused by\n\
             Internal error: Failed due to a difference in schemas, \
@@ -529,7 +574,7 @@ mod tests {
             produce_one_row: false,
             schema: Arc::new(DFSchema::empty()),
         });
-        opt.optimize(&plan, &config, &observe).unwrap();
+        opt.optimize(plan, &config, &observe).unwrap();
     }
 
     #[test]
@@ -539,7 +584,7 @@ mod tests {
         let opt = Optimizer::with_rules(vec![Arc::new(GetTableScanRule {})]);
         let config = OptimizerContext::new().with_skip_failing_rules(false);
 
-        let input = Arc::new(test_table_scan()?);
+        let input = Box::new(test_table_scan()?);
         let input_schema = input.schema().clone();
 
         let plan = LogicalPlan::Projection(Projection::try_new_with_schema(
@@ -550,9 +595,10 @@ mod tests {
 
         // optimizing should be ok, but the schema will have changed  (no metadata)
         assert_ne!(plan.schema().as_ref(), input_schema.as_ref());
-        let optimized_plan = opt.optimize(&plan, &config, &observe)?;
+        let optimized_plan = opt.optimize(plan, &config, &observe)?;
         // metadata was removed
-        assert_eq!(optimized_plan.schema().as_ref(), input_schema.as_ref());
+        assert!(optimized_plan.transformed);
+        assert_eq!(optimized_plan.data.schema().as_ref(), input_schema.as_ref());
         Ok(())
     }
 
@@ -571,13 +617,14 @@ mod tests {
 
         let mut plans: Vec<LogicalPlan> = Vec::new();
         let final_plan =
-            opt.optimize(&initial_plan, &config, |p, _| plans.push(p.clone()))?;
+            opt.optimize(initial_plan.clone(), &config, |p, _| plans.push(p.clone()))?;
 
         // initial_plan is not observed, so we have 3 plans
         assert_eq!(3, plans.len());
 
         // we got again the initial_plan with [1, 2, 3]
-        assert_eq!(initial_plan, final_plan);
+        assert!(final_plan.transformed);
+        assert_eq!(initial_plan, final_plan.data);
 
         Ok(())
     }
@@ -597,13 +644,14 @@ mod tests {
 
         let mut plans: Vec<LogicalPlan> = Vec::new();
         let final_plan =
-            opt.optimize(&initial_plan, &config, |p, _| plans.push(p.clone()))?;
+            opt.optimize(initial_plan, &config, |p, _| plans.push(p.clone()))?;
 
         // initial_plan is not observed, so we have 4 plans
         assert_eq!(4, plans.len());
 
         // we got again the plan with [3, 2, 1]
-        assert_eq!(plans[0], final_plan);
+        assert!(final_plan.transformed);
+        assert_eq!(plans[0], final_plan.data);
 
         Ok(())
     }

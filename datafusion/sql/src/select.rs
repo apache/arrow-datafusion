@@ -16,7 +16,6 @@
 // under the License.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
 use crate::utils::{
@@ -373,7 +372,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
 
                 Ok(LogicalPlan::Filter(Filter::try_new(
                     filter_expr,
-                    Arc::new(plan),
+                    Box::new(plan),
                 )?))
             }
             None => Ok(plan),

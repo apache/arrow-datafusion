@@ -16,7 +16,6 @@
 // under the License.
 
 use arrow_schema::DataType;
-use std::sync::Arc;
 
 use datafusion::error::Result;
 use datafusion::prelude::*;
@@ -44,7 +43,7 @@ async fn where_scalar_subquery(ctx: &SessionContext) -> Result<()> {
     ctx.table("t1")
         .await?
         .filter(
-            scalar_subquery(Arc::new(
+            scalar_subquery(Box::new(
                 ctx.table("t2")
                     .await?
                     .filter(out_ref_col(DataType::Utf8, "t1.c1").eq(col("t2.c1")))?
@@ -67,7 +66,7 @@ async fn where_in_subquery(ctx: &SessionContext) -> Result<()> {
         .await?
         .filter(in_subquery(
             col("t1.c2"),
-            Arc::new(
+            Box::new(
                 ctx.table("t2")
                     .await?
                     .filter(col("t2.c1").gt(lit(ScalarValue::UInt8(Some(0)))))?
@@ -87,7 +86,7 @@ async fn where_in_subquery(ctx: &SessionContext) -> Result<()> {
 async fn where_exist_subquery(ctx: &SessionContext) -> Result<()> {
     ctx.table("t1")
         .await?
-        .filter(exists(Arc::new(
+        .filter(exists(Box::new(
             ctx.table("t2")
                 .await?
                 .filter(out_ref_col(DataType::Utf8, "t1.c1").eq(col("t2.c1")))?

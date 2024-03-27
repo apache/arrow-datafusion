@@ -319,7 +319,7 @@ async fn roundtrip_logical_plan_copy_to_sql_options() -> Result<()> {
     table_options.set("format.delimiter", ";")?;
 
     let plan = LogicalPlan::Copy(CopyTo {
-        input: Arc::new(input),
+        input: Box::new(input),
         output_url: "test.csv".to_string(),
         partition_by: vec!["a".to_string(), "b".to_string(), "c".to_string()],
         format_options: FormatOptions::CSV(table_options.csv.clone()),
@@ -353,7 +353,7 @@ async fn roundtrip_logical_plan_copy_to_writer_options() -> Result<()> {
     parquet_format.global.max_row_group_size = 555;
 
     let plan = LogicalPlan::Copy(CopyTo {
-        input: Arc::new(input),
+        input: Box::new(input),
         output_url: "test.parquet".to_string(),
         format_options: FormatOptions::PARQUET(parquet_format.clone()),
         partition_by: vec!["a".to_string(), "b".to_string(), "c".to_string()],
@@ -385,7 +385,7 @@ async fn roundtrip_logical_plan_copy_to_arrow() -> Result<()> {
     let input = create_csv_scan(&ctx).await?;
 
     let plan = LogicalPlan::Copy(CopyTo {
-        input: Arc::new(input),
+        input: Box::new(input),
         output_url: "test.arrow".to_string(),
         partition_by: vec!["a".to_string(), "b".to_string(), "c".to_string()],
         format_options: FormatOptions::ARROW,
@@ -426,7 +426,7 @@ async fn roundtrip_logical_plan_copy_to_csv() -> Result<()> {
     csv_format.null_value = Some("NIL".to_string());
 
     let plan = LogicalPlan::Copy(CopyTo {
-        input: Arc::new(input),
+        input: Box::new(input),
         output_url: "test.csv".to_string(),
         partition_by: vec!["a".to_string(), "b".to_string(), "c".to_string()],
         format_options: FormatOptions::CSV(csv_format.clone()),

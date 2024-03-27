@@ -93,7 +93,8 @@ mod tests {
 
     use crate::push_down_limit::PushDownLimit;
 
-    fn assert_optimized_plan_eq(plan: &LogicalPlan, expected: &str) -> Result<()> {
+    fn assert_optimized_plan_eq(plan: LogicalPlan, expected: &str) -> Result<()> {
+        let plan_schema = plan.schema().clone();
         let optimizer = Optimizer::with_rules(vec![Arc::new(EliminateLimit::new())]);
         let optimized_plan = optimizer
             .optimize_recursively(
@@ -101,18 +102,19 @@ mod tests {
                 plan,
                 &OptimizerContext::new(),
             )?
-            .unwrap_or_else(|| plan.clone());
+            .data;
 
         let formatted_plan = format!("{optimized_plan:?}");
         assert_eq!(formatted_plan, expected);
-        assert_eq!(plan.schema(), optimized_plan.schema());
+        assert_eq!(plan_schema.as_ref(), optimized_plan.schema().as_ref());
         Ok(())
     }
 
     fn assert_optimized_plan_eq_with_pushdown(
-        plan: &LogicalPlan,
+        plan: LogicalPlan,
         expected: &str,
     ) -> Result<()> {
+        let plan_schema = plan.schema().clone();
         fn observe(_plan: &LogicalPlan, _rule: &dyn OptimizerRule) {}
         let config = OptimizerContext::new().with_max_passes(1);
         let optimizer = Optimizer::with_rules(vec![
@@ -121,10 +123,11 @@ mod tests {
         ]);
         let optimized_plan = optimizer
             .optimize(plan, &config, observe)
-            .expect("failed to optimize plan");
+            .expect("failed to optimize plan")
+            .data;
         let formatted_plan = format!("{optimized_plan:?}");
         assert_eq!(formatted_plan, expected);
-        assert_eq!(plan.schema(), optimized_plan.schema());
+        assert_eq!(&plan_schema, optimized_plan.schema());
         Ok(())
     }
 
@@ -137,7 +140,7 @@ mod tests {
             .build()?;
         // No aggregate / scan / limit
         let expected = "EmptyRelation";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 
     #[test]
@@ -157,7 +160,7 @@ mod tests {
             \n  EmptyRelation\
             \n  Aggregate: groupBy=[[test.a]], aggr=[[SUM(test.b)]]\
             \n    TableScan: test";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 
     #[test]
@@ -171,7 +174,7 @@ mod tests {
 
         // No aggregate / scan / limit
         let expected = "EmptyRelation";
-        assert_optimized_plan_eq_with_pushdown(&plan, expected)
+        assert_optimized_plan_eq_with_pushdown(plan, expected)
     }
 
     #[test]
@@ -191,7 +194,7 @@ mod tests {
         \n    Limit: skip=0, fetch=2\
         \n      Aggregate: groupBy=[[test.a]], aggr=[[SUM(test.b)]]\
         \n        TableScan: test";
-        assert_optimized_plan_eq_with_pushdown(&plan, expected)
+        assert_optimized_plan_eq_with_pushdown(plan, expected)
     }
 
     #[test]
@@ -209,7 +212,7 @@ mod tests {
             \n    Limit: skip=0, fetch=2\
             \n      Aggregate: groupBy=[[test.a]], aggr=[[SUM(test.b)]]\
             \n        TableScan: test";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 
     #[test]
@@ -227,7 +230,7 @@ mod tests {
         \n    Limit: skip=2, fetch=1\
         \n      Aggregate: groupBy=[[test.a]], aggr=[[SUM(test.b)]]\
         \n        TableScan: test";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 
     #[test]
@@ -249,7 +252,7 @@ mod tests {
             \n    Limit: skip=2, fetch=1\
             \n      TableScan: test\
             \n    TableScan: test1";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 
     #[test]
@@ -262,6 +265,6 @@ mod tests {
 
         let expected = "Aggregate: groupBy=[[test.a]], aggr=[[SUM(test.b)]]\
             \n  TableScan: test";
-        assert_optimized_plan_eq(&plan, expected)
+        assert_optimized_plan_eq(plan, expected)
     }
 }

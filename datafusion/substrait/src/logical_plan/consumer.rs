@@ -574,7 +574,7 @@ pub async fn from_substrait_rel(
             let Some(input) = exchange.input.as_ref() else {
                 return substrait_err!("Unexpected empty input in ExchangeRel");
             };
-            let input = Arc::new(from_substrait_rel(ctx, input, extensions).await?);
+            let input = Box::new(from_substrait_rel(ctx, input, extensions).await?);
 
             let Some(exchange_kind) = &exchange.exchange_kind else {
                 return substrait_err!("Unexpected empty input in ExchangeRel");
@@ -1049,7 +1049,7 @@ pub async fn from_substrait_rex(
                                     .clone(),
                                 ),
                                 subquery: Subquery {
-                                    subquery: Arc::new(haystack_expr),
+                                    subquery: Box::new(haystack_expr),
                                     outer_ref_columns: outer_refs,
                                 },
                                 negated: false,

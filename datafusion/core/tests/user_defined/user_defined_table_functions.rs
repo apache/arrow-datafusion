@@ -158,7 +158,7 @@ impl SimpleCsvTable {
                 normalize_col(self.exprs[0].clone(), &plan)?,
                 plan.schema(),
             )],
-            Arc::new(plan),
+            Box::new(plan),
         )
         .map(LogicalPlan::Projection)?;
         let rbs = collect(

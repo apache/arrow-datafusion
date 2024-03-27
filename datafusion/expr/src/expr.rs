@@ -26,11 +26,11 @@ use std::sync::Arc;
 use crate::expr_fn::binary_expr;
 use crate::logical_plan::Subquery;
 use crate::utils::{expr_to_columns, find_out_reference_exprs};
-use crate::window_frame;
 use crate::{
     aggregate_function, built_in_function, built_in_window_function, udaf,
     BuiltinScalarFunction, ExprSchemable, Operator, Signature,
 };
+use crate::{lit, window_frame};
 
 use arrow::datatypes::DataType;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
@@ -182,6 +182,12 @@ pub enum Expr {
     OuterReferenceColumn(DataType, Column),
     /// Unnest expression
     Unnest(Unnest),
+}
+
+impl Default for Expr {
+    fn default() -> Self {
+        lit(0)
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]

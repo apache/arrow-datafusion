@@ -98,16 +98,16 @@ mod tests {
         let schema = Arc::new(DFSchema::empty());
 
         let one_node_plan =
-            Arc::new(LogicalPlan::EmptyRelation(datafusion_expr::EmptyRelation {
+            Box::new(LogicalPlan::EmptyRelation(datafusion_expr::EmptyRelation {
                 produce_one_row: false,
                 schema: schema.clone(),
             }));
 
         assert_eq!(1, get_node_number(&one_node_plan).get());
 
-        let two_node_plan = Arc::new(LogicalPlan::Projection(
+        let two_node_plan = LogicalPlan::Projection(
             datafusion_expr::Projection::try_new(vec![lit(1), lit(2)], one_node_plan)?,
-        ));
+        );
 
         assert_eq!(2, get_node_number(&two_node_plan).get());
 

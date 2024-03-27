@@ -164,7 +164,7 @@ mod tests {
         col, lit, logical_plan::builder::LogicalPlanBuilder, JoinType,
     };
 
-    fn assert_plan_eq(plan: &LogicalPlan, expected: &str) -> Result<()> {
+    fn assert_plan_eq(plan: LogicalPlan, expected: &str) -> Result<()> {
         assert_optimized_plan_eq_display_indent(
             Arc::new(ExtractEquijoinPredicate {}),
             plan,
@@ -186,7 +186,7 @@ mod tests {
             \n  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]\
             \n  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
             \n  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]\
             \n  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
             \n  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]\
             \n  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 
     #[test]
@@ -255,7 +255,7 @@ mod tests {
             \n  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]\
             \n  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 
     #[test]
@@ -281,7 +281,7 @@ mod tests {
             \n  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]\
             \n  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 
     #[test]
@@ -318,7 +318,7 @@ mod tests {
             \n    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]\
             \n    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 
     #[test]
@@ -351,7 +351,7 @@ mod tests {
         \n    TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]\
         \n    TableScan: t3 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 
     #[test]
@@ -375,6 +375,6 @@ mod tests {
         \n  TableScan: t1 [a:UInt32, b:UInt32, c:UInt32]\
         \n  TableScan: t2 [a:UInt32, b:UInt32, c:UInt32]";
 
-        assert_plan_eq(&plan, expected)
+        assert_plan_eq(plan, expected)
     }
 }

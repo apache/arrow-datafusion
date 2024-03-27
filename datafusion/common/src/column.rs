@@ -35,6 +35,15 @@ pub struct Column {
     pub name: String,
 }
 
+impl Default for Column {
+    fn default() -> Self {
+        Self {
+            relation: None,
+            name: "".to_string(),
+        }
+    }
+}
+
 impl Column {
     /// Create Column from optional qualifier and name. The optional qualifier, if present,
     /// will be parsed and normalized by default.

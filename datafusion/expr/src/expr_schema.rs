@@ -32,7 +32,6 @@ use datafusion_common::{
     ExprSchema, Result,
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// trait to allow expr to typable with respect to a schema
 pub trait ExprSchemable {
@@ -544,7 +543,7 @@ pub fn cast_subquery(subquery: Subquery, cast_to_type: &DataType) -> Result<Subq
         }
     };
     Ok(Subquery {
-        subquery: Arc::new(new_plan),
+        subquery: Box::new(new_plan),
         outer_ref_columns: subquery.outer_ref_columns,
     })
 }

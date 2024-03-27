@@ -18,7 +18,6 @@
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 use datafusion_common::config::FormatOptions;
 use datafusion_common::{DFSchemaRef, OwnedTableReference};
@@ -29,7 +28,7 @@ use crate::LogicalPlan;
 #[derive(Clone)]
 pub struct CopyTo {
     /// The relation that determines the tuples to write to the output file(s)
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
     /// The location to write the file(s)
     pub output_url: String,
     /// Determines which, if any, columns should be used for hive-style partitioned writes
@@ -69,7 +68,7 @@ pub struct DmlStatement {
     /// The type of operation to perform
     pub op: WriteOp,
     /// The relation that determines the tuples to add/remove/modify the schema must match with table_schema
-    pub input: Arc<LogicalPlan>,
+    pub input: Box<LogicalPlan>,
 }
 
 impl DmlStatement {

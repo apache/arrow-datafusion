@@ -41,7 +41,7 @@ impl OptimizerRule for EliminateOneUnion {
     ) -> Result<Option<LogicalPlan>> {
         match plan {
             LogicalPlan::Union(Union { inputs, .. }) if inputs.len() == 1 => {
-                Ok(inputs.first().map(|input| input.as_ref().clone()))
+                Ok(inputs.first().cloned())
             }
             _ => Ok(None),
         }
@@ -76,7 +76,7 @@ mod tests {
         ])
     }
 
-    fn assert_optimized_plan_equal(plan: &LogicalPlan, expected: &str) -> Result<()> {
+    fn assert_optimized_plan_equal(plan: LogicalPlan, expected: &str) -> Result<()> {
         assert_optimized_plan_eq_with_rules(
             vec![Arc::new(EliminateOneUnion::new())],
             plan,
@@ -97,7 +97,7 @@ mod tests {
         Union\
         \n  TableScan: table\
         \n  TableScan: table";
-        assert_optimized_plan_equal(&plan, expected)
+        assert_optimized_plan_equal(plan, expected)
     }
 
     #[test]
@@ -108,11 +108,11 @@ mod tests {
         )?;
         let schema = table_plan.schema().clone();
         let single_union_plan = LogicalPlan::Union(Union {
-            inputs: vec![Arc::new(table_plan)],
+            inputs: vec![table_plan],
             schema,
         });
 
         let expected = "TableScan: table";
-        assert_optimized_plan_equal(&single_union_plan, expected)
+        assert_optimized_plan_equal(single_union_plan, expected)
     }
 }
