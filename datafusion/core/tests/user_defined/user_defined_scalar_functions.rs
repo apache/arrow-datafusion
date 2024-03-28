@@ -747,7 +747,7 @@ struct CustomFunctionFactory {}
 impl FunctionFactory for CustomFunctionFactory {
     async fn create(
         &self,
-        _state: &SessionConfig,
+        _state: &SessionState,
         statement: CreateFunction,
     ) -> Result<RegisterFunction> {
         let f: ScalarFunctionWrapper = statement.try_into()?;

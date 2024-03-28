@@ -16,8 +16,9 @@
 // under the License.
 
 use datafusion::error::Result;
-use datafusion::execution::config::SessionConfig;
-use datafusion::execution::context::{FunctionFactory, RegisterFunction, SessionContext};
+use datafusion::execution::context::{
+    FunctionFactory, RegisterFunction, SessionContext, SessionState,
+};
 use datafusion_common::tree_node::{Transformed, TreeNode};
 use datafusion_common::{exec_err, internal_err, DataFusionError};
 use datafusion_expr::simplify::ExprSimplifyResult;
@@ -91,7 +92,7 @@ impl FunctionFactory for CustomFunctionFactory {
     /// the function instance.
     async fn create(
         &self,
-        _state: &SessionConfig,
+        _state: &SessionState,
         statement: CreateFunction,
     ) -> Result<RegisterFunction> {
         let f: ScalarFunctionWrapper = statement.try_into()?;
