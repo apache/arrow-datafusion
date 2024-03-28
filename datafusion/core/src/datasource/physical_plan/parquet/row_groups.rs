@@ -234,6 +234,10 @@ impl PruningStatistics for BloomFilterStatistics {
                     ScalarValue::Int32(Some(v)) => sbbf.check(v),
                     ScalarValue::Int16(Some(v)) => sbbf.check(v),
                     ScalarValue::Int8(Some(v)) => sbbf.check(v),
+                    ScalarValue::UInt64(Some(v)) => sbbf.check(v),
+                    ScalarValue::UInt32(Some(v)) => sbbf.check(v),
+                    ScalarValue::UInt16(Some(v)) => sbbf.check(v),
+                    ScalarValue::UInt8(Some(v)) => sbbf.check(v),
                     ScalarValue::Decimal128(Some(v), p, s) => match parquet_type {
                         Type::INT32 => {
                             //https://github.com/apache/parquet-format/blob/eb4b31c1d64a01088d02a2f9aefc6c17c54cc6fc/Encodings.md?plain=1#L35-L42
