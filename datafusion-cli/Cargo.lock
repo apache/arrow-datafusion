@@ -1116,7 +1116,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "ahash",
  "apache-avro",
@@ -1167,7 +1167,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-cli"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "arrow",
  "assert_cmd",
@@ -1195,7 +1195,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-common"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "ahash",
  "apache-avro",
@@ -1215,14 +1215,14 @@ dependencies = [
 
 [[package]]
 name = "datafusion-common-runtime"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "datafusion-execution"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "arrow",
  "chrono",
@@ -1241,7 +1241,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-expr"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "ahash",
  "arrow",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-functions"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "arrow",
  "base64 0.22.0",
@@ -1279,7 +1279,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-functions-array"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -1297,7 +1297,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-optimizer"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -1313,7 +1313,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-physical-expr"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "ahash",
  "arrow",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-physical-plan"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "ahash",
  "arrow",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "datafusion-sql"
-version = "36.0.0"
+version = "37.0.0"
 dependencies = [
  "arrow",
  "arrow-array",

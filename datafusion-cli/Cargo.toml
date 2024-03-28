@@ -18,7 +18,7 @@
 [package]
 name = "datafusion-cli"
 description = "Command Line Client for DataFusion query engine."
-version = "36.0.0"
+version = "37.0.0"
 authors = ["Apache Arrow <dev@arrow.apache.org>"]
 edition = "2021"
 keywords = ["arrow", "datafusion", "query", "sql"]
@@ -35,7 +35,7 @@ async-trait = "0.1.41"
 aws-config = "0.55"
 aws-credential-types = "0.55"
 clap = { version = "3", features = ["derive", "cargo"] }
-datafusion = { path = "../datafusion/core", version = "36.0.0", features = [
+datafusion = { path = "../datafusion/core", version = "37.0.0", features = [
     "avro",
     "crypto_expressions",
     "datetime_expressions",

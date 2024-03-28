@@ -49,7 +49,7 @@ license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/apache/arrow-datafusion"
 rust-version = "1.72"
-version = "36.0.0"
+version = "37.0.0"
 
 [workspace.dependencies]
 # We turn off default-features for some dependencies here so the workspaces which inherit them can
@@ -71,20 +71,20 @@ bytes = "1.4"
 chrono = { version = "0.4.34", default-features = false }
 ctor = "0.2.0"
 dashmap = "5.4.0"
-datafusion = { path = "datafusion/core", version = "36.0.0", default-features = false }
-datafusion-common = { path = "datafusion/common", version = "36.0.0", default-features = false }
-datafusion-common-runtime = { path = "datafusion/common-runtime", version = "36.0.0" }
-datafusion-execution = { path = "datafusion/execution", version = "36.0.0" }
-datafusion-expr = { path = "datafusion/expr", version = "36.0.0" }
-datafusion-functions = { path = "datafusion/functions", version = "36.0.0" }
-datafusion-functions-array = { path = "datafusion/functions-array", version = "36.0.0" }
-datafusion-optimizer = { path = "datafusion/optimizer", version = "36.0.0", default-features = false }
-datafusion-physical-expr = { path = "datafusion/physical-expr", version = "36.0.0", default-features = false }
-datafusion-physical-plan = { path = "datafusion/physical-plan", version = "36.0.0" }
-datafusion-proto = { path = "datafusion/proto", version = "36.0.0" }
-datafusion-sql = { path = "datafusion/sql", version = "36.0.0" }
-datafusion-sqllogictest = { path = "datafusion/sqllogictest", version = "36.0.0" }
-datafusion-substrait = { path = "datafusion/substrait", version = "36.0.0" }
+datafusion = { path = "datafusion/core", version = "37.0.0", default-features = false }
+datafusion-common = { path = "datafusion/common", version = "37.0.0", default-features = false }
+datafusion-common-runtime = { path = "datafusion/common-runtime", version = "37.0.0" }
+datafusion-execution = { path = "datafusion/execution", version = "37.0.0" }
+datafusion-expr = { path = "datafusion/expr", version = "37.0.0" }
+datafusion-functions = { path = "datafusion/functions", version = "37.0.0" }
+datafusion-functions-array = { path = "datafusion/functions-array", version = "37.0.0" }
+datafusion-optimizer = { path = "datafusion/optimizer", version = "37.0.0", default-features = false }
+datafusion-physical-expr = { path = "datafusion/physical-expr", version = "37.0.0", default-features = false }
+datafusion-physical-plan = { path = "datafusion/physical-plan", version = "37.0.0" }
+datafusion-proto = { path = "datafusion/proto", version = "37.0.0" }
+datafusion-sql = { path = "datafusion/sql", version = "37.0.0" }
+datafusion-sqllogictest = { path = "datafusion/sqllogictest", version = "37.0.0" }
+datafusion-substrait = { path = "datafusion/substrait", version = "37.0.0" }
 doc-comment = "0.3"
 env_logger = "0.11"
 futures = "0.3"
