@@ -1,0 +1,160 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+
+#   http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+## Tests for basic array queries
+
+# Make a table with multiple input partitions
+statement ok
+CREATE TABLE data AS
+  SELECT * FROM (VALUES
+      ([1,2,3], [4,5], 1)
+   )
+    UNION ALL
+  SELECT * FROM (VALUES
+     ([2,3],   [2,3], 1),
+     ([1,2,3], NULL,  1)
+  )
+;
+
+query ??I rowsort
+SELECT * FROM data;
+----
+[1, 2, 3] NULL 1
+[1, 2, 3] [4, 5] 1
+[2, 3] [2, 3] 1
+
+###########
+# Filtering
+###########
+
+query error DataFusion error: Arrow error: Invalid argument error: Invalid comparison operation: List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\) == List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\)
+SELECT * FROM data WHERE column1 = [1,2,3];
+
+query error DataFusion error: Arrow error: Invalid argument error: Invalid comparison operation: List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\) == List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\)
+SELECT * FROM data WHERE column1 = column2
+
+query error DataFusion error: Arrow error: Invalid argument error: Invalid comparison operation: List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\) != List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\)
+SELECT * FROM data WHERE column1 != [1,2,3];
+
+query error DataFusion error: Arrow error: Invalid argument error: Invalid comparison operation: List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\) != List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\)
+SELECT * FROM data WHERE column1 != column2
+
+###########
+# Aggregates
+###########
+
+query error Internal error: Min/Max accumulator not implemented for type List
+SELECT min(column1) FROM data;
+
+query error Internal error: Min/Max accumulator not implemented for type List
+SELECT max(column1) FROM data;
+
+query I
+SELECT count(column1) FROM data;
+----
+3
+
+# note single count distincts are rewritten to use a group by
+query I
+SELECT count(distinct column1) FROM data;
+----
+2
+
+query I
+SELECT count(distinct column2) FROM data;
+----
+2
+
+
+# note multiple count distincts are not rewritten
+query II
+SELECT count(distinct column1), count(distinct column2) FROM data;
+----
+2 2
+
+
+###########
+# GROUP BY
+###########
+
+
+query I
+SELECT count(column1) FROM data GROUP BY column3;
+----
+3
+
+# note single count distincts are rewritten to use a group by
+query I
+SELECT count(distinct column1) FROM data GROUP BY column3;
+----
+2
+
+query I
+SELECT count(distinct column2) FROM data GROUP BY column3;
+----
+2
+
+# note multiple count distincts are not rewritten
+query II
+SELECT count(distinct column1), count(distinct column2) FROM data GROUP BY column3;
+----
+2 2
+
+
+###########
+# ORDER BY
+###########
+
+query ??I
+SELECT * FROM data ORDER BY column2;
+----
+[2, 3] [2, 3] 1
+[1, 2, 3] [4, 5] 1
+[1, 2, 3] NULL 1
+
+query ??I
+SELECT * FROM data ORDER BY column2 DESC;
+----
+[1, 2, 3] NULL 1
+[1, 2, 3] [4, 5] 1
+[2, 3] [2, 3] 1
+
+query ??I
+SELECT * FROM data ORDER BY column2 DESC NULLS LAST;
+----
+[1, 2, 3] [4, 5] 1
+[2, 3] [2, 3] 1
+[1, 2, 3] NULL 1
+
+# multi column
+query ??I
+SELECT * FROM data ORDER BY column1, column2;
+----
+[1, 2, 3] [4, 5] 1
+[1, 2, 3] NULL 1
+[2, 3] [2, 3] 1
+
+query ??I
+SELECT * FROM data ORDER BY column1, column3, column2;
+----
+[1, 2, 3] [4, 5] 1
+[1, 2, 3] NULL 1
+[2, 3] [2, 3] 1
+
+
+statement ok
+drop table data
