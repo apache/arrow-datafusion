@@ -335,11 +335,11 @@ mod tests {
     use arrow_array::{ArrayRef, BooleanArray, RecordBatch, StringArray};
     use arrow_schema::{DataType, Field, Schema};
     use datafusion_common::{DFSchema, Result};
-    use datafusion_expr::{col, left, Literal};
+    use datafusion_expr::{col, lit};
 
     #[test]
     fn test_create_physical_expr_scalar_input_output() -> Result<()> {
-        let expr = col("letter").eq(left("APACHE".lit(), 1i64.lit()));
+        let expr = col("letter").eq(lit("A"));
 
         let schema = Schema::new(vec![Field::new("letter", DataType::Utf8, false)]);
         let df_schema = DFSchema::try_from_qualified_schema("data", &schema)?;

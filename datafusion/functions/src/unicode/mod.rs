@@ -22,6 +22,11 @@ use std::sync::Arc;
 use datafusion_expr::ScalarUDF;
 
 mod character_length;
+mod left;
+mod lpad;
+mod reverse;
+mod right;
+mod rpad;
 
 // create UDFs
 make_udf_function!(
@@ -29,6 +34,11 @@ make_udf_function!(
     CHARACTER_LENGTH,
     character_length
 );
+make_udf_function!(left::LeftFunc, LEFT, left);
+make_udf_function!(lpad::LPadFunc, LPAD, lpad);
+make_udf_function!(right::RightFunc, RIGHT, right);
+make_udf_function!(reverse::ReverseFunc, REVERSE, reverse);
+make_udf_function!(rpad::RPadFunc, RPAD, rpad);
 
 pub mod expr_fn {
     use datafusion_expr::Expr;
@@ -47,9 +57,41 @@ pub mod expr_fn {
     pub fn length(string: Expr) -> Expr {
         character_length(string)
     }
+
+    #[doc = "returns the first `n` characters in the `string`"]
+    pub fn left(string: Expr, n: Expr) -> Expr {
+        super::left().call(vec![string, n])
+    }
+
+    #[doc = "fill up a string to the length by prepending the characters"]
+    pub fn lpad(args: Vec<Expr>) -> Expr {
+        super::lpad().call(args)
+    }
+
+    #[doc = "reverses the `string`"]
+    pub fn reverse(string: Expr) -> Expr {
+        super::reverse().call(vec![string])
+    }
+
+    #[doc = "returns the last `n` characters in the `string`"]
+    pub fn right(string: Expr, n: Expr) -> Expr {
+        super::right().call(vec![string, n])
+    }
+
+    #[doc = "fill up a string to the length by appending the characters"]
+    pub fn rpad(args: Vec<Expr>) -> Expr {
+        super::rpad().call(args)
+    }
 }
 
 ///   Return a list of all functions in this package
 pub fn functions() -> Vec<Arc<ScalarUDF>> {
-    vec![character_length()]
+    vec![
+        character_length(),
+        left(),
+        lpad(),
+        reverse(),
+        right(),
+        rpad(),
+    ]
 }

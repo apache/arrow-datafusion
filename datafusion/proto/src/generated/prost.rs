@@ -2871,8 +2871,8 @@ pub enum ScalarFunction {
     /// 28 was DatePart
     /// 29 was DateTrunc
     InitCap = 30,
-    Left = 31,
-    Lpad = 32,
+    /// 31 was Left
+    /// 32 was Lpad
     /// 33 was Lower
     /// 34 was Ltrim
     /// 35 was MD5
@@ -2882,9 +2882,9 @@ pub enum ScalarFunction {
     /// 39 was RegexpReplace
     /// 40 was Repeat
     /// 41 was Replace
-    Reverse = 42,
-    Right = 43,
-    Rpad = 44,
+    /// 42 was Reverse
+    /// 43 was Right
+    /// 44 was Rpad
     /// 45 was Rtrim
     /// 46 was SHA224
     /// 47 was SHA256
@@ -3004,12 +3004,7 @@ impl ScalarFunction {
             ScalarFunction::Concat => "Concat",
             ScalarFunction::ConcatWithSeparator => "ConcatWithSeparator",
             ScalarFunction::InitCap => "InitCap",
-            ScalarFunction::Left => "Left",
-            ScalarFunction::Lpad => "Lpad",
             ScalarFunction::Random => "Random",
-            ScalarFunction::Reverse => "Reverse",
-            ScalarFunction::Right => "Right",
-            ScalarFunction::Rpad => "Rpad",
             ScalarFunction::Strpos => "Strpos",
             ScalarFunction::Substr => "Substr",
             ScalarFunction::Translate => "Translate",
@@ -3057,12 +3052,7 @@ impl ScalarFunction {
             "Concat" => Some(Self::Concat),
             "ConcatWithSeparator" => Some(Self::ConcatWithSeparator),
             "InitCap" => Some(Self::InitCap),
-            "Left" => Some(Self::Left),
-            "Lpad" => Some(Self::Lpad),
             "Random" => Some(Self::Random),
-            "Reverse" => Some(Self::Reverse),
-            "Right" => Some(Self::Right),
-            "Rpad" => Some(Self::Rpad),
             "Strpos" => Some(Self::Strpos),
             "Substr" => Some(Self::Substr),
             "Translate" => Some(Self::Translate),

@@ -111,18 +111,8 @@ pub enum BuiltinScalarFunction {
     EndsWith,
     /// initcap
     InitCap,
-    /// left
-    Left,
-    /// lpad
-    Lpad,
     /// random
     Random,
-    /// reverse
-    Reverse,
-    /// right
-    Right,
-    /// rpad
-    Rpad,
     /// strpos
     Strpos,
     /// substr
@@ -220,12 +210,7 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::ConcatWithSeparator => Volatility::Immutable,
             BuiltinScalarFunction::EndsWith => Volatility::Immutable,
             BuiltinScalarFunction::InitCap => Volatility::Immutable,
-            BuiltinScalarFunction::Left => Volatility::Immutable,
-            BuiltinScalarFunction::Lpad => Volatility::Immutable,
             BuiltinScalarFunction::Radians => Volatility::Immutable,
-            BuiltinScalarFunction::Reverse => Volatility::Immutable,
-            BuiltinScalarFunction::Right => Volatility::Immutable,
-            BuiltinScalarFunction::Rpad => Volatility::Immutable,
             BuiltinScalarFunction::Strpos => Volatility::Immutable,
             BuiltinScalarFunction::Substr => Volatility::Immutable,
             BuiltinScalarFunction::Translate => Volatility::Immutable,
@@ -264,17 +249,8 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::InitCap => {
                 utf8_to_str_type(&input_expr_types[0], "initcap")
             }
-            BuiltinScalarFunction::Left => utf8_to_str_type(&input_expr_types[0], "left"),
-            BuiltinScalarFunction::Lpad => utf8_to_str_type(&input_expr_types[0], "lpad"),
             BuiltinScalarFunction::Pi => Ok(Float64),
             BuiltinScalarFunction::Random => Ok(Float64),
-            BuiltinScalarFunction::Reverse => {
-                utf8_to_str_type(&input_expr_types[0], "reverse")
-            }
-            BuiltinScalarFunction::Right => {
-                utf8_to_str_type(&input_expr_types[0], "right")
-            }
-            BuiltinScalarFunction::Rpad => utf8_to_str_type(&input_expr_types[0], "rpad"),
             BuiltinScalarFunction::EndsWith => Ok(Boolean),
             BuiltinScalarFunction::Strpos => {
                 utf8_to_int_type(&input_expr_types[0], "strpos/instr/position")
@@ -361,27 +337,8 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::Coalesce => {
                 Signature::variadic_equal(self.volatility())
             }
-            BuiltinScalarFunction::InitCap | BuiltinScalarFunction::Reverse => {
+            BuiltinScalarFunction::InitCap => {
                 Signature::uniform(1, vec![Utf8, LargeUtf8], self.volatility())
-            }
-            BuiltinScalarFunction::Lpad | BuiltinScalarFunction::Rpad => {
-                Signature::one_of(
-                    vec![
-                        Exact(vec![Utf8, Int64]),
-                        Exact(vec![LargeUtf8, Int64]),
-                        Exact(vec![Utf8, Int64, Utf8]),
-                        Exact(vec![LargeUtf8, Int64, Utf8]),
-                        Exact(vec![Utf8, Int64, LargeUtf8]),
-                        Exact(vec![LargeUtf8, Int64, LargeUtf8]),
-                    ],
-                    self.volatility(),
-                )
-            }
-            BuiltinScalarFunction::Left | BuiltinScalarFunction::Right => {
-                Signature::one_of(
-                    vec![Exact(vec![Utf8, Int64]), Exact(vec![LargeUtf8, Int64])],
-                    self.volatility(),
-                )
             }
 
             BuiltinScalarFunction::EndsWith | BuiltinScalarFunction::Strpos => {
@@ -580,11 +537,6 @@ impl BuiltinScalarFunction {
             BuiltinScalarFunction::ConcatWithSeparator => &["concat_ws"],
             BuiltinScalarFunction::EndsWith => &["ends_with"],
             BuiltinScalarFunction::InitCap => &["initcap"],
-            BuiltinScalarFunction::Left => &["left"],
-            BuiltinScalarFunction::Lpad => &["lpad"],
-            BuiltinScalarFunction::Reverse => &["reverse"],
-            BuiltinScalarFunction::Right => &["right"],
-            BuiltinScalarFunction::Rpad => &["rpad"],
             BuiltinScalarFunction::Strpos => &["strpos", "instr", "position"],
             BuiltinScalarFunction::Substr => &["substr"],
             BuiltinScalarFunction::Translate => &["translate"],
