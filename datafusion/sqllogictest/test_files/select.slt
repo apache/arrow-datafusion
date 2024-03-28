@@ -1386,6 +1386,27 @@ AggregateExec: mode=FinalPartitioned, gby=[c2@0 as c2], aggr=[COUNT(*)]
 --------RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1
 ----------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/testing/data/csv/aggregate_test_100.csv]]}, projection=[c2], has_header=true
 
+# FilterExec can track equality of non-column expressions.
+# plan below shouldn't have a SortExec because given column 'a' is ordered.
+# 'CAST(ROUND(b) as INT)' is also ordered. After filter is applied.
+query TT
+EXPLAIN SELECT *
+FROM annotated_data_finite2
+WHERE CAST(ROUND(b) as INT) = a
+ORDER BY CAST(ROUND(b) as INT);
+----
+logical_plan
+Sort: CAST(round(CAST(annotated_data_finite2.b AS Float64)) AS Int32) ASC NULLS LAST
+--Filter: CAST(round(CAST(annotated_data_finite2.b AS Float64)) AS Int32) = annotated_data_finite2.a
+----TableScan: annotated_data_finite2 projection=[a0, a, b, c, d], partial_filters=[CAST(round(CAST(annotated_data_finite2.b AS Float64)) AS Int32) = annotated_data_finite2.a]
+physical_plan
+SortPreservingMergeExec: [CAST(round(CAST(b@2 AS Float64)) AS Int32) ASC NULLS LAST]
+--CoalesceBatchesExec: target_batch_size=8192
+----FilterExec: CAST(round(CAST(b@2 AS Float64)) AS Int32) = a@1
+------RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1
+--------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[a0, a, b, c, d], output_ordering=[a@1 ASC NULLS LAST, b@2 ASC NULLS LAST, c@3 ASC NULLS LAST], has_header=true
+
+
 statement ok
 drop table annotated_data_finite2;
 
