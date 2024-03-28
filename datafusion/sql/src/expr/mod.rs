@@ -29,7 +29,8 @@ use datafusion_expr::expr::InList;
 use datafusion_expr::expr::ScalarFunction;
 use datafusion_expr::{
     col, expr, lit, AggregateFunction, Between, BinaryExpr, BuiltinScalarFunction, Cast,
-    Expr, ExprSchemable, GetFieldAccess, GetIndexedField, Like, Operator, TryCast,
+    Expr, ExprSchemable, GetFieldAccess, GetIndexedField, Like, Literal, Operator,
+    TryCast,
 };
 
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
@@ -604,18 +605,44 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         }
         let args = values
             .into_iter()
-            .map(|value| {
-                self.sql_expr_to_logical_expr(value, input_schema, planner_context)
+            .enumerate()
+            .map(|(i, value)| {
+                let args = if let SQLExpr::Named { expr, name } = value {
+                    [
+                        name.value.lit(),
+                        self.sql_expr_to_logical_expr(
+                            *expr,
+                            input_schema,
+                            planner_context,
+                        )?,
+                    ]
+                } else {
+                    [
+                        format!("c{i}").lit(),
+                        self.sql_expr_to_logical_expr(
+                            value,
+                            input_schema,
+                            planner_context,
+                        )?,
+                    ]
+                };
+
+                Ok(args)
             })
-            .collect::<Result<Vec<_>>>()?;
-        let struct_func = self
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        let named_struct_func = self
             .context_provider
-            .get_function_meta("struct")
+            .get_function_meta("named_struct")
             .ok_or_else(|| {
-                internal_datafusion_err!("Unable to find expected 'struct' function")
-            })?;
+            internal_datafusion_err!("Unable to find expected 'named_struct' function")
+        })?;
+
         Ok(Expr::ScalarFunction(ScalarFunction::new_udf(
-            struct_func,
+            named_struct_func,
             args,
         )))
     }

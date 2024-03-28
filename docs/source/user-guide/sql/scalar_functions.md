@@ -3312,11 +3312,12 @@ are not allowed
 ## Struct Functions
 
 - [struct](#struct)
+- [named_struct](#named_struct)
 
 ### `struct`
 
-Returns an Arrow struct using the specified input expressions.
-Fields in the returned struct use the `cN` naming convention.
+Returns an Arrow struct using the specified input expressions optionally named.
+Fields in the returned struct use the optional name or the `cN` naming convention.
 For example: `c0`, `c1`, `c2`, etc.
 
 ```
@@ -3324,7 +3325,7 @@ struct(expression1[, ..., expression_n])
 ```
 
 For example, this query converts two columns `a` and `b` to a single column with
-a struct type of fields `c0` and `c1`:
+a struct type of fields `field_a` and `c1`:
 
 ```
 select * from t;
@@ -3335,18 +3336,55 @@ select * from t;
 | 3 | 4 |
 +---+---+
 
-select struct(a, b) from t;
-+-----------------+
-| struct(t.a,t.b) |
-+-----------------+
-| {c0: 1, c1: 2}  |
-| {c0: 3, c1: 4}  |
-+-----------------+
+select struct(a as field_a, b) from t;
++--------------------------------------------------+
+| named_struct(Utf8("field_a"),t.a,Utf8("c1"),t.b) |
++--------------------------------------------------+
+| {field_a: 1, c1: 2}                              |
+| {field_a: 3, c1: 4}                              |
++--------------------------------------------------+
 ```
 
 #### Arguments
 
 - **expression_n**: Expression to include in the output struct.
+  Can be a constant, column, or function, any combination of arithmetic or
+  string operators, or a named expression of previous listed .
+
+### `named_struct`
+
+Returns an Arrow struct using the specified name and input expressions pairs.
+
+```
+named_struct(expression1_name, expression1_input[, ..., expression_n_name, expression_n_input])
+```
+
+For example, this query converts two columns `a` and `b` to a single column with
+a struct type of fields `field_a` and `field_b`:
+
+```
+select * from t;
++---+---+
+| a | b |
++---+---+
+| 1 | 2 |
+| 3 | 4 |
++---+---+
+
+select named_struct('field_a', a, 'field_b', b) from t;
++-------------------------------------------------------+
+| named_struct(Utf8("field_a"),t.a,Utf8("field_b"),t.b) |
++-------------------------------------------------------+
+| {field_a: 1, field_b: 2}                              |
+| {field_a: 3, field_b: 4}                              |
++-------------------------------------------------------+
+```
+
+#### Arguments
+
+- **expression_n_name**: Name of the column field.
+  Must be a constant string.
+- **expression_n_input**: Expression to include in the output struct.
   Can be a constant, column, or function, and any combination of arithmetic or
   string operators.
 

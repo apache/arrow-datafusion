@@ -23,11 +23,12 @@ statement ok
 CREATE TABLE values(
     a INT,
     b FLOAT,
-    c VARCHAR
+    c VARCHAR,
+    n VARCHAR,
 ) AS VALUES
-  (1, 1.1, 'a'),
-  (2, 2.2, 'b'),
-  (3, 3.3, 'c')
+  (1, 1.1, 'a', NULL),
+  (2, 2.2, 'b', NULL),
+  (3, 3.3, 'c', NULL)
 ;
 
 # struct[i]
@@ -49,6 +50,18 @@ query ?
 select struct(1, 3.14, 'e');
 ----
 {c0: 1, c1: 3.14, c2: e}
+
+# struct scalar function with named values
+query ?
+select struct(1 as "name0", 3.14 as name1, 'e', true as 'name3');
+----
+{name0: 1, name1: 3.14, c2: e, name3: true}
+
+# struct scalar function with mixed named and unnamed values
+query ?
+select struct(1, 3.14 as name1, 'e', true);
+----
+{c0: 1, name1: 3.14, c2: e, c3: true}
 
 # struct scalar function with columns #1
 query ?
@@ -72,11 +85,98 @@ query TT
 explain select struct(a, b, c) from values;
 ----
 logical_plan
-Projection: struct(values.a, values.b, values.c)
+Projection: named_struct(Utf8("c0"), values.a, Utf8("c1"), values.b, Utf8("c2"), values.c)
 --TableScan: values projection=[a, b, c]
 physical_plan
-ProjectionExec: expr=[struct(a@0, b@1, c@2) as struct(values.a,values.b,values.c)]
+ProjectionExec: expr=[named_struct(c0, a@0, c1, b@1, c2, c@2) as named_struct(Utf8("c0"),values.a,Utf8("c1"),values.b,Utf8("c2"),values.c)]
 --MemoryExec: partitions=1, partition_sizes=[1]
+
+# error on 0 arguments
+query error
+select named_struct();
+----
+DataFusion error: Error during planning: No function matches the given name and argument types 'named_struct()'. You might need to add explicit type casts.
+	Candidate functions:
+	named_struct(Any, .., Any)
+
+
+# error on odd number of arguments #1
+query error DataFusion error: Execution error: named_struct requires an even number of arguments, got 1 instead
+select named_struct('a');
+
+# error on odd number of arguments #2
+query error DataFusion error: Execution error: named_struct requires an even number of arguments, got 1 instead
+select named_struct(1);
+
+# error on odd number of arguments #3
+query error DataFusion error: Execution error: named_struct requires an even number of arguments, got 1 instead
+select named_struct(values.a) from values;
+
+# error on odd number of arguments #4
+query error DataFusion error: Execution error: named_struct requires an even number of arguments, got 3 instead
+select named_struct('a', 1, 'b');
+
+# error on even argument not a string literal #1
+query error DataFusion error: Execution error: named_struct even arguments must be string literals, got Int64\(1\) instead at position 0
+select named_struct(1, 'a');
+
+# error on even argument not a string literal #2
+query error DataFusion error: Execution error: named_struct even arguments must be string literals, got Int64\(0\) instead at position 2
+select named_struct('corret', 1, 0, 'wrong');
+
+# error on even argument not a string literal #3
+query error DataFusion error: Execution error: named_struct even arguments must be string literals, got values\.a instead at position 0
+select named_struct(values.a, 'a') from values;
+
+# error on even argument not a string literal #4
+query error DataFusion error: Execution error: named_struct even arguments must be string literals, got values\.c instead at position 0
+select named_struct(values.c, 'c') from values;
+
+# named_struct with mixed scalar and array values #1
+query ?
+select named_struct('scalar', 27, 'array', values.a, 'null', NULL) from values;
+----
+{scalar: 27, array: 1, null: }
+{scalar: 27, array: 2, null: }
+{scalar: 27, array: 3, null: }
+
+# named_struct with mixed scalar and array values #2
+query ?
+select named_struct('array', values.a, 'scalar', 27, 'null', NULL) from values;
+----
+{array: 1, scalar: 27, null: }
+{array: 2, scalar: 27, null: }
+{array: 3, scalar: 27, null: }
+
+# named_struct with mixed scalar and array values #3
+query ?
+select named_struct('null', NULL, 'array', values.a, 'scalar', 27) from values;
+----
+{null: , array: 1, scalar: 27}
+{null: , array: 2, scalar: 27}
+{null: , array: 3, scalar: 27}
+
+# named_struct with mixed scalar and array values #4
+query ?
+select named_struct('null_array', values.n, 'array', values.a, 'scalar', 27, 'null', NULL) from values;
+----
+{null_array: , array: 1, scalar: 27, null: }
+{null_array: , array: 2, scalar: 27, null: }
+{null_array: , array: 3, scalar: 27, null: }
+
+# named_struct arrays only
+query ?
+select named_struct('field_a', a, 'field_b', b) from values;
+----
+{field_a: 1, field_b: 1.1}
+{field_a: 2, field_b: 2.2}
+{field_a: 3, field_b: 3.3}
+
+# named_struct scalars only
+query ?
+select named_struct('field_a', 1, 'field_b', 2);
+----
+{field_a: 1, field_b: 2}
 
 statement ok
 drop table values;
