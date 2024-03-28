@@ -247,24 +247,20 @@ fn create_physical_name(e: &Expr, is_first_expr: bool) -> Result<String> {
             distinct,
             args,
             filter,
-            order_by,
+            order_by: _,
             null_treatment: _,
         }) => match func_def {
             AggregateFunctionDefinition::BuiltIn(..) => {
                 create_function_physical_name(func_def.name(), *distinct, args)
             }
             AggregateFunctionDefinition::UDF(fun) => {
-                // TODO: Add support for filter and order by in AggregateUDF
+                // TODO: Add support for filter by in AggregateUDF
                 if filter.is_some() {
                     return exec_err!(
                         "aggregate expression with filter is not supported"
                     );
                 }
-                if order_by.is_some() {
-                    return exec_err!(
-                        "aggregate expression with order_by is not supported"
-                    );
-                }
+
                 let names = args
                     .iter()
                     .map(|e| create_physical_name(e, false))
@@ -1667,6 +1663,8 @@ pub fn create_aggregate_expr_with_name_and_maybe_filter(
                 )?),
                 None => None,
             };
+
+            let sort_exprs = order_by.clone().unwrap_or(vec![]);
             let order_by = match order_by {
                 Some(e) => Some(create_physical_sort_exprs(
                     e,
@@ -1693,13 +1691,18 @@ pub fn create_aggregate_expr_with_name_and_maybe_filter(
                     (agg_expr, filter, order_by)
                 }
                 AggregateFunctionDefinition::UDF(fun) => {
+                    let ordering_reqs: Vec<PhysicalSortExpr> =
+                        order_by.clone().unwrap_or(vec![]);
+
                     let agg_expr = udaf::create_aggregate_expr(
                         fun,
                         &args,
+                        &sort_exprs,
+                        &ordering_reqs,
                         physical_input_schema,
                         name,
-                    );
-                    (agg_expr?, filter, order_by)
+                    )?;
+                    (agg_expr, filter, order_by)
                 }
                 AggregateFunctionDefinition::Name(_) => {
                     return internal_err!(

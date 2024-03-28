@@ -17,8 +17,9 @@
 
 //! Function module contains typing and signature for built-in and user defined functions.
 
-use crate::{Accumulator, ColumnarValue, PartitionEvaluator};
-use arrow::datatypes::DataType;
+use crate::ColumnarValue;
+use crate::{Accumulator, Expr, PartitionEvaluator};
+use arrow::datatypes::{DataType, Schema};
 use datafusion_common::Result;
 use std::sync::Arc;
 
@@ -38,9 +39,10 @@ pub type ReturnTypeFunction =
     Arc<dyn Fn(&[DataType]) -> Result<Arc<DataType>> + Send + Sync>;
 
 /// Factory that returns an accumulator for the given aggregate, given
-/// its return datatype.
-pub type AccumulatorFactoryFunction =
-    Arc<dyn Fn(&DataType) -> Result<Box<dyn Accumulator>> + Send + Sync>;
+/// its return datatype, the sorting expressions and the schema for ordering.
+pub type AccumulatorFactoryFunction = Arc<
+    dyn Fn(&DataType, &[Expr], &Schema) -> Result<Box<dyn Accumulator>> + Send + Sync,
+>;
 
 /// Factory that creates a PartitionEvaluator for the given window
 /// function

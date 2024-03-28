@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use arrow_schema::Schema;
 use datafusion::{arrow::datatypes::DataType, logical_expr::Volatility};
 use datafusion_physical_expr::NullState;
 use std::{any::Any, sync::Arc};
@@ -85,7 +86,12 @@ impl AggregateUDFImpl for GeoMeanUdaf {
     /// is supported, DataFusion will use this row oriented
     /// accumulator when the aggregate function is used as a window function
     /// or when there are only aggregates (no GROUP BY columns) in the plan.
-    fn accumulator(&self, _arg: &DataType) -> Result<Box<dyn Accumulator>> {
+    fn accumulator(
+        &self,
+        _arg: &DataType,
+        _sort_exprs: &[Expr],
+        _schema: &Schema,
+    ) -> Result<Box<dyn Accumulator>> {
         Ok(Box::new(GeometricMean::new()))
     }
 
@@ -191,7 +197,7 @@ impl Accumulator for GeometricMean {
 
 // create local session context with an in-memory table
 fn create_context() -> Result<SessionContext> {
-    use datafusion::arrow::datatypes::{Field, Schema};
+    use datafusion::arrow::datatypes::Field;
     use datafusion::datasource::MemTable;
     // define a schema.
     let schema = Arc::new(Schema::new(vec![

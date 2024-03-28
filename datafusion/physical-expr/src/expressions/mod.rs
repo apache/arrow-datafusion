@@ -53,7 +53,7 @@ pub use crate::aggregate::correlation::Correlation;
 pub use crate::aggregate::count::Count;
 pub use crate::aggregate::count_distinct::DistinctCount;
 pub use crate::aggregate::covariance::{Covariance, CovariancePop};
-pub use crate::aggregate::first_last::{FirstValue, LastValue};
+pub use crate::aggregate::first_last::{FirstValue, FirstValueAccumulator, LastValue};
 pub use crate::aggregate::grouping::Grouping;
 pub use crate::aggregate::median::Median;
 pub use crate::aggregate::min_max::{Max, Min};

@@ -22,7 +22,7 @@ use crate::{Accumulator, Expr};
 use crate::{
     AccumulatorFactoryFunction, ReturnTypeFunction, Signature, StateTypeFunction,
 };
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Schema};
 use datafusion_common::{not_impl_err, Result};
 use std::any::Any;
 use std::fmt::{self, Debug, Formatter};
@@ -166,10 +166,14 @@ impl AggregateUDF {
         self.inner.return_type(args)
     }
 
-    /// Return an accumulator the given aggregate, given
-    /// its return datatype.
-    pub fn accumulator(&self, return_type: &DataType) -> Result<Box<dyn Accumulator>> {
-        self.inner.accumulator(return_type)
+    /// Return an accumulator the given aggregate, given its return datatype
+    pub fn accumulator(
+        &self,
+        return_type: &DataType,
+        sort_exprs: &[Expr],
+        schema: &Schema,
+    ) -> Result<Box<dyn Accumulator>> {
+        self.inner.accumulator(return_type, sort_exprs, schema)
     }
 
     /// Return the type of the intermediate state used by this aggregator, given
@@ -213,8 +217,9 @@ where
 /// # use std::any::Any;
 /// # use arrow::datatypes::DataType;
 /// # use datafusion_common::{DataFusionError, plan_err, Result};
-/// # use datafusion_expr::{col, ColumnarValue, Signature, Volatility};
+/// # use datafusion_expr::{col, ColumnarValue, Signature, Volatility, Expr};
 /// # use datafusion_expr::{AggregateUDFImpl, AggregateUDF, Accumulator};
+/// # use arrow::datatypes::Schema;
 /// #[derive(Debug, Clone)]
 /// struct GeoMeanUdf {
 ///   signature: Signature
@@ -240,7 +245,7 @@ where
 ///      Ok(DataType::Float64)
 ///    }
 ///    // This is the accumulator factory; DataFusion uses it to create new accumulators.
-///    fn accumulator(&self, _arg: &DataType) -> Result<Box<dyn Accumulator>> { unimplemented!() }
+///    fn accumulator(&self, _arg: &DataType, _sort_exprs: &[Expr], _schema: &Schema) -> Result<Box<dyn Accumulator>> { unimplemented!() }
 ///    fn state_type(&self, _return_type: &DataType) -> Result<Vec<DataType>> {
 ///        Ok(vec![DataType::Float64, DataType::UInt32])
 ///    }
@@ -269,7 +274,20 @@ pub trait AggregateUDFImpl: Debug + Send + Sync {
 
     /// Return a new [`Accumulator`] that aggregates values for a specific
     /// group during query execution.
-    fn accumulator(&self, arg: &DataType) -> Result<Box<dyn Accumulator>>;
+    ///
+    /// `arg`: the type of the argument to this accumulator
+    ///
+    /// `sort_exprs`: contains a list of `Expr::SortExpr`s if the
+    /// aggregate is called with an explicit `ORDER BY`. For example,
+    /// `ARRAY_AGG(x ORDER BY y ASC)`. In this case, `sort_exprs` would contain `[y ASC]`
+    ///
+    /// `schema` is the input schema to the udaf
+    fn accumulator(
+        &self,
+        arg: &DataType,
+        sort_exprs: &[Expr],
+        schema: &Schema,
+    ) -> Result<Box<dyn Accumulator>>;
 
     /// Return the type used to serialize the  [`Accumulator`]'s intermediate state.
     /// See [`Accumulator::state()`] for more details
@@ -277,7 +295,7 @@ pub trait AggregateUDFImpl: Debug + Send + Sync {
 
     /// If the aggregate expression has a specialized
     /// [`GroupsAccumulator`] implementation. If this returns true,
-    /// `[Self::create_groups_accumulator`] will be called.
+    /// `[Self::create_groups_accumulator]` will be called.
     fn groups_accumulator_supported(&self) -> bool {
         false
     }
@@ -337,8 +355,13 @@ impl AggregateUDFImpl for AliasedAggregateUDFImpl {
         self.inner.return_type(arg_types)
     }
 
-    fn accumulator(&self, arg: &DataType) -> Result<Box<dyn Accumulator>> {
-        self.inner.accumulator(arg)
+    fn accumulator(
+        &self,
+        arg: &DataType,
+        sort_exprs: &[Expr],
+        schema: &Schema,
+    ) -> Result<Box<dyn Accumulator>> {
+        self.inner.accumulator(arg, sort_exprs, schema)
     }
 
     fn state_type(&self, return_type: &DataType) -> Result<Vec<DataType>> {
@@ -394,8 +417,13 @@ impl AggregateUDFImpl for AggregateUDFLegacyWrapper {
         Ok(res.as_ref().clone())
     }
 
-    fn accumulator(&self, arg: &DataType) -> Result<Box<dyn Accumulator>> {
-        (self.accumulator)(arg)
+    fn accumulator(
+        &self,
+        arg: &DataType,
+        sort_exprs: &[Expr],
+        schema: &Schema,
+    ) -> Result<Box<dyn Accumulator>> {
+        (self.accumulator)(arg, sort_exprs, schema)
     }
 
     fn state_type(&self, return_type: &DataType) -> Result<Vec<DataType>> {

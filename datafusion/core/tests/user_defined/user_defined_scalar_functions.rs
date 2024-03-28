@@ -291,7 +291,7 @@ async fn udaf_as_window_func() -> Result<()> {
         vec![DataType::Int32],
         Arc::new(DataType::Int32),
         Volatility::Immutable,
-        Arc::new(|_| Ok(Box::new(MyAccumulator))),
+        Arc::new(|_, _, _| Ok(Box::new(MyAccumulator))),
         Arc::new(vec![DataType::Int32]),
     );
 

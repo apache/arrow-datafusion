@@ -29,7 +29,7 @@ use crate::{
     ScalarUDF, Signature, Volatility,
 };
 use crate::{AggregateUDFImpl, ColumnarValue, ScalarUDFImpl, WindowUDF, WindowUDFImpl};
-use arrow::datatypes::DataType;
+use arrow::datatypes::{DataType, Schema};
 use datafusion_common::{Column, Result};
 use std::any::Any;
 use std::fmt::Debug;
@@ -739,6 +739,29 @@ pub fn create_udaf(
     ))
 }
 
+/// Creates a new UDAF with a specific signature, state type and return type.
+/// The signature and state type must match the `Accumulator's implementation`.
+pub fn create_udaf_with_ordering(
+    name: &str,
+    input_type: Vec<DataType>,
+    return_type: Arc<DataType>,
+    volatility: Volatility,
+    accumulator: AccumulatorFactoryFunction,
+    state_type: Arc<Vec<DataType>>,
+) -> AggregateUDF {
+    let return_type = Arc::try_unwrap(return_type).unwrap_or_else(|t| t.as_ref().clone());
+    let state_type = Arc::try_unwrap(state_type).unwrap_or_else(|t| t.as_ref().clone());
+
+    AggregateUDF::from(SimpleOrderedAggregateUDF::new(
+        name,
+        input_type,
+        return_type,
+        volatility,
+        accumulator,
+        state_type,
+    ))
+}
+
 /// Implements [`AggregateUDFImpl`] for functions that have a single signature and
 /// return type.
 pub struct SimpleAggregateUDF {
@@ -816,8 +839,87 @@ impl AggregateUDFImpl for SimpleAggregateUDF {
         Ok(self.return_type.clone())
     }
 
-    fn accumulator(&self, arg: &DataType) -> Result<Box<dyn crate::Accumulator>> {
-        (self.accumulator)(arg)
+    fn accumulator(
+        &self,
+        arg: &DataType,
+        sort_exprs: &[Expr],
+        schema: &Schema,
+    ) -> Result<Box<dyn crate::Accumulator>> {
+        (self.accumulator)(arg, sort_exprs, schema)
+    }
+
+    fn state_type(&self, _return_type: &DataType) -> Result<Vec<DataType>> {
+        Ok(self.state_type.clone())
+    }
+}
+
+/// Implements [`AggregateUDFImpl`] for functions that have a single signature and
+/// return type.
+pub struct SimpleOrderedAggregateUDF {
+    name: String,
+    signature: Signature,
+    return_type: DataType,
+    accumulator: AccumulatorFactoryFunction,
+    state_type: Vec<DataType>,
+}
+
+impl Debug for SimpleOrderedAggregateUDF {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("AggregateUDF")
+            .field("name", &self.name)
+            .field("signature", &self.signature)
+            .field("fun", &"<FUNC>")
+            .finish()
+    }
+}
+
+impl SimpleOrderedAggregateUDF {
+    /// Create a new `AggregateUDFImpl` from a name, input types, return type, state type and
+    /// implementation. Implementing [`AggregateUDFImpl`] allows more flexibility
+    pub fn new(
+        name: impl Into<String>,
+        input_type: Vec<DataType>,
+        return_type: DataType,
+        volatility: Volatility,
+        accumulator: AccumulatorFactoryFunction,
+        state_type: Vec<DataType>,
+    ) -> Self {
+        let name = name.into();
+        let signature = Signature::exact(input_type, volatility);
+        Self {
+            name,
+            signature,
+            return_type,
+            accumulator,
+            state_type,
+        }
+    }
+}
+
+impl AggregateUDFImpl for SimpleOrderedAggregateUDF {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(self.return_type.clone())
+    }
+
+    fn accumulator(
+        &self,
+        arg: &DataType,
+        sort_exprs: &[Expr],
+        schema: &Schema,
+    ) -> Result<Box<dyn crate::Accumulator>> {
+        (self.accumulator)(arg, sort_exprs, schema)
     }
 
     fn state_type(&self, _return_type: &DataType) -> Result<Vec<DataType>> {

@@ -963,7 +963,8 @@ mod test {
         let table_scan = test_table_scan()?;
 
         let return_type = DataType::UInt32;
-        let accumulator: AccumulatorFactoryFunction = Arc::new(|_| unimplemented!());
+        let accumulator: AccumulatorFactoryFunction =
+            Arc::new(|_, _, _| unimplemented!());
         let state_type = vec![DataType::UInt32];
         let udf_agg = |inner: Expr| {
             Expr::AggregateFunction(datafusion_expr::expr::AggregateFunction::new_udf(

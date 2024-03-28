@@ -92,8 +92,18 @@ pub fn create_window_expr(
             ))
         }
         WindowFunctionDefinition::AggregateUDF(fun) => {
-            let aggregate =
-                udaf::create_aggregate_expr(fun.as_ref(), args, input_schema, name)?;
+            // TODO: Ordering not supported for Window UDFs yet
+            let sort_exprs = &[];
+            let ordering_req = &[];
+
+            let aggregate = udaf::create_aggregate_expr(
+                fun.as_ref(),
+                args,
+                sort_exprs,
+                ordering_req,
+                input_schema,
+                name,
+            )?;
             window_expr_from_aggregate_expr(
                 partition_by,
                 order_by,

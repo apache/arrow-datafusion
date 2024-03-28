@@ -17,20 +17,17 @@
 
 //! This module contains functions and structs supporting user-defined aggregate functions.
 
-use datafusion_expr::GroupsAccumulator;
+use datafusion_expr::{Expr, GroupsAccumulator};
 use fmt::Debug;
 use std::any::Any;
 use std::fmt;
 
-use arrow::{
-    datatypes::Field,
-    datatypes::{DataType, Schema},
-};
+use arrow::datatypes::{DataType, Field, Schema};
 
 use super::{expressions::format_state_name, Accumulator, AggregateExpr};
 use datafusion_common::{not_impl_err, Result};
 pub use datafusion_expr::AggregateUDF;
-use datafusion_physical_expr::PhysicalExpr;
+use datafusion_physical_expr::{LexOrdering, PhysicalExpr, PhysicalSortExpr};
 
 use datafusion_physical_expr::aggregate::utils::down_cast_any_ref;
 use std::sync::Arc;
@@ -40,12 +37,14 @@ use std::sync::Arc;
 pub fn create_aggregate_expr(
     fun: &AggregateUDF,
     input_phy_exprs: &[Arc<dyn PhysicalExpr>],
-    input_schema: &Schema,
+    sort_exprs: &[Expr],
+    ordering_req: &[PhysicalSortExpr],
+    schema: &Schema,
     name: impl Into<String>,
 ) -> Result<Arc<dyn AggregateExpr>> {
     let input_exprs_types = input_phy_exprs
         .iter()
-        .map(|arg| arg.data_type(input_schema))
+        .map(|arg| arg.data_type(schema))
         .collect::<Result<Vec<_>>>()?;
 
     Ok(Arc::new(AggregateFunctionExpr {
@@ -53,6 +52,9 @@ pub fn create_aggregate_expr(
         args: input_phy_exprs.to_vec(),
         data_type: fun.return_type(&input_exprs_types)?,
         name: name.into(),
+        schema: schema.clone(),
+        sort_exprs: sort_exprs.to_vec(),
+        ordering_req: ordering_req.to_vec(),
     }))
 }
 
@@ -64,6 +66,11 @@ pub struct AggregateFunctionExpr {
     /// Output / return type of this aggregate
     data_type: DataType,
     name: String,
+    schema: Schema,
+    // The logical order by expressions
+    sort_exprs: Vec<Expr>,
+    // The physical order by expressions
+    ordering_req: LexOrdering,
 }
 
 impl AggregateFunctionExpr {
@@ -106,11 +113,14 @@ impl AggregateExpr for AggregateFunctionExpr {
     }
 
     fn create_accumulator(&self) -> Result<Box<dyn Accumulator>> {
-        self.fun.accumulator(&self.data_type)
+        self.fun
+            .accumulator(&self.data_type, self.sort_exprs.as_slice(), &self.schema)
     }
 
     fn create_sliding_accumulator(&self) -> Result<Box<dyn Accumulator>> {
-        let accumulator = self.fun.accumulator(&self.data_type)?;
+        let accumulator =
+            self.fun
+                .accumulator(&self.data_type, &self.sort_exprs, &self.schema)?;
 
         // Accumulators that have window frame startings different
         // than `UNBOUNDED PRECEDING`, such as `1 PRECEEDING`, need to
@@ -174,6 +184,10 @@ impl AggregateExpr for AggregateFunctionExpr {
 
     fn create_groups_accumulator(&self) -> Result<Box<dyn GroupsAccumulator>> {
         self.fun.create_groups_accumulator()
+    }
+
+    fn order_bys(&self) -> Option<&[PhysicalSortExpr]> {
+        (!self.ordering_req.is_empty()).then_some(&self.ordering_req)
     }
 }
 

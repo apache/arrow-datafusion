@@ -150,7 +150,7 @@ async fn main() -> Result<()> {
         Arc::new(DataType::Float64),
         Volatility::Immutable,
         // This is the accumulator factory; DataFusion uses it to create new accumulators.
-        Arc::new(|_| Ok(Box::new(GeometricMean::new()))),
+        Arc::new(|_, _, _| Ok(Box::new(GeometricMean::new()))),
         // This is the description of the state. `state()` must match the types here.
         Arc::new(vec![DataType::Float64, DataType::UInt32]),
     );

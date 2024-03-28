@@ -210,7 +210,7 @@ impl PartialEq<dyn Any> for FirstValue {
 }
 
 #[derive(Debug)]
-struct FirstValueAccumulator {
+pub struct FirstValueAccumulator {
     first: ScalarValue,
     // At the beginning, `is_set` is false, which means `first` is not seen yet.
     // Once we see the first value, we set the `is_set` flag and do not update `first` anymore.
