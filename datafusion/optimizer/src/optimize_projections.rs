@@ -26,6 +26,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use crate::common_subexpr_eliminate::is_not_complex;
 use crate::optimizer::ApplyOrder;
 use crate::{OptimizerConfig, OptimizerRule};
 
@@ -35,6 +36,7 @@ use datafusion_common::{
     JoinType, Result,
 };
 use datafusion_expr::expr::{Alias, ScalarFunction};
+
 use datafusion_expr::{
     logical_plan::LogicalPlan, projection_schema, Aggregate, BinaryExpr, Cast, Distinct,
     Expr, Projection, TableScan, Window,
@@ -304,7 +306,6 @@ fn optimize_projections(
             // Only use window expressions that are absolutely necessary according
             // to parent requirements:
             let new_window_expr = get_at_indices(&window.window_expr, &window_reqs);
-
             // Get all the required column indices at the input, either by the
             // parent or window expression requirements.
             let required_indices = get_all_required_indices(
@@ -319,7 +320,6 @@ fn optimize_projections(
             } else {
                 window.input.as_ref().clone()
             };
-
             return if new_window_expr.is_empty() {
                 // When no window expression is necessary, use the input directly:
                 Ok(Some(window_child))
@@ -717,13 +717,30 @@ fn indices_referred_by_expr(
     input_schema: &DFSchemaRef,
     expr: &Expr,
 ) -> Result<Vec<usize>> {
-    let mut cols = expr.to_columns()?;
     // Get outer-referenced (subquery) columns:
+    // TODO: Support more Expressions
+    let mut cols = expr.to_columns()?;
     outer_columns(expr, &mut cols);
-    Ok(cols
+    let mut res_vec: Vec<usize> = cols
         .iter()
         .flat_map(|col| input_schema.index_of_column(col))
-        .collect())
+        .collect();
+    match expr {
+        Expr::BinaryExpr(BinaryExpr { op, .. }) if !is_not_complex(op) => {
+            if let Some(index) =
+                input_schema.index_of_column_by_name(None, &expr.to_string())?
+            {
+                match res_vec.binary_search(&index) {
+                    Ok(_) => {}
+                    Err(pos) => {
+                        res_vec.insert(pos, index);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(res_vec)
 }
 
 /// Gets all required indices for the input; i.e. those required by the parent
