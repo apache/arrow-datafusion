@@ -2995,16 +2995,6 @@ fn join_with_aliases() {
 }
 
 #[test]
-fn cte_use_same_name_multiple_times() {
-    let sql =
-        "with a as (select * from person), a as (select * from orders) select * from a;";
-    let expected =
-        "SQL error: ParserError(\"WITH query name \\\"a\\\" specified more than once\")";
-    let result = logical_plan(sql).err().unwrap();
-    assert_eq!(result.strip_backtrace(), expected);
-}
-
-#[test]
 fn negative_interval_plus_interval_in_projection() {
     let sql = "select -interval '2 days' + interval '5 days';";
     let expected =

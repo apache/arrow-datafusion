@@ -213,6 +213,11 @@ impl PlannerContext {
     pub fn get_cte(&self, cte_name: &str) -> Option<&LogicalPlan> {
         self.ctes.get(cte_name).map(|cte| cte.as_ref())
     }
+
+    /// Remove the plan of CTE / Subquery for the specified name
+    pub(super) fn remove_cte(&mut self, cte_name: &str) {
+        self.ctes.remove(cte_name);
+    }
 }
 
 /// SQL query planner

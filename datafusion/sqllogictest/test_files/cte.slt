@@ -39,6 +39,37 @@ physical_plan
 ProjectionExec: expr=[1 as a, 2 as b, 3 as c]
 --PlaceholderRowExec
 
+# cte_use_same_name_multiple_times
+statement error DataFusion error: Error during planning: WITH query name "a" specified more than once
+WITH a AS (SELECT 1), a AS (SELECT 2) SELECT * FROM a;
+
+# Test disabling recursive CTE
+statement ok
+set datafusion.execution.enable_recursive_ctes = false;
+
+query error DataFusion error: This feature is not implemented: Recursive CTEs are not enabled
+WITH RECURSIVE nodes AS (
+    SELECT 1 as id
+    UNION ALL
+    SELECT id + 1 as id
+    FROM nodes
+    WHERE id < 3
+) SELECT * FROM nodes
+
+statement ok
+set datafusion.execution.enable_recursive_ctes = true;
+
+
+# DISTINCT UNION is not supported
+query error DataFusion error: This feature is not implemented: Recursive queries with a distinct 'UNION' \(in which the previous iteration's results will be de\-duplicated\) is not supported
+WITH RECURSIVE nodes AS (
+    SELECT 1 as id
+    UNION
+    SELECT id + 1 as id
+    FROM nodes
+    WHERE id < 3
+) SELECT * FROM nodes
+
 
 # trivial recursive CTE works
 query I rowsort
@@ -744,3 +775,60 @@ WITH RECURSIVE my_cte AS (
     UNION ALL
     SELECT 'abc' FROM my_cte WHERE CAST(a AS text) !='abc'
 ) SELECT * FROM my_cte;
+
+# Define a non-recursive CTE in the recursive WITH clause.
+# Test issue: https://github.com/apache/arrow-datafusion/issues/9804
+query I
+WITH RECURSIVE cte AS (
+    SELECT a FROM (VALUES(1)) AS t(a) WHERE a > 2
+    UNION ALL
+    SELECT 2
+) SELECT * FROM cte;
+----
+2
+
+# Define a non-recursive CTE in the recursive WITH clause.
+# UNION ALL
+query I rowsort
+WITH RECURSIVE cte AS (
+    SELECT 1
+    UNION ALL
+    SELECT 2
+) SELECT * FROM cte;
+----
+1
+2
+
+# Define a non-recursive CTE in the recursive WITH clause.
+# DISTINCT UNION
+query I
+WITH RECURSIVE cte AS (
+    SELECT 2
+    UNION
+    SELECT 2
+) SELECT * FROM cte;
+----
+2
+
+# Define a non-recursive CTE in the recursive WITH clause.
+# UNION is not present.
+query I
+WITH RECURSIVE cte AS (
+    SELECT 1
+) SELECT * FROM cte;
+----
+1
+
+# Define a recursive CTE and a non-recursive CTE at the same time.
+query II rowsort
+WITH RECURSIVE
+non_recursive_cte AS (
+  SELECT 1
+),
+recursive_cte AS (
+  SELECT 1 AS a UNION ALL SELECT a+2 FROM recursive_cte WHERE a < 3
+)
+SELECT * FROM non_recursive_cte, recursive_cte;
+----
+1 1
+1 3

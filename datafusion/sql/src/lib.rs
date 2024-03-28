@@ -28,6 +28,7 @@
 //! [`SqlToRel`]: planner::SqlToRel
 //! [`LogicalPlan`]: datafusion_expr::logical_plan::LogicalPlan
 
+mod cte;
 mod expr;
 pub mod parser;
 pub mod planner;

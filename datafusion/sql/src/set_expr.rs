@@ -35,45 +35,58 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 right,
                 set_quantifier,
             } => {
-                let all = match set_quantifier {
-                    SetQuantifier::All => true,
-                    SetQuantifier::Distinct | SetQuantifier::None => false,
-                    SetQuantifier::ByName => {
-                        return not_impl_err!("UNION BY NAME not implemented");
-                    }
-                    SetQuantifier::AllByName => {
-                        return not_impl_err!("UNION ALL BY NAME not implemented")
-                    }
-                    SetQuantifier::DistinctByName => {
-                        return not_impl_err!("UNION DISTINCT BY NAME not implemented")
-                    }
-                };
-
                 let left_plan = self.set_expr_to_plan(*left, planner_context)?;
                 let right_plan = self.set_expr_to_plan(*right, planner_context)?;
-                match (op, all) {
-                    (SetOperator::Union, true) => LogicalPlanBuilder::from(left_plan)
-                        .union(right_plan)?
-                        .build(),
-                    (SetOperator::Union, false) => LogicalPlanBuilder::from(left_plan)
-                        .union_distinct(right_plan)?
-                        .build(),
-                    (SetOperator::Intersect, true) => {
-                        LogicalPlanBuilder::intersect(left_plan, right_plan, true)
-                    }
-                    (SetOperator::Intersect, false) => {
-                        LogicalPlanBuilder::intersect(left_plan, right_plan, false)
-                    }
-                    (SetOperator::Except, true) => {
-                        LogicalPlanBuilder::except(left_plan, right_plan, true)
-                    }
-                    (SetOperator::Except, false) => {
-                        LogicalPlanBuilder::except(left_plan, right_plan, false)
-                    }
-                }
+                self.set_operation_to_plan(op, left_plan, right_plan, set_quantifier)
             }
             SetExpr::Query(q) => self.query_to_plan(*q, planner_context),
             _ => not_impl_err!("Query {set_expr} not implemented yet"),
+        }
+    }
+
+    pub(super) fn is_union_all(set_quantifier: SetQuantifier) -> Result<bool> {
+        match set_quantifier {
+            SetQuantifier::All => Ok(true),
+            SetQuantifier::Distinct | SetQuantifier::None => Ok(false),
+            SetQuantifier::ByName => {
+                not_impl_err!("UNION BY NAME not implemented")
+            }
+            SetQuantifier::AllByName => {
+                not_impl_err!("UNION ALL BY NAME not implemented")
+            }
+            SetQuantifier::DistinctByName => {
+                not_impl_err!("UNION DISTINCT BY NAME not implemented")
+            }
+        }
+    }
+
+    pub(super) fn set_operation_to_plan(
+        &self,
+        op: SetOperator,
+        left_plan: LogicalPlan,
+        right_plan: LogicalPlan,
+        set_quantifier: SetQuantifier,
+    ) -> Result<LogicalPlan> {
+        let all = Self::is_union_all(set_quantifier)?;
+        match (op, all) {
+            (SetOperator::Union, true) => LogicalPlanBuilder::from(left_plan)
+                .union(right_plan)?
+                .build(),
+            (SetOperator::Union, false) => LogicalPlanBuilder::from(left_plan)
+                .union_distinct(right_plan)?
+                .build(),
+            (SetOperator::Intersect, true) => {
+                LogicalPlanBuilder::intersect(left_plan, right_plan, true)
+            }
+            (SetOperator::Intersect, false) => {
+                LogicalPlanBuilder::intersect(left_plan, right_plan, false)
+            }
+            (SetOperator::Except, true) => {
+                LogicalPlanBuilder::except(left_plan, right_plan, true)
+            }
+            (SetOperator::Except, false) => {
+                LogicalPlanBuilder::except(left_plan, right_plan, false)
+            }
         }
     }
 }
