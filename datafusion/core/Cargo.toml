@@ -130,7 +130,7 @@ zstd = { version = "0.13", optional = true, default-features = false }
 [dev-dependencies]
 async-trait = { workspace = true }
 bigdecimal = { workspace = true }
-cargo = "0.77.0"
+cargo = "0.78.0"
 criterion = { version = "0.5", features = ["async_tokio"] }
 csv = "1.1.6"
 ctor = { workspace = true }
