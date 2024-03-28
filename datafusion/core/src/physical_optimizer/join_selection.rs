@@ -30,8 +30,8 @@ use crate::error::Result;
 use crate::physical_optimizer::PhysicalOptimizerRule;
 use crate::physical_plan::joins::utils::{ColumnIndex, JoinFilter};
 use crate::physical_plan::joins::{
-    CrossJoinExec, HashJoinExec, PartitionMode, StreamJoinPartitionMode,
-    SymmetricHashJoinExec,
+    CrossJoinExec, HashJoinExec, NestedLoopJoinExec, PartitionMode,
+    StreamJoinPartitionMode, SymmetricHashJoinExec,
 };
 use crate::physical_plan::projection::ProjectionExec;
 use crate::physical_plan::{ExecutionPlan, ExecutionPlanProperties};
@@ -197,6 +197,38 @@ fn swap_hash_join(
         )?;
         Ok(Arc::new(proj))
     }
+}
+
+/// Swaps inputs of `NestedLoopJoinExec` and wraps it into `ProjectionExec` is required
+fn swap_nl_join(join: &NestedLoopJoinExec) -> Result<Arc<dyn ExecutionPlan>> {
+    let new_filter = swap_join_filter(join.filter());
+    let new_join_type = &swap_join_type(*join.join_type());
+
+    let new_join = NestedLoopJoinExec::try_new(
+        Arc::clone(join.right()),
+        Arc::clone(join.left()),
+        new_filter,
+        new_join_type,
+    )?;
+
+    // For Semi/Anti joins, swap result will produce same output schema,
+    // no need to wrap them into additional projection
+    let plan: Arc<dyn ExecutionPlan> = if matches!(
+        join.join_type(),
+        JoinType::LeftSemi
+            | JoinType::RightSemi
+            | JoinType::LeftAnti
+            | JoinType::RightAnti
+    ) {
+        Arc::new(new_join)
+    } else {
+        let projection =
+            swap_reverting_projection(&join.left().schema(), &join.right().schema());
+
+        Arc::new(ProjectionExec::try_new(projection, Arc::new(new_join))?)
+    };
+
+    Ok(plan)
 }
 
 /// When the order of the join is changed by the optimizer, the columns in
@@ -461,6 +493,14 @@ fn statistical_join_selection_subrule(
             } else {
                 None
             }
+        } else if let Some(nl_join) = plan.as_any().downcast_ref::<NestedLoopJoinExec>() {
+            let left = nl_join.left();
+            let right = nl_join.right();
+            if should_swap_join_order(&**left, &**right)? {
+                swap_nl_join(nl_join).map(Some)?
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -697,8 +737,11 @@ mod tests_statistical {
 
     use arrow::datatypes::{DataType, Field, Schema};
     use datafusion_common::{stats::Precision, JoinType, ScalarValue};
-    use datafusion_physical_expr::expressions::Column;
+    use datafusion_expr::Operator;
+    use datafusion_physical_expr::expressions::{BinaryExpr, Column};
     use datafusion_physical_expr::{PhysicalExpr, PhysicalExprRef};
+
+    use rstest::rstest;
 
     /// Return statistcs for empty table
     fn empty_statistics() -> Statistics {
@@ -783,6 +826,35 @@ mod tests_statistical {
                 .unwrap_or(Precision::Absent),
             ..Default::default()
         }]
+    }
+
+    /// Create join filter for NLJoinExec with expression `big_col > small_col`
+    /// where both columns are 0-indexed and come from left and right inputs respectively
+    fn nl_join_filter() -> Option<JoinFilter> {
+        let column_indices = vec![
+            ColumnIndex {
+                index: 0,
+                side: JoinSide::Left,
+            },
+            ColumnIndex {
+                index: 0,
+                side: JoinSide::Right,
+            },
+        ];
+        let intermediate_schema = Schema::new(vec![
+            Field::new("big_col", DataType::Int32, false),
+            Field::new("small_col", DataType::Int32, false),
+        ]);
+        let expression = Arc::new(BinaryExpr::new(
+            Arc::new(Column::new_with_schema("big_col", &intermediate_schema).unwrap()),
+            Operator::Gt,
+            Arc::new(Column::new_with_schema("big_col", &intermediate_schema).unwrap()),
+        )) as _;
+        Some(JoinFilter::new(
+            expression,
+            column_indices,
+            intermediate_schema,
+        ))
     }
 
     /// Returns three plans with statistics of (min, max, distinct_count)
@@ -1149,6 +1221,137 @@ mod tests_statistical {
             Precision::Inexact(2097152)
         );
         crosscheck_plans(join).unwrap();
+    }
+
+    #[rstest(
+        join_type,
+        case::inner(JoinType::Inner),
+        case::left(JoinType::Left),
+        case::right(JoinType::Right),
+        case::full(JoinType::Full)
+    )]
+    #[tokio::test]
+    async fn test_nl_join_with_swap(join_type: JoinType) {
+        let (big, small) = create_big_and_small();
+
+        let join = Arc::new(
+            NestedLoopJoinExec::try_new(
+                Arc::clone(&big),
+                Arc::clone(&small),
+                nl_join_filter(),
+                &join_type,
+            )
+            .unwrap(),
+        );
+
+        let optimized_join = JoinSelection::new()
+            .optimize(join.clone(), &ConfigOptions::new())
+            .unwrap();
+
+        let swapping_projection = optimized_join
+            .as_any()
+            .downcast_ref::<ProjectionExec>()
+            .expect("A proj is required to swap columns back to their original order");
+
+        assert_eq!(swapping_projection.expr().len(), 2);
+        let (col, name) = &swapping_projection.expr()[0];
+        assert_eq!(name, "big_col");
+        assert_col_expr(col, "big_col", 1);
+        let (col, name) = &swapping_projection.expr()[1];
+        assert_eq!(name, "small_col");
+        assert_col_expr(col, "small_col", 0);
+
+        let swapped_join = swapping_projection
+            .input()
+            .as_any()
+            .downcast_ref::<NestedLoopJoinExec>()
+            .expect("The type of the plan should not be changed");
+
+        // Assert join side of big_col swapped in filter expression
+        let swapped_filter = swapped_join.filter().unwrap();
+        let swapped_big_col_idx = swapped_filter.schema().index_of("big_col").unwrap();
+        let swapped_big_col_side = swapped_filter
+            .column_indices()
+            .get(swapped_big_col_idx)
+            .unwrap()
+            .side;
+        assert_eq!(
+            swapped_big_col_side,
+            JoinSide::Right,
+            "Filter column side should be swapped"
+        );
+
+        assert_eq!(
+            swapped_join.left().statistics().unwrap().total_byte_size,
+            Precision::Inexact(8192)
+        );
+        assert_eq!(
+            swapped_join.right().statistics().unwrap().total_byte_size,
+            Precision::Inexact(2097152)
+        );
+        crosscheck_plans(join.clone()).unwrap();
+    }
+
+    #[rstest(
+        join_type,
+        case::left_semi(JoinType::LeftSemi),
+        case::left_anti(JoinType::LeftAnti),
+        case::right_semi(JoinType::RightSemi),
+        case::right_anti(JoinType::RightAnti)
+    )]
+    #[tokio::test]
+    async fn test_nl_join_with_swap_no_proj(join_type: JoinType) {
+        let (big, small) = create_big_and_small();
+
+        let join = Arc::new(
+            NestedLoopJoinExec::try_new(
+                Arc::clone(&big),
+                Arc::clone(&small),
+                nl_join_filter(),
+                &join_type,
+            )
+            .unwrap(),
+        );
+
+        let optimized_join = JoinSelection::new()
+            .optimize(join.clone(), &ConfigOptions::new())
+            .unwrap();
+
+        let swapped_join = optimized_join
+            .as_any()
+            .downcast_ref::<NestedLoopJoinExec>()
+            .expect("The type of the plan should not be changed");
+
+        // Assert before/after schemas are equal
+        assert_eq!(
+            join.schema(),
+            swapped_join.schema(),
+            "Join schema should not be modified while optimization"
+        );
+
+        // Assert join side of big_col swapped in filter expression
+        let swapped_filter = swapped_join.filter().unwrap();
+        let swapped_big_col_idx = swapped_filter.schema().index_of("big_col").unwrap();
+        let swapped_big_col_side = swapped_filter
+            .column_indices()
+            .get(swapped_big_col_idx)
+            .unwrap()
+            .side;
+        assert_eq!(
+            swapped_big_col_side,
+            JoinSide::Right,
+            "Filter column side should be swapped"
+        );
+
+        assert_eq!(
+            swapped_join.left().statistics().unwrap().total_byte_size,
+            Precision::Inexact(8192)
+        );
+        assert_eq!(
+            swapped_join.right().statistics().unwrap().total_byte_size,
+            Precision::Inexact(2097152)
+        );
+        crosscheck_plans(join.clone()).unwrap();
     }
 
     #[tokio::test]

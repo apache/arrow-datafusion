@@ -344,6 +344,7 @@ SELECT * FROM my_cte t1, my_cte
 6 5
 6 6
 
+# TODO: (probably) infinite recursion when recursive CTE is on build-side of join (works for CrossJoinExec / NLJoinExec)
 # CTE within recursive CTE works and does not result in 'index out of bounds: the len is 0 but the index is 0'
 query I
 WITH RECURSIVE "recursive_cte" AS (
@@ -359,8 +360,8 @@ WITH RECURSIVE "recursive_cte" AS (
     SELECT
       2 as "val"
     FROM
-      "recursive_cte" 
-      FULL JOIN "sub_cte" ON 1 = 1
+      "sub_cte"
+      FULL JOIN "recursive_cte" ON 1 = 1
     WHERE
       "recursive_cte"."val" < 2
   )

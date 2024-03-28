@@ -3429,9 +3429,9 @@ SortPreservingMergeExec: [sn@0 ASC NULLS LAST]
 ------------AggregateExec: mode=Partial, gby=[sn@1 as sn, amount@2 as amount], aggr=[SUM(l.amount)]
 --------------ProjectionExec: expr=[amount@1 as amount, sn@2 as sn, amount@3 as amount]
 ----------------NestedLoopJoinExec: join_type=Inner, filter=sn@0 >= sn@1
-------------------MemoryExec: partitions=8, partition_sizes=[1, 0, 0, 0, 0, 0, 0, 0]
 ------------------CoalescePartitionsExec
 --------------------MemoryExec: partitions=8, partition_sizes=[1, 0, 0, 0, 0, 0, 0, 0]
+------------------MemoryExec: partitions=8, partition_sizes=[1, 0, 0, 0, 0, 0, 0, 0]
 
 query IRR
 SELECT r.sn, SUM(l.amount), r.amount

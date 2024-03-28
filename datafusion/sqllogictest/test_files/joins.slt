@@ -2010,7 +2010,8 @@ set datafusion.explain.logical_plan_only = false;
 statement ok
 set datafusion.execution.target_partitions = 4;
 
-# Right as inner table nested loop join
+# Planning inner nested loop join 
+# inputs are swapped due to inexact statistics + join reordering caused additional projection
 
 query TT
 EXPLAIN
@@ -2027,17 +2028,18 @@ Inner Join:  Filter: join_t1.t1_id > join_t2.t2_id
 ----Filter: join_t2.t2_int > UInt32(1)
 ------TableScan: join_t2 projection=[t2_id, t2_int]
 physical_plan
-NestedLoopJoinExec: join_type=Inner, filter=t1_id@0 > t2_id@1
---CoalesceBatchesExec: target_batch_size=2
-----FilterExec: t1_id@0 > 10
-------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
---------MemoryExec: partitions=1, partition_sizes=[1]
---CoalescePartitionsExec
-----ProjectionExec: expr=[t2_id@0 as t2_id]
-------CoalesceBatchesExec: target_batch_size=2
---------FilterExec: t2_int@1 > 1
-----------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
-------------MemoryExec: partitions=1, partition_sizes=[1]
+ProjectionExec: expr=[t1_id@1 as t1_id, t2_id@0 as t2_id]
+--NestedLoopJoinExec: join_type=Inner, filter=t1_id@0 > t2_id@1
+----CoalescePartitionsExec
+------ProjectionExec: expr=[t2_id@0 as t2_id]
+--------CoalesceBatchesExec: target_batch_size=2
+----------FilterExec: t2_int@1 > 1
+------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------------MemoryExec: partitions=1, partition_sizes=[1]
+----CoalesceBatchesExec: target_batch_size=2
+------FilterExec: t1_id@0 > 10
+--------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----------MemoryExec: partitions=1, partition_sizes=[1]
 
 query II
 SELECT join_t1.t1_id, join_t2.t2_id
@@ -3473,9 +3475,9 @@ Inner Join:  Filter: r.a < l.a
 ----TableScan: annotated_data projection=[a0, a, b, c, d]
 physical_plan
 NestedLoopJoinExec: join_type=Inner, filter=a@1 < a@0
+--CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[a0, a, b, c, d], output_ordering=[a@1 ASC, b@2 ASC NULLS LAST, c@3 ASC NULLS LAST], has_header=true
 --RepartitionExec: partitioning=RoundRobinBatch(2), input_partitions=1
 ----CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[a0, a, b, c, d], output_ordering=[a@1 ASC, b@2 ASC NULLS LAST, c@3 ASC NULLS LAST], has_header=true
---CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/window_2.csv]]}, projection=[a0, a, b, c, d], output_ordering=[a@1 ASC, b@2 ASC NULLS LAST, c@3 ASC NULLS LAST], has_header=true
 
 # Currently datafusion cannot pushdown filter conditions with scalar UDF into
 # cross join.
