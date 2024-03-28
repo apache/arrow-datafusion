@@ -18,6 +18,7 @@
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use super::collapse_monotonic_lex_req;
 use super::ordering::collapse_lex_ordering;
 use crate::equivalence::{
     collapse_lex_req, EquivalenceGroup, OrderingEquivalenceClass, ProjectionMapping,
@@ -251,7 +252,7 @@ impl EquivalenceProperties {
         let normalized_sort_reqs = self.eq_group.normalize_sort_requirements(sort_reqs);
         let constants_normalized = self.eq_group.normalize_exprs(self.constants.clone());
         // Prune redundant sections in the requirement:
-        collapse_lex_req(
+        collapse_monotonic_lex_req(collapse_lex_req(
             normalized_sort_reqs
                 .iter()
                 .filter(|&order| {
@@ -259,7 +260,7 @@ impl EquivalenceProperties {
                 })
                 .cloned()
                 .collect(),
-        )
+        ))
     }
 
     /// Checks whether the given ordering is satisfied by any of the existing
@@ -2198,6 +2199,53 @@ mod tests {
                 "error in test: reqs: {reqs:?}, expected: {expected:?}, normalized: {normalized:?}"
             );
         }
+
+        Ok(())
+    }
+    #[test]
+    fn test_eliminate_redundant_monotonic_sorts() -> Result<()> {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("a", DataType::Date32, true),
+            Field::new("b", DataType::Utf8, true),
+            Field::new("c", DataType::Timestamp(TimeUnit::Nanosecond, None), true),
+        ]));
+        let mut properties = EquivalenceProperties::new(schema.clone())
+            .with_reorder(
+                ["a", "b", "c"]
+                    .into_iter()
+                    .map(|c| {
+                        col(c, schema.as_ref()).map(|expr| PhysicalSortExpr {
+                            expr,
+                            options: SortOptions {
+                                descending: false,
+                                nulls_first: true,
+                            },
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?,
+            )
+            // b is constant, so it should be removed from the sort order
+            .add_constants(Some(col("b", schema.as_ref())?));
+
+        // If c is a monotonic expression of a, then order by (c, a) is equivalent to order by (a)
+        properties.add_equal_conditions(
+            &(Arc::new(CastExpr::new(
+                col("c", schema.as_ref())?,
+                DataType::Date32,
+                None,
+            )) as Arc<dyn PhysicalExpr>),
+            &col("a", schema.as_ref())?,
+        );
+
+        let sort = &[PhysicalSortExpr {
+            expr: col("c", schema.as_ref())?,
+            options: SortOptions {
+                descending: false,
+                nulls_first: true,
+            },
+        }];
+
+        assert!(properties.ordering_satisfy(sort));
 
         Ok(())
     }
