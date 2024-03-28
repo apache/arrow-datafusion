@@ -991,10 +991,10 @@ FROM
 LIMIT 5
 ----
 c 3 1 c 1 1
-c 3 1 d 4 -40
-c 3 1 b 0 29
-c 3 1 a 0 -85
-c 3 1 b 4 -82
+d 6 -40 c 1 1
+b 2 29 c 1 1
+a 2 -85 c 1 1
+b 6 -82 c 1 1
 
 # TODO: test_prepare_statement
 
