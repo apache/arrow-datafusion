@@ -27,6 +27,7 @@ pub mod combine_partial_final_agg;
 pub mod enforce_distribution;
 pub mod enforce_sorting;
 pub mod join_selection;
+pub mod limit_pushdown;
 pub mod limited_distinct_aggregation;
 pub mod optimizer;
 pub mod output_requirements;
