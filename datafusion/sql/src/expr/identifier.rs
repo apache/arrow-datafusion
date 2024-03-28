@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::sync::Arc;
+
 use crate::planner::{ContextProvider, PlannerContext, SqlToRel};
 use datafusion_common::{
     internal_err, plan_datafusion_err, Column, DFField, DFSchema, DataFusionError,
@@ -243,22 +245,22 @@ fn form_identifier(idents: &[String]) -> Result<(Option<TableReference>, &String
         1 => Ok((None, &idents[0])),
         2 => Ok((
             Some(TableReference::Bare {
-                table: (&idents[0]).into(),
+                table: Arc::new(idents[0].clone()),
             }),
             &idents[1],
         )),
         3 => Ok((
             Some(TableReference::Partial {
-                schema: (&idents[0]).into(),
-                table: (&idents[1]).into(),
+                schema: Arc::new(idents[0].clone()),
+                table: Arc::new(idents[1].clone()),
             }),
             &idents[2],
         )),
         4 => Ok((
             Some(TableReference::Full {
-                catalog: (&idents[0]).into(),
-                schema: (&idents[1]).into(),
-                table: (&idents[2]).into(),
+                catalog: Arc::new(idents[0].clone()),
+                schema: Arc::new(idents[1].clone()),
+                table: Arc::new(idents[2].clone()),
             }),
             &idents[3],
         )),

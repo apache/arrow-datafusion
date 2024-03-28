@@ -460,16 +460,16 @@ pub async fn from_substrait_rel(
                         return plan_err!("No table name found in NamedTable");
                     }
                     1 => TableReference::Bare {
-                        table: (&nt.names[0]).into(),
+                        table: Arc::new(nt.names[0].clone()),
                     },
                     2 => TableReference::Partial {
-                        schema: (&nt.names[0]).into(),
-                        table: (&nt.names[1]).into(),
+                        schema: Arc::new(nt.names[0].clone()),
+                        table: Arc::new(nt.names[1].clone()),
                     },
                     _ => TableReference::Full {
-                        catalog: (&nt.names[0]).into(),
-                        schema: (&nt.names[1]).into(),
-                        table: (&nt.names[2]).into(),
+                        catalog: Arc::new(nt.names[0].clone()),
+                        schema: Arc::new(nt.names[1].clone()),
+                        table: Arc::new(nt.names[2].clone()),
                     },
                 };
                 let t = ctx.table(table_reference).await?;

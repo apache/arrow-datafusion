@@ -344,7 +344,7 @@ impl SessionContext {
         let table = MemTable::try_new(batch.schema(), vec![vec![batch]])?;
         self.register_table(
             TableReference::Bare {
-                table: table_name.into(),
+                table: Arc::new(table_name.into()),
             },
             Arc::new(table),
         )
@@ -704,6 +704,7 @@ impl SessionContext {
                 SchemaReference::Bare { .. } => {
                     state.config_options().catalog.default_catalog.to_string()
                 }
+                SchemaReference::X { phantom } => todo!(),
             };
             if let Some(catalog) = state.catalog_list.catalog(&catalog_name) {
                 catalog
@@ -1042,7 +1043,7 @@ impl SessionContext {
             .with_schema(resolved_schema);
         let table = ListingTable::try_new(config)?.with_definition(sql_definition);
         self.register_table(
-            TableReference::Bare { table: name.into() },
+            TableReference::Bare { table: Arc::new(name.into()) },
             Arc::new(table),
         )?;
         Ok(())
@@ -1533,7 +1534,7 @@ impl SessionState {
         table_ref: impl Into<TableReference<'a>>,
     ) -> Result<Arc<dyn SchemaProvider>> {
         let resolved_ref = self.resolve_table_ref(table_ref);
-        if self.config.information_schema() && resolved_ref.schema == INFORMATION_SCHEMA {
+        if self.config.information_schema() && *resolved_ref.schema == INFORMATION_SCHEMA {
             return Ok(Arc::new(InformationSchemaProvider::new(
                 self.catalog_list.clone(),
             )));
