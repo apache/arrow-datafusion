@@ -65,34 +65,22 @@ jobs:
           # this key equals the ones on `linux-build-lib` for re-use
           key: cargo-cache-benchmark-${{ hashFiles('datafusion/**/Cargo.toml', 'benchmarks/Cargo.toml', 'datafusion-cli/Cargo.toml') }}
 
-      - name: Check workspace without default features
+      - name: Check datafusion without default features
+        # Some of the test binaries require the parquet feature still
+        #run: cargo check --all-targets --no-default-features -p datafusion
         run: cargo check --no-default-features -p datafusion
 
       - name: Check datafusion-common without default features
-        run: cargo check --tests --no-default-features -p datafusion-common
+        run: cargo check --all-targets --no-default-features -p datafusion-common
+
+      - name: Check datafusion-functions
+        run: cargo check --all-targets --no-default-features -p datafusion-functions
 
       - name: Check workspace in debug mode
         run: cargo check
 
-      - name: Check workspace with all features
+      - name: Check workspace with avro,json features
         run: cargo check --workspace --benches --features avro,json
-
-      # Ensure that the datafusion crate can be built with only a subset of the function
-      # packages enabled.
-      - name: Check function packages (array_expressions)
-        run: cargo check --no-default-features --features=array_expressions -p datafusion
-
-      - name: Check function packages (datetime_expressions)
-        run: cargo check --no-default-features --features=datetime_expressions -p datafusion
-
-      - name: Check function packages (encoding_expressions)
-        run: cargo check --no-default-features --features=encoding_expressions -p datafusion
-
-      - name: Check function packages (math_expressions)
-        run: cargo check --no-default-features --features=math_expressions -p datafusion
-
-      - name: Check function packages (regex_expressions)
-        run: cargo check --no-default-features --features=regex_expressions -p datafusion
 
       - name: Check Cargo.lock for datafusion-cli
         run: |
@@ -100,7 +88,50 @@ jobs:
           # and check in the updated Cargo.lock file.
           cargo check --manifest-path datafusion-cli/Cargo.toml --locked
 
-  # test the crate
+      # Ensure that the datafusion crate can be built with only a subset of the function
+      # packages enabled.
+      - name: Check datafusion (array_expressions)
+        run: cargo check --no-default-features --features=array_expressions -p datafusion
+
+      - name: Check datafusion (crypto)
+        run: cargo check --no-default-features --features=crypto_expressions -p datafusion
+
+      - name: Check datafusion (datetime_expressions)
+        run: cargo check --no-default-features --features=datetime_expressions -p datafusion
+
+      - name: Check datafusion (encoding_expressions)
+        run: cargo check --no-default-features --features=encoding_expressions -p datafusion
+
+      - name: Check datafusion (math_expressions)
+        run: cargo check --no-default-features --features=math_expressions -p datafusion
+
+      - name: Check datafusion (regex_expressions)
+        run: cargo check --no-default-features --features=regex_expressions -p datafusion
+
+      - name: Check datafusion (string_expressions)
+        run: cargo check --no-default-features --features=string_expressions -p datafusion
+
+      # Ensure that the datafusion-functions crate can be built with only a subset of the function
+      # packages enabled.
+      - name: Check datafusion-functions (crypto)
+        run: cargo check --all-targets --no-default-features --features=crypto_expressions -p datafusion-functions
+
+      - name: Check datafusion-functions (datetime_expressions)
+        run: cargo check --all-targets --no-default-features --features=datetime_expressions -p datafusion-functions
+
+      - name: Check datafusion-functions (encoding_expressions)
+        run: cargo check --all-targets --no-default-features --features=encoding_expressions -p datafusion-functions
+
+      - name: Check datafusion-functions (math_expressions)
+        run: cargo check --all-targets --no-default-features --features=math_expressions -p datafusion-functions
+
+      - name: Check datafusion-functions (regex_expressions)
+        run: cargo check --all-targets --no-default-features --features=regex_expressions -p datafusion-functions
+
+      - name: Check datafusion-functions (string_expressions)
+        run: cargo check --all-targets --no-default-features --features=string_expressions -p datafusion-functions
+
+  # Run tests
   linux-test:
     name: cargo test (amd64)
     needs: [ linux-build-lib ]

@@ -90,15 +90,19 @@ tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 [[bench]]
 harness = false
 name = "to_timestamp"
+required-features = ["datetime_expressions"]
 
 [[bench]]
 harness = false
 name = "regx"
+required-features = ["regex_expressions"]
 
 [[bench]]
 harness = false
 name = "make_date"
+required-features = ["datetime_expressions"]
 
 [[bench]]
 harness = false
 name = "to_char"
+required-features = ["datetime_expressions"]
