@@ -4026,6 +4026,9 @@ impl serde::Serialize for Constraint {
                 constraint::ConstraintMode::Unique(v) => {
                     struct_ser.serialize_field("unique", v)?;
                 }
+                constraint::ConstraintMode::ForeignKey(v) => {
+                    struct_ser.serialize_field("foreignKey", v)?;
+                }
             }
         }
         struct_ser.end()
@@ -4041,12 +4044,15 @@ impl<'de> serde::Deserialize<'de> for Constraint {
             "primary_key",
             "primaryKey",
             "unique",
+            "foreign_key",
+            "foreignKey",
         ];
 
         #[allow(clippy::enum_variant_names)]
         enum GeneratedField {
             PrimaryKey,
             Unique,
+            ForeignKey,
         }
         impl<'de> serde::Deserialize<'de> for GeneratedField {
             fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
@@ -4070,6 +4076,7 @@ impl<'de> serde::Deserialize<'de> for Constraint {
                         match value {
                             "primaryKey" | "primary_key" => Ok(GeneratedField::PrimaryKey),
                             "unique" => Ok(GeneratedField::Unique),
+                            "foreignKey" | "foreign_key" => Ok(GeneratedField::ForeignKey),
                             _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
                         }
                     }
@@ -4104,6 +4111,13 @@ impl<'de> serde::Deserialize<'de> for Constraint {
                                 return Err(serde::de::Error::duplicate_field("unique"));
                             }
                             constraint_mode__ = map_.next_value::<::std::option::Option<_>>()?.map(constraint::ConstraintMode::Unique)
+;
+                        }
+                        GeneratedField::ForeignKey => {
+                            if constraint_mode__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("foreignKey"));
+                            }
+                            constraint_mode__ = map_.next_value::<::std::option::Option<_>>()?.map(constraint::ConstraintMode::ForeignKey)
 ;
                         }
                     }
@@ -9407,6 +9421,136 @@ impl<'de> serde::Deserialize<'de> for FixedSizeList {
             }
         }
         deserializer.deserialize_struct("datafusion.FixedSizeList", FIELDS, GeneratedVisitor)
+    }
+}
+impl serde::Serialize for ForeignKeyConstraint {
+    #[allow(deprecated)]
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut len = 0;
+        if !self.indices.is_empty() {
+            len += 1;
+        }
+        if !self.referred_columns.is_empty() {
+            len += 1;
+        }
+        if !self.referenced_table.is_empty() {
+            len += 1;
+        }
+        let mut struct_ser = serializer.serialize_struct("datafusion.ForeignKeyConstraint", len)?;
+        if !self.indices.is_empty() {
+            struct_ser.serialize_field("indices", &self.indices.iter().map(ToString::to_string).collect::<Vec<_>>())?;
+        }
+        if !self.referred_columns.is_empty() {
+            struct_ser.serialize_field("referredColumns", &self.referred_columns)?;
+        }
+        if !self.referenced_table.is_empty() {
+            struct_ser.serialize_field("referencedTable", &self.referenced_table)?;
+        }
+        struct_ser.end()
+    }
+}
+impl<'de> serde::Deserialize<'de> for ForeignKeyConstraint {
+    #[allow(deprecated)]
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        const FIELDS: &[&str] = &[
+            "indices",
+            "referred_columns",
+            "referredColumns",
+            "referenced_table",
+            "referencedTable",
+        ];
+
+        #[allow(clippy::enum_variant_names)]
+        enum GeneratedField {
+            Indices,
+            ReferredColumns,
+            ReferencedTable,
+        }
+        impl<'de> serde::Deserialize<'de> for GeneratedField {
+            fn deserialize<D>(deserializer: D) -> std::result::Result<GeneratedField, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct GeneratedVisitor;
+
+                impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+                    type Value = GeneratedField;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(formatter, "expected one of: {:?}", &FIELDS)
+                    }
+
+                    #[allow(unused_variables)]
+                    fn visit_str<E>(self, value: &str) -> std::result::Result<GeneratedField, E>
+                    where
+                        E: serde::de::Error,
+                    {
+                        match value {
+                            "indices" => Ok(GeneratedField::Indices),
+                            "referredColumns" | "referred_columns" => Ok(GeneratedField::ReferredColumns),
+                            "referencedTable" | "referenced_table" => Ok(GeneratedField::ReferencedTable),
+                            _ => Err(serde::de::Error::unknown_field(value, FIELDS)),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(GeneratedVisitor)
+            }
+        }
+        struct GeneratedVisitor;
+        impl<'de> serde::de::Visitor<'de> for GeneratedVisitor {
+            type Value = ForeignKeyConstraint;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("struct datafusion.ForeignKeyConstraint")
+            }
+
+            fn visit_map<V>(self, mut map_: V) -> std::result::Result<ForeignKeyConstraint, V::Error>
+                where
+                    V: serde::de::MapAccess<'de>,
+            {
+                let mut indices__ = None;
+                let mut referred_columns__ = None;
+                let mut referenced_table__ = None;
+                while let Some(k) = map_.next_key()? {
+                    match k {
+                        GeneratedField::Indices => {
+                            if indices__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("indices"));
+                            }
+                            indices__ = 
+                                Some(map_.next_value::<Vec<::pbjson::private::NumberDeserialize<_>>>()?
+                                    .into_iter().map(|x| x.0).collect())
+                            ;
+                        }
+                        GeneratedField::ReferredColumns => {
+                            if referred_columns__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("referredColumns"));
+                            }
+                            referred_columns__ = Some(map_.next_value()?);
+                        }
+                        GeneratedField::ReferencedTable => {
+                            if referenced_table__.is_some() {
+                                return Err(serde::de::Error::duplicate_field("referencedTable"));
+                            }
+                            referenced_table__ = Some(map_.next_value()?);
+                        }
+                    }
+                }
+                Ok(ForeignKeyConstraint {
+                    indices: indices__.unwrap_or_default(),
+                    referred_columns: referred_columns__.unwrap_or_default(),
+                    referenced_table: referenced_table__.unwrap_or_default(),
+                })
+            }
+        }
+        deserializer.deserialize_struct("datafusion.ForeignKeyConstraint", FIELDS, GeneratedVisitor)
     }
 }
 impl serde::Serialize for FullTableReference {

@@ -312,6 +312,13 @@ fn plan_create_table_with_unique() {
 }
 
 #[test]
+fn plan_create_table_with_fk() {
+    let sql = "create table person (name string, city string, foreign key (city) references cities(name))";
+    let plan = "CreateMemoryTable: Bare { table: \"person\" } constraints=[ForeignKey { indices: [1], referred_columns: [\"name\"], referenced_table: Bare { table: \"cities\" } }]\n  EmptyRelation";
+    quick_test(sql, plan);
+}
+
+#[test]
 fn plan_create_table_no_pk() {
     let sql = "create table person (id int, name string)";
     let plan = r#"

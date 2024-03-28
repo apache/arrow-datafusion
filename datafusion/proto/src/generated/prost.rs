@@ -295,8 +295,18 @@ pub struct UniqueConstraint {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ForeignKeyConstraint {
+    #[prost(uint64, repeated, tag = "1")]
+    pub indices: ::prost::alloc::vec::Vec<u64>,
+    #[prost(string, repeated, tag = "2")]
+    pub referred_columns: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "3")]
+    pub referenced_table: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Constraint {
-    #[prost(oneof = "constraint::ConstraintMode", tags = "1, 2")]
+    #[prost(oneof = "constraint::ConstraintMode", tags = "1, 2, 3")]
     pub constraint_mode: ::core::option::Option<constraint::ConstraintMode>,
 }
 /// Nested message and enum types in `Constraint`.
@@ -308,6 +318,8 @@ pub mod constraint {
         PrimaryKey(super::PrimaryKeyConstraint),
         #[prost(message, tag = "2")]
         Unique(super::UniqueConstraint),
+        #[prost(message, tag = "3")]
+        ForeignKey(super::ForeignKeyConstraint),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

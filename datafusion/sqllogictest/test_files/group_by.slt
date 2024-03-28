@@ -3254,8 +3254,7 @@ CREATE TABLE sales_global_with_pk_alternate (zip_code INT,
           (1, 'FRA', 3, '2022-01-02 12:00:00'::timestamp, 'EUR', 200.0),
           (1, 'TUR', 4, '2022-01-03 10:00:00'::timestamp, 'TRY', 100.0)
 
-# we do not currently support foreign key constraints.
-statement error DataFusion error: Error during planning: Foreign key constraints are not currently supported
+statement ok
 CREATE TABLE sales_global_with_foreign_key (zip_code INT,
   country VARCHAR(3),
   sn INT references sales_global_with_pk_alternate(sn),
@@ -3269,8 +3268,7 @@ CREATE TABLE sales_global_with_foreign_key (zip_code INT,
   (1, 'FRA', 3, '2022-01-02 12:00:00'::timestamp, 'EUR', 200.0),
   (1, 'TUR', 4, '2022-01-03 10:00:00'::timestamp, 'TRY', 100.0)
 
-# we do not currently support foreign key
-statement error DataFusion error: Error during planning: Foreign key constraints are not currently supported
+statement error DataFusion error: Execution error: Table 'sales_global_with_foreign_key' already exists
 CREATE TABLE sales_global_with_foreign_key (zip_code INT,
   country VARCHAR(3),
   sn INT REFERENCES sales_global_with_pk_alternate(sn),
@@ -3284,11 +3282,9 @@ CREATE TABLE sales_global_with_foreign_key (zip_code INT,
   (1, 'FRA', 3, '2022-01-02 12:00:00'::timestamp, 'EUR', 200.0),
   (1, 'TUR', 4, '2022-01-03 10:00:00'::timestamp, 'TRY', 100.0)
 
-# we do not currently support foreign key
 # foreign key can be defined with a different syntax.
-# we should get the same error.
-statement error DataFusion error: Error during planning: Foreign key constraints are not currently supported
-CREATE TABLE sales_global_with_foreign_key (zip_code INT,
+statement ok
+CREATE TABLE sales_global_with_foreign_key_alternate (zip_code INT,
   country VARCHAR(3),
   sn INT,
   ts TIMESTAMP,
