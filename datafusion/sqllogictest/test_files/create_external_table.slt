@@ -100,6 +100,14 @@ CREATE EXTERNAL TABLE t(c1 int) STORED AS CSV WITH LOCATION 'foo.csv';
 statement error DataFusion error: SQL error: ParserError\("Unexpected token FOOBAR"\)
 CREATE EXTERNAL TABLE t(c1 int) STORED AS CSV FOOBAR BARBAR BARFOO LOCATION 'foo.csv';
 
+# Missing partition column
+statement error DataFusion error: Arrow error: Schema error: Unable to get field named "c2". Valid fields: \["c1"\]
+create EXTERNAL TABLE t(c1 int) STORED AS CSV PARTITIONED BY (c2) LOCATION 'foo.csv'
+
+# Duplicate Column in `PARTITIONED BY` clause
+statement error DataFusion error: Schema error: Schema contains duplicate unqualified field name c1
+create EXTERNAL TABLE t(c1 int, c2 int) STORED AS CSV PARTITIONED BY (c1 int) LOCATION 'foo.csv'
+
 # Conflicting options
 statement error DataFusion error: Invalid or Unsupported Configuration: Config value "column_index_truncate_length" not found on CsvOptions
 CREATE EXTERNAL TABLE csv_table (column1 int)

@@ -42,7 +42,7 @@ LOCATION '../../testing/data/csv/aggregate_test_100.csv'
 
 
 statement ok
-create table dictionary_encoded_values as values 
+create table dictionary_encoded_values as values
 ('a', arrow_cast('foo', 'Dictionary(Int32, Utf8)')), ('b', arrow_cast('bar', 'Dictionary(Int32, Utf8)'));
 
 query TTT
@@ -55,13 +55,13 @@ statement ok
 CREATE EXTERNAL TABLE dictionary_encoded_parquet_partitioned(
   a varchar,
   b varchar,
-) 
+)
 STORED AS parquet
 LOCATION 'test_files/scratch/insert_to_external/parquet_types_partitioned/'
 PARTITIONED BY (b);
 
 query TT
-insert into dictionary_encoded_parquet_partitioned 
+insert into dictionary_encoded_parquet_partitioned
 select * from dictionary_encoded_values
 ----
 2
@@ -76,13 +76,13 @@ statement ok
 CREATE EXTERNAL TABLE dictionary_encoded_arrow_partitioned(
   a varchar,
   b varchar,
-) 
+)
 STORED AS arrow
 LOCATION 'test_files/scratch/insert_to_external/arrow_dict_partitioned/'
 PARTITIONED BY (b);
 
 query TT
-insert into dictionary_encoded_arrow_partitioned 
+insert into dictionary_encoded_arrow_partitioned
 select * from dictionary_encoded_values
 ----
 2
@@ -90,7 +90,7 @@ select * from dictionary_encoded_values
 statement ok
 CREATE EXTERNAL TABLE dictionary_encoded_arrow_test_readback(
   a varchar,
-) 
+)
 STORED AS arrow
 LOCATION 'test_files/scratch/insert_to_external/arrow_dict_partitioned/b=bar/';
 
@@ -184,6 +184,30 @@ select * from partitioned_insert_test_verify;
 ----
 1
 2
+
+statement ok
+CREATE EXTERNAL TABLE
+partitioned_insert_test_hive(c bigint)
+STORED AS csv
+LOCATION 'test_files/scratch/insert_to_external/insert_to_partitioned'
+PARTITIONED BY (a string, b string);
+
+query ITT
+INSERT INTO partitioned_insert_test_hive VALUES (3,30,300);
+----
+1
+
+query ITT
+SELECT * FROM partitioned_insert_test_hive order by a,b,c;
+----
+1 10 100
+1 10 200
+1 20 100
+2 20 100
+1 20 200
+2 20 200
+3 30 300
+
 
 statement ok
 CREATE EXTERNAL TABLE
