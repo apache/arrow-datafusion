@@ -15,34 +15,33 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! The [`Limit`] rule tries to modify a given plan so that it can
-//! accommodate infinite sources and utilize statistical information (if there
-//! is any) to obtain more performant plans. To achieve the first goal, it
-//! tries to transform a non-runnable query (with the given infinite sources)
-//! into a runnable query by replacing pipeline-breaking join operations with
-//! pipeline-friendly ones. To achieve the second goal, it selects the proper
-//! `PartitionMode` and the build side using the available statistics for hash joins.
+//! The [`LimitPushdown`] The LimitPushdown optimization rule is designed
+//! to improve the performance of query execution by pushing the LIMIT clause down
+//!  through the execution plan as far as possible, ideally directly
+//! to the [`CoalesceBatchesExec`]. to reduce target_batch_size This means that instead of processing
+//! a large amount of data and then applying the limit at the end,
+//! the system tries to limit the amount of data being processed throughout the execution of the query.
 
 use std::sync::Arc;
 
-use crate::datasource::physical_plan::CsvExec;
 use crate::physical_optimizer::utils::is_global_limit;
 use crate::physical_optimizer::PhysicalOptimizerRule;
-use crate::physical_plan::aggregates::AggregateExec;
-use crate::physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
-use crate::physical_plan::{ExecutionPlan, ExecutionPlanProperties};
+
+use crate::physical_plan::limit::GlobalLimitExec;
+use crate::physical_plan::ExecutionPlan;
 use datafusion_common::config::ConfigOptions;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::Result;
-use datafusion_optimizer::push_down_limit;
+
 use datafusion_physical_plan::coalesce_batches::CoalesceBatchesExec;
 use datafusion_physical_plan::coalesce_partitions::CoalescePartitionsExec;
-use hashbrown::raw::Global;
-use itertools::Itertools;
+
+#[allow(missing_docs)]
 pub struct LimitPushdown {}
 
 impl LimitPushdown {
-    fn new() -> Self {
+    #[allow(missing_docs)]
+    pub fn new() -> Self {
         Self {}
     }
 }
@@ -61,7 +60,7 @@ impl PhysicalOptimizerRule for LimitPushdown {
         plan.transform_down(&push_down_limit).data()
     }
 
-    fn name() -> &str {
+    fn name(&self) -> &str {
         "LimitPushdown"
     }
 
@@ -75,22 +74,54 @@ fn new_global_limit_with_input() {}
 fn push_down_limit(
     plan: Arc<dyn ExecutionPlan>,
 ) -> Result<Transformed<Arc<dyn ExecutionPlan>>> {
-    let modified =
-        if let Some(global_limit) = plan.as_any().downcast_ref::<GlobalLimitExec>() {
-            let input = global_limit.input().as_any();
-            if let Some(coalesce_partition_exec) =
-                input.downcast_ref::<CoalescePartitionsExec>()
-            {
-                general_swap(plan)
-            } else if let Some(coalesce_batch_exec) =
-                input.downcast_ref::<CoalesceBatchesExec>()
-            {
-                general_swap(plan)
-            } else {
-                None
-            }
+    if let Some(global_limit) = plan.as_any().downcast_ref::<GlobalLimitExec>() {
+        let input = global_limit.input().as_any();
+        if let Some(_) = input.downcast_ref::<CoalescePartitionsExec>() {
+            return Ok(Transformed::yes(swap_with_coalesce_partition(global_limit)));
+        } else if let Some(coalesce_batches) = input.downcast_ref::<CoalesceBatchesExec>()
+        {
+            return Ok(Transformed::yes(reset_and_get_new_limit(
+                global_limit,
+                coalesce_batches,
+            )));
         } else {
-            Ok(Transformed::no(plan))
-        };
+            return Ok(Transformed::no(plan));
+        }
+    } else {
+        return Ok(Transformed::no(plan));
+    }
 }
-fn general_swap(plan: &GlobalLimitExec) -> Result<Option<Arc<dyn ExecutionPlan>>> {}
+// swap the coalesce_patition exec with current limit
+fn swap_with_coalesce_partition(plan: &GlobalLimitExec) -> Arc<dyn ExecutionPlan> {
+    Arc::new(CoalescePartitionsExec::new(make_with_child(
+        plan,
+        &plan.input().children()[0],
+    )))
+}
+
+// create a new node with its child
+fn make_with_child(
+    plan: &GlobalLimitExec,
+    child: &Arc<dyn ExecutionPlan>,
+) -> Arc<dyn ExecutionPlan> {
+    Arc::new(GlobalLimitExec::new(
+        child.clone(),
+        plan.skip(),
+        plan.fetch(),
+    ))
+}
+
+// reset target size and return a new plan
+fn reset_and_get_new_limit(
+    plan: &GlobalLimitExec,
+    child: &CoalesceBatchesExec,
+) -> Arc<dyn ExecutionPlan> {
+    Arc::new(GlobalLimitExec::new(
+        Arc::new(CoalesceBatchesExec::new(
+            child.input().clone(),
+            plan.fetch().unwrap_or(child.target_batch_size()),
+        )),
+        plan.skip(),
+        plan.fetch(),
+    ))
+}

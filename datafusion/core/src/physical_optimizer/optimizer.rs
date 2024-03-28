@@ -19,6 +19,7 @@
 
 use std::sync::Arc;
 
+use super::limit_pushdown::LimitPushdown;
 use super::projection_pushdown::ProjectionPushdown;
 use crate::config::ConfigOptions;
 use crate::physical_optimizer::aggregate_statistics::AggregateStatistics;
@@ -126,6 +127,11 @@ impl PhysicalOptimizer {
             // are not present, the load of executors such as join or union will be
             // reduced by narrowing their input tables.
             Arc::new(ProjectionPushdown::new()),
+            // The LimitPushdown rule tries to pushdown GlobalLimitExec to as close as
+            // to CoalesceBatchesExec since the target_batch_size for CoalesceBatchesExec may be
+            // large and if we could pushdown a LimitExec to close to it and reset its target_batch_size
+            // we could save time for a less size
+            Arc::new(LimitPushdown::new()),
         ];
 
         Self::with_rules(rules)

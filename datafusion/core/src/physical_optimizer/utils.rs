@@ -19,7 +19,7 @@
 
 use std::sync::Arc;
 
-use crate::datasource::physical_plan::ArrowExec;
+use crate::datasource::physical_plan::{ArrowExec, AvroExec, CsvExec, NdJsonExec};
 use crate::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use crate::physical_plan::repartition::RepartitionExec;
 use crate::physical_plan::sorts::sort::SortExec;
@@ -29,11 +29,18 @@ use crate::physical_plan::windows::{BoundedWindowAggExec, WindowAggExec};
 use crate::physical_plan::{ExecutionPlan, ExecutionPlanProperties};
 
 use datafusion_physical_expr::{LexRequirement, PhysicalSortRequirement};
+use datafusion_physical_plan::joins::NestedLoopJoinExec;
 use datafusion_physical_plan::joins::{CrossJoinExec, HashJoinExec};
 use datafusion_physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
+use datafusion_physical_plan::memory::MemoryExec;
+use datafusion_physical_plan::placeholder_row::PlaceholderRowExec;
+use datafusion_physical_plan::recursive_query::RecursiveQueryExec;
+use datafusion_physical_plan::sorts::partial_sort::PartialSortExec;
+use datafusion_physical_plan::streaming::StreamingTableExec;
 use datafusion_physical_plan::test::exec::StatisticsExec;
 use datafusion_physical_plan::tree_node::PlanContext;
-
+use datafusion_physical_plan::union::InterleaveExec;
+use datafusion_physical_plan::unnest::UnnestExec;
 /// This utility function adds a `SortExec` above an operator according to the
 /// given ordering requirements while preserving the original partitioning.
 pub fn add_sort_above<T: Clone + Default>(
@@ -126,7 +133,7 @@ pub fn is_limit_terminator(plan: &Arc<dyn ExecutionPlan>) -> bool {
         || plan.as_any().is::<PartialSortExec>()
         || plan.as_any().is::<ArrowExec>()
         || plan.as_any().is::<AvroExec>()
-        || plan.as_any().is::<CsvExecExec>()
+        || plan.as_any().is::<CsvExec>()
         || plan.as_any().is::<NdJsonExec>()
         || plan.as_any().is::<StatisticsExec>()
         || plan.as_any().is::<PlaceholderRowExec>()

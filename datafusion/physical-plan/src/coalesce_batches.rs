@@ -83,6 +83,9 @@ impl CoalesceBatchesExec {
             input.execution_mode(),                 // Execution Mode
         )
     }
+    pub fn set_target_batch_size(&mut self, siz: usize) {
+        self.target_batch_size = siz;
+    }
 }
 
 impl DisplayAs for CoalesceBatchesExec {

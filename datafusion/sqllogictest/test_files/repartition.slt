@@ -121,9 +121,9 @@ Limit: skip=0, fetch=5
 --Filter: sink_table.c3 > Int16(0)
 ----TableScan: sink_table projection=[c1, c2, c3]
 physical_plan
-GlobalLimitExec: skip=0, fetch=5
---CoalescePartitionsExec
-----CoalesceBatchesExec: target_batch_size=8192
+CoalescePartitionsExec
+--GlobalLimitExec: skip=0, fetch=5
+----CoalesceBatchesExec: target_batch_size=5
 ------FilterExec: c3@2 > 0
 --------RepartitionExec: partitioning=RoundRobinBatch(3), input_partitions=1
 ----------StreamingTableExec: partition_sizes=1, projection=[c1, c2, c3], infinite_source=true
