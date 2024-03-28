@@ -86,16 +86,23 @@ impl CliHelper {
                     ))))
                 }
             };
-
-            match DFParser::parse_sql_with_dialect(&sql, dialect.as_ref()) {
-                Ok(statements) if statements.is_empty() => Ok(ValidationResult::Invalid(
-                    Some("  🤔 You entered an empty statement".to_string()),
-                )),
-                Ok(_statements) => Ok(ValidationResult::Valid(None)),
-                Err(err) => Ok(ValidationResult::Invalid(Some(format!(
-                    "  🤔 Invalid statement: {err}",
-                )))),
+            let lines = split_from_semicolon(sql);
+            for line in lines {
+                match DFParser::parse_sql_with_dialect(&line, dialect.as_ref()) {
+                    Ok(statements) if statements.is_empty() => {
+                        return Ok(ValidationResult::Invalid(Some(
+                            "  🤔 You entered an empty statement".to_string(),
+                        )));
+                    }
+                    Ok(_statements) => {}
+                    Err(err) => {
+                        return Ok(ValidationResult::Invalid(Some(format!(
+                            "  🤔 Invalid statement: {err}",
+                        ))));
+                    }
+                }
             }
+            Ok(ValidationResult::Valid(None))
         } else if input.starts_with('\\') {
             // command
             Ok(ValidationResult::Valid(None))
@@ -195,6 +202,19 @@ pub fn unescape_input(input: &str) -> datafusion::error::Result<String> {
     }
 
     Ok(result)
+}
+
+/// Splits a string which consists of multiple queries.
+pub(crate) fn split_from_semicolon(sql: String) -> Vec<String> {
+    sql.split(';')
+        .filter_map(|s| {
+            if !s.trim().is_empty() {
+                Some(format!("{};", s.trim()))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]

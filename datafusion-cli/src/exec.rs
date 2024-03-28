@@ -22,6 +22,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
 
+use crate::helper::split_from_semicolon;
 use crate::print_format::PrintFormat;
 use crate::{
     command::{Command, OutputFormat},
@@ -164,21 +165,24 @@ pub async fn exec_from_repl(
                 }
             }
             Ok(line) => {
-                rl.add_history_entry(line.trim_end())?;
-                tokio::select! {
-                    res = exec_and_print(ctx, print_options, line) => match res {
-                        Ok(_) => {}
-                        Err(err) => eprintln!("{err}"),
-                    },
-                    _ = signal::ctrl_c() => {
-                        println!("^C");
-                        continue
-                    },
+                let lines = split_from_semicolon(line);
+                for line in lines {
+                    rl.add_history_entry(line.trim_end())?;
+                    tokio::select! {
+                        res = exec_and_print(ctx, print_options, line) => match res {
+                            Ok(_) => {}
+                            Err(err) => eprintln!("{err}"),
+                        },
+                        _ = signal::ctrl_c() => {
+                            println!("^C");
+                            continue
+                        },
+                    }
+                    // dialect might have changed
+                    rl.helper_mut().unwrap().set_dialect(
+                        &ctx.task_ctx().session_config().options().sql_parser.dialect,
+                    );
                 }
-                // dialect might have changed
-                rl.helper_mut().unwrap().set_dialect(
-                    &ctx.task_ctx().session_config().options().sql_parser.dialect,
-                );
             }
             Err(ReadlineError::Interrupted) => {
                 println!("^C");
