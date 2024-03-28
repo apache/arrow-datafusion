@@ -55,23 +55,14 @@ DataFusion CLI can also be installed via PyPI. You can check how to install PyPI
 Install it as any other pre-built software like this:
 
 ```bash
-pip3 install datafusion
+pip3 install datafusion-cli
 # Defaulting to user installation because normal site-packages is not writeable
-# Collecting datafusion
-#   Downloading datafusion-33.0.0-cp38-abi3-macosx_11_0_arm64.whl.metadata (9.6 kB)
-# Collecting pyarrow>=11.0.0 (from datafusion)
-#   Downloading pyarrow-14.0.1-cp39-cp39-macosx_11_0_arm64.whl.metadata (3.0 kB)
-# Requirement already satisfied: numpy>=1.16.6 in /Users/Library/Python/3.9/lib/python/site-packages (from pyarrow>=11.0.0->datafusion) (1.23.4)
-# Downloading datafusion-33.0.0-cp38-abi3-macosx_11_0_arm64.whl (13.5 MB)
-#    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.5/13.5 MB 3.6 MB/s eta 0:00:00
-# Downloading pyarrow-14.0.1-cp39-cp39-macosx_11_0_arm64.whl (24.0 MB)
-#    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 24.0/24.0 MB 36.4 MB/s eta 0:00:00
-# Installing collected packages: pyarrow, datafusion
-#   Attempting uninstall: pyarrow
-#     Found existing installation: pyarrow 10.0.1
-#     Uninstalling pyarrow-10.0.1:
-#       Successfully uninstalled pyarrow-10.0.1
-# Successfully installed datafusion-33.0.0 pyarrow-14.0.1
+# Collecting datafusion-cli
+#   Downloading datafusion_cli-36.0.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.7 kB)
+# Downloading datafusion_cli-36.0.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (24.8 MB)
+#    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 24.8/24.8 MB 3.5 MB/s eta 0:00:00
+# Installing collected packages: datafusion-cli
+# Successfully installed datafusion-cli-36.0.0
 
 datafusion-cli
 ```
