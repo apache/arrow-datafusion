@@ -2714,6 +2714,8 @@ pub struct PartitionedFile {
     pub partition_values: ::prost::alloc::vec::Vec<ScalarValue>,
     #[prost(message, optional, tag = "5")]
     pub range: ::core::option::Option<FileRange>,
+    #[prost(message, optional, tag = "6")]
+    pub statistics: ::core::option::Option<Statistics>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

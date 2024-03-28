@@ -150,6 +150,7 @@ pub(crate) mod test_util {
             object_meta: meta,
             partition_values: vec![],
             range: None,
+            statistics: None,
             extensions: None,
         }]];
 

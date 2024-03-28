@@ -93,6 +93,7 @@ pub async fn from_substrait_rel(
                             },
                             partition_values: vec![],
                             range: None,
+                            statistics: None,
                             extensions: None,
                         };
 

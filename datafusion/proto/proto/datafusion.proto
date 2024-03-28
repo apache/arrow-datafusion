@@ -1846,6 +1846,7 @@ message PartitionedFile {
   uint64 last_modified_ns = 3;
   repeated ScalarValue partition_values = 4;
   FileRange range = 5;
+  Statistics statistics = 6;
 }
 
 message FileRange {

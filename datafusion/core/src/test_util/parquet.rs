@@ -151,6 +151,7 @@ impl TestParquetFile {
                 object_meta: self.object_meta.clone(),
                 partition_values: vec![],
                 range: None,
+                statistics: None,
                 extensions: None,
             }]],
             statistics: Statistics::new_unknown(&self.schema),

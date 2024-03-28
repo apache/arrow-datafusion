@@ -62,6 +62,7 @@ async fn get_parquet_exec(state: &SessionState, filter: Expr) -> ParquetExec {
         object_meta: meta,
         partition_values: vec![],
         range: None,
+        statistics: None,
         extensions: None,
     };
 

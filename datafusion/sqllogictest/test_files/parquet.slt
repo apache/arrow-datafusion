@@ -21,6 +21,10 @@
 statement ok
 set datafusion.execution.target_partitions = 2;
 
+# Collect statistics -- used for sorting files
+statement ok
+set datafusion.execution.collect_statistics = true;
+
 # Create a table as a data source
 statement ok
 CREATE TABLE src_table (
@@ -132,8 +136,8 @@ STORED AS PARQUET;
 ----
 3
 
-# Check output plan again, expect no "output_ordering" clause in the physical_plan -> ParquetExec,
-# due to there being more files than partitions:
+# Check output plan again, expect an "output_ordering" clause in the physical_plan -> ParquetExec:
+# After https://github.com/apache/arrow-datafusion/pull/9593 this should not require a sort.
 query TT
 EXPLAIN SELECT int_col, string_col
 FROM test_table
@@ -144,9 +148,7 @@ Sort: test_table.string_col ASC NULLS LAST, test_table.int_col ASC NULLS LAST
 --TableScan: test_table projection=[int_col, string_col]
 physical_plan
 SortPreservingMergeExec: [string_col@1 ASC NULLS LAST,int_col@0 ASC NULLS LAST]
---SortExec: expr=[string_col@1 ASC NULLS LAST,int_col@0 ASC NULLS LAST]
-----ParquetExec: file_groups={2 groups: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/0.parquet, WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/1.parquet], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/2.parquet]]}, projection=[int_col, string_col]
-
+--ParquetExec: file_groups={2 groups: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/0.parquet, WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/1.parquet], [WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/2.parquet]]}, projection=[int_col, string_col], output_ordering=[string_col@1 ASC NULLS LAST, int_col@0 ASC NULLS LAST]
 
 # Perform queries using MIN and MAX
 query I
@@ -168,6 +170,38 @@ query D
 SELECT min(date_col) FROM test_table;
 ----
 1970-01-02
+
+# Clean up
+statement ok
+DROP TABLE test_table;
+
+# Do one more test, but order by numeric columns:
+# This is to exercise file group sorting, which uses file-level statistics
+# DataFusion doesn't currently support string column statistics
+statement ok
+CREATE EXTERNAL TABLE test_table (
+  int_col INT NOT NULL,
+  string_col TEXT NOT NULL,
+  bigint_col BIGINT NOT NULL,
+  date_col DATE NOT NULL
+)
+STORED AS PARQUET
+WITH HEADER ROW
+WITH ORDER (int_col ASC NULLS LAST, bigint_col ASC NULLS LAST)
+LOCATION 'test_files/scratch/parquet/test_table';
+
+# Check output plan again, expect an "output_ordering" clause in the physical_plan -> ParquetExec:
+# After https://github.com/apache/arrow-datafusion/pull/9593 this should not require a sort.
+query TT
+EXPLAIN SELECT int_col, bigint_col
+FROM test_table
+ORDER BY int_col, bigint_col;
+----
+logical_plan
+Sort: test_table.int_col ASC NULLS LAST, test_table.bigint_col ASC NULLS LAST
+--TableScan: test_table projection=[int_col, bigint_col]
+physical_plan ParquetExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/0.parquet, WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/1.parquet, WORKSPACE_ROOT/datafusion/sqllogictest/test_files/scratch/parquet/test_table/2.parquet]]}, projection=[int_col, bigint_col], output_ordering=[int_col@0 ASC NULLS LAST, bigint_col@1 ASC NULLS LAST]
+
 
 # Clean up
 statement ok

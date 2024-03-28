@@ -24,7 +24,7 @@ mod url;
 
 use crate::error::Result;
 use chrono::TimeZone;
-use datafusion_common::ScalarValue;
+use datafusion_common::{ScalarValue, Statistics};
 use futures::Stream;
 use object_store::{path::Path, ObjectMeta};
 use std::pin::Pin;
@@ -67,6 +67,8 @@ pub struct PartitionedFile {
     pub partition_values: Vec<ScalarValue>,
     /// An optional file range for a more fine-grained parallel execution
     pub range: Option<FileRange>,
+    /// Optional statistics that describe the data in this file
+    pub statistics: Option<Statistics>,
     /// An optional field for user defined per object metadata
     pub extensions: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
@@ -83,6 +85,7 @@ impl PartitionedFile {
             },
             partition_values: vec![],
             range: None,
+            statistics: None,
             extensions: None,
         }
     }
@@ -98,7 +101,8 @@ impl PartitionedFile {
                 version: None,
             },
             partition_values: vec![],
-            range: None,
+            range: Some(FileRange { start, end }),
+            statistics: None,
             extensions: None,
         }
         .with_range(start, end)
@@ -128,6 +132,7 @@ impl From<ObjectMeta> for PartitionedFile {
             object_meta,
             partition_values: vec![],
             range: None,
+            statistics: None,
             extensions: None,
         }
     }
