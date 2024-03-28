@@ -263,16 +263,16 @@ impl<'a> TableReference<'a> {
                 schema,
                 table,
             } => OwnedTableReference::Full {
-                catalog: catalog.to_string().into(),
-                schema: schema.to_string().into(),
-                table: table.to_string().into(),
+                catalog: catalog.clone(),
+                schema: schema.clone(),
+                table: table.clone(),
             },
             Self::Partial { schema, table } => OwnedTableReference::Partial {
-                schema: schema.to_string().into(),
-                table: table.to_string().into(),
+                schema: schema.clone(),
+                table: table.clone(),
             },
             Self::Bare { table } => OwnedTableReference::Bare {
-                table: table.to_string().into(),
+                table: table.clone(),
             },
             _ => unreachable!()
         }

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::{borrow::Cow, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SchemaReference<'a> {
@@ -37,7 +37,7 @@ impl SchemaReference<'_> {
         match self {
             SchemaReference::Bare { schema } => schema,
             SchemaReference::Full { schema, catalog: _ } => schema,
-            SchemaReference::X { phantom } => todo!(),
+            _ => todo!(),
         }
     }
 }
