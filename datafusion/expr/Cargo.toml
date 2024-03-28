@@ -43,6 +43,7 @@ arrow-array = { workspace = true }
 chrono = { workspace = true }
 datafusion-common = { workspace = true, default-features = true }
 paste = "^1.0"
+serde_json = { workspace = true }
 sqlparser = { workspace = true }
 strum = { version = "0.26.1", features = ["derive"] }
 strum_macros = "0.26.0"

@@ -1249,6 +1249,7 @@ dependencies = [
  "chrono",
  "datafusion-common",
  "paste",
+ "serde_json",
  "sqlparser",
  "strum 0.26.2",
  "strum_macros 0.26.2",
