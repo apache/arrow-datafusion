@@ -35,6 +35,7 @@ use datafusion_common::{
     JoinType, Result,
 };
 use datafusion_expr::expr::{Alias, ScalarFunction};
+
 use datafusion_expr::{
     logical_plan::LogicalPlan, projection_schema, Aggregate, BinaryExpr, Cast, Distinct,
     Expr, Projection, TableScan, Window,
@@ -304,7 +305,6 @@ fn optimize_projections(
             // Only use window expressions that are absolutely necessary according
             // to parent requirements:
             let new_window_expr = get_at_indices(&window.window_expr, &window_reqs);
-
             // Get all the required column indices at the input, either by the
             // parent or window expression requirements.
             let required_indices = get_all_required_indices(
@@ -319,7 +319,6 @@ fn optimize_projections(
             } else {
                 window.input.as_ref().clone()
             };
-
             return if new_window_expr.is_empty() {
                 // When no window expression is necessary, use the input directly:
                 Ok(Some(window_child))
@@ -717,8 +716,9 @@ fn indices_referred_by_expr(
     input_schema: &DFSchemaRef,
     expr: &Expr,
 ) -> Result<Vec<usize>> {
-    let mut cols = expr.to_columns()?;
     // Get outer-referenced (subquery) columns:
+    // TODO: Support more Expressions
+    let mut cols = expr.to_columns()?;
     outer_columns(expr, &mut cols);
     Ok(cols
         .iter()

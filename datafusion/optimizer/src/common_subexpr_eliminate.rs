@@ -17,11 +17,13 @@
 
 //! Eliminate common sub-expression.
 
-use std::collections::{BTreeSet, HashMap};
-use std::sync::Arc;
-
 use crate::utils::is_volatile_expression;
 use crate::{utils, OptimizerConfig, OptimizerRule};
+use datafusion_expr::{Expr, Operator};
+use std::collections::{BTreeSet, HashMap};
+use std::ops::Deref;
+
+use std::sync::Arc;
 
 use arrow::datatypes::DataType;
 use datafusion_common::tree_node::{
@@ -31,9 +33,10 @@ use datafusion_common::tree_node::{
 use datafusion_common::{
     internal_err, Column, DFField, DFSchema, DFSchemaRef, DataFusionError, Result,
 };
-use datafusion_expr::expr::Alias;
+use datafusion_expr::expr::{Alias, WindowFunction};
 use datafusion_expr::logical_plan::{Aggregate, LogicalPlan, Projection, Window};
-use datafusion_expr::{col, Expr, ExprSchemable};
+use datafusion_expr::{col, BinaryExpr, Cast, ExprSchemable};
+use hashbrown::HashSet;
 
 /// A map from expression's identifier to tuple including
 /// - the expression itself (cloned)
@@ -146,12 +149,11 @@ impl CommonSubexprEliminate {
             self.rewrite_exprs_list(exprs_list, arrays_list, expr_set, &mut affected_id)?;
 
         let mut new_input = self
-            .try_optimize(input, config)?
+            .common_optimize(input, config)?
             .unwrap_or_else(|| input.clone());
         if !affected_id.is_empty() {
             new_input = build_common_expr_project_plan(new_input, affected_id, expr_set)?;
         }
-
         Ok((rewrite_exprs, new_input))
     }
 
@@ -187,7 +189,6 @@ impl CommonSubexprEliminate {
             window_exprs.push(window_expr);
             arrays_per_window.push(arrays);
         }
-
         let mut window_exprs = window_exprs
             .iter()
             .map(|expr| expr.as_slice())
@@ -196,7 +197,6 @@ impl CommonSubexprEliminate {
             .iter()
             .map(|arrays| arrays.as_slice())
             .collect::<Vec<_>>();
-
         assert_eq!(window_exprs.len(), arrays_per_window.len());
         let (mut new_expr, new_input) = self.rewrite_expr(
             &window_exprs,
@@ -206,14 +206,12 @@ impl CommonSubexprEliminate {
             config,
         )?;
         assert_eq!(window_exprs.len(), new_expr.len());
-
         // Construct consecutive window operator, with their corresponding new window expressions.
         plan = new_input;
         while let Some(new_window_expr) = new_expr.pop() {
             // Since `new_expr` and `window_exprs` length are same. We can safely `.unwrap` here.
             let orig_window_expr = window_exprs.pop().unwrap();
             assert_eq!(new_window_expr.len(), orig_window_expr.len());
-
             // Rename new re-written window expressions with original name (by giving alias)
             // Otherwise we may receive schema error, in subsequent operators.
             let new_window_expr = new_window_expr
@@ -226,7 +224,6 @@ impl CommonSubexprEliminate {
                 .collect::<Result<Vec<_>>>()?;
             plan = LogicalPlan::Window(Window::try_new(new_window_expr, Arc::new(plan))?);
         }
-
         Ok(plan)
     }
 
@@ -360,16 +357,13 @@ impl CommonSubexprEliminate {
 
         // Visit expr list and build expr identifier to occuring count map (`expr_set`).
         let arrays = to_arrays(&expr, input_schema, &mut expr_set, ExprMask::Normal)?;
-
         let (mut new_expr, new_input) =
             self.rewrite_expr(&[&expr], &[&arrays], input, &expr_set, config)?;
-
         plan.with_new_exprs(pop_expr(&mut new_expr)?, vec![new_input])
     }
 }
-
-impl OptimizerRule for CommonSubexprEliminate {
-    fn try_optimize(
+impl CommonSubexprEliminate {
+    fn common_optimize(
         &self,
         plan: &LogicalPlan,
         config: &dyn OptimizerConfig,
@@ -413,8 +407,8 @@ impl OptimizerRule for CommonSubexprEliminate {
 
         let original_schema = plan.schema().clone();
         match optimized_plan {
+            Some(LogicalPlan::Projection(_)) => Ok(optimized_plan),
             Some(optimized_plan) if optimized_plan.schema() != &original_schema => {
-                // add an additional projection if the output schema changed.
                 Ok(Some(build_recover_project_plan(
                     &original_schema,
                     optimized_plan,
@@ -422,6 +416,34 @@ impl OptimizerRule for CommonSubexprEliminate {
             }
             plan => Ok(plan),
         }
+    }
+    /// currently the implemention is not optimal, Basically I just do a top-down iteration over all the
+    ///
+    fn add_extra_projection(&self, plan: &LogicalPlan) -> Result<Option<LogicalPlan>> {
+        let result = plan
+            .clone()
+            .rewrite(&mut ProjectionAdder {
+                insertion_point_map: HashMap::new(),
+                depth: 0,
+                complex_exprs: HashMap::new(),
+            })?
+            .data;
+        Ok(Some(result))
+    }
+}
+impl OptimizerRule for CommonSubexprEliminate {
+    fn try_optimize(
+        &self,
+        plan: &LogicalPlan,
+        config: &dyn OptimizerConfig,
+    ) -> Result<Option<LogicalPlan>> {
+        let optimized_plan_option = self.common_optimize(plan, config)?;
+
+        let plan = match optimized_plan_option {
+            Some(plan) => plan,
+            _ => plan.clone(),
+        };
+        self.add_extra_projection(&plan)
     }
 
     fn name(&self) -> &str {
@@ -498,7 +520,6 @@ fn build_common_expr_project_plan(
             project_exprs.push(Expr::Column(field.qualified_column()));
         }
     }
-
     Ok(LogicalPlan::Projection(Projection::try_new(
         project_exprs,
         Arc::new(input),
@@ -693,7 +714,6 @@ impl TreeNodeVisitor for ExprIdentifierVisitor<'_> {
         self.visit_stack.push(VisitRecord::ExprItem(desc.clone()));
 
         let data_type = expr.get_type(&self.input_schema)?;
-
         self.expr_set
             .entry(desc)
             .or_insert_with(|| (expr.clone(), 0, data_type))
@@ -829,6 +849,213 @@ fn replace_common_expr(
     .data()
 }
 
+struct ProjectionAdder {
+    // Keeps track of cumulative usage of common expressions with its corresponding data type.
+    // accross plan where key is unsafe nodes that cumulative tracking is invalidated.
+    insertion_point_map: HashMap<usize, HashMap<Expr, (DataType, u32)>>,
+    depth: usize,
+    // Keeps track of cumulative usage of the common expressions with its corresponding data type.
+    // between safe nodes.
+    complex_exprs: HashMap<Expr, (DataType, u32)>,
+}
+pub fn is_not_complex(op: &Operator) -> bool {
+    matches!(
+        op,
+        &Operator::Eq | &Operator::NotEq | &Operator::Lt | &Operator::Gt | &Operator::And
+    )
+}
+
+impl ProjectionAdder {
+    // TODO: adding more expressions for sub query, currently only support for Simple Binary Expressions
+    fn get_complex_expressions(
+        exprs: Vec<Expr>,
+        schema: DFSchemaRef,
+    ) -> HashSet<(Expr, DataType)> {
+        let mut res = HashSet::new();
+        for expr in exprs {
+            match expr {
+                Expr::BinaryExpr(BinaryExpr {
+                    left: ref l_box,
+                    op,
+                    right: ref r_box,
+                }) if !is_not_complex(&op) => {
+                    if let (Expr::Column(l), Expr::Column(_r)) = (&**l_box, &**r_box) {
+                        let l_field = schema
+                            .field_from_column(l)
+                            .expect("Field not found for left column");
+                        res.insert((expr.clone(), l_field.data_type().clone()));
+                    }
+                }
+                Expr::Cast(Cast { expr, data_type: _ }) => {
+                    let exprs_with_type =
+                        Self::get_complex_expressions(vec![*expr], schema.clone());
+                    res.extend(exprs_with_type);
+                }
+                Expr::Alias(Alias {
+                    expr,
+                    relation: _,
+                    name: _,
+                }) => {
+                    let exprs_with_type =
+                        Self::get_complex_expressions(vec![*expr], schema.clone());
+                    res.extend(exprs_with_type);
+                }
+                Expr::WindowFunction(WindowFunction { fun: _, args, .. }) => {
+                    let exprs_with_type =
+                        Self::get_complex_expressions(args, schema.clone());
+                    res.extend(exprs_with_type);
+                }
+                _ => {}
+            }
+        }
+        res
+    }
+
+    fn update_expr_with_available_columns(
+        expr: &mut Expr,
+        available_columns: &[Column],
+    ) -> Result<()> {
+        match expr {
+            Expr::BinaryExpr(_) => {
+                for available_col in available_columns {
+                    if available_col.flat_name() == expr.display_name()? {
+                        *expr = Expr::Column(available_col.clone());
+                    }
+                }
+            }
+            Expr::WindowFunction(WindowFunction { fun: _, args, .. }) => {
+                args.iter_mut().try_for_each(|arg| {
+                    Self::update_expr_with_available_columns(arg, available_columns)
+                })?
+            }
+            Expr::Cast(Cast { expr, .. }) => {
+                Self::update_expr_with_available_columns(expr, available_columns)?
+            }
+            Expr::Alias(alias) => {
+                Self::update_expr_with_available_columns(
+                    &mut alias.expr,
+                    available_columns,
+                )?;
+            }
+            _ => {
+                // cannot rewrite
+            }
+        }
+        Ok(())
+    }
+
+    // Assumes operators doesn't modify name of the fields.
+    // Otherwise this operation is not safe.
+    fn extend_with_exprs(&mut self, node: &LogicalPlan) {
+        // use depth to trace where we are in the LogicalPlan tree
+        // extract all expressions + check whether it contains in depth_sets
+        let exprs = node.expressions();
+        let mut schema = node.schema().deref().clone();
+        for ip in node.inputs() {
+            schema.merge(ip.schema());
+        }
+        let expr_with_type = Self::get_complex_expressions(exprs, Arc::new(schema));
+        for (expr, dtype) in expr_with_type {
+            let (_, count) = self.complex_exprs.entry(expr).or_insert_with(|| (dtype, 0));
+            *count += 1;
+        }
+    }
+}
+impl TreeNodeRewriter for ProjectionAdder {
+    type Node = LogicalPlan;
+    /// currently we just collect the complex bianryOP
+
+    fn f_down(&mut self, node: Self::Node) -> Result<Transformed<Self::Node>> {
+        // Insert for other end points
+        self.depth += 1;
+        match node {
+            LogicalPlan::TableScan(_) => {
+                // Stop tracking cumulative usage at the source.
+                let complex_exprs = std::mem::take(&mut self.complex_exprs);
+                self.insertion_point_map
+                    .insert(self.depth - 1, complex_exprs);
+                Ok(Transformed::no(node))
+            }
+            LogicalPlan::Sort(_) | LogicalPlan::Filter(_) | LogicalPlan::Window(_) => {
+                // These are safe operators where, expression identity is preserved during operation.
+                self.extend_with_exprs(&node);
+                Ok(Transformed::no(node))
+            }
+            LogicalPlan::Projection(_) => {
+                // Stop tracking cumulative usage at the projection since it may invalidate expression identity.
+                let complex_exprs = std::mem::take(&mut self.complex_exprs);
+                self.insertion_point_map
+                    .insert(self.depth - 1, complex_exprs);
+                // Start tracking common expressions from now on including projection.
+                self.extend_with_exprs(&node);
+                Ok(Transformed::no(node))
+            }
+            _ => {
+                // Unsupported operators
+                self.complex_exprs.clear();
+                Ok(Transformed::no(node))
+            }
+        }
+    }
+
+    fn f_up(&mut self, node: Self::Node) -> Result<Transformed<Self::Node>> {
+        let cached_exprs = self
+            .insertion_point_map
+            .get(&self.depth)
+            .cloned()
+            .unwrap_or_default();
+        self.depth -= 1;
+        // do not do extra things
+        let should_add_projection =
+            cached_exprs.iter().any(|(_expr, (_, count))| *count > 1);
+
+        let children = node.inputs();
+        if children.len() != 1 {
+            // Only can rewrite node with single child
+            return Ok(Transformed::no(node));
+        }
+        let child = children[0].clone();
+        let child = if should_add_projection {
+            let mut field_set = HashSet::new();
+            let mut project_exprs = vec![];
+            for (expr, (dtype, count)) in &cached_exprs {
+                if *count > 1 {
+                    let f =
+                        DFField::new_unqualified(&expr.to_string(), dtype.clone(), true);
+                    field_set.insert(f.name().to_owned());
+                    project_exprs.push(expr.clone().alias(expr.to_string()));
+                }
+            }
+            // Do not lose fields in the child.
+            for field in child.schema().fields() {
+                if field_set.insert(field.qualified_name()) {
+                    project_exprs.push(Expr::Column(field.qualified_column()));
+                }
+            }
+
+            // adding new plan here
+            LogicalPlan::Projection(Projection::try_new(
+                project_exprs,
+                Arc::new(node.inputs()[0].clone()),
+            )?)
+        } else {
+            child
+        };
+        let mut expressions = node.expressions();
+        let available_columns = child
+            .schema()
+            .fields()
+            .iter()
+            .map(|field| field.qualified_column())
+            .collect::<Vec<_>>();
+        // Replace expressions with its pre-computed variant if available.
+        expressions.iter_mut().try_for_each(|expr| {
+            Self::update_expr_with_available_columns(expr, &available_columns)
+        })?;
+        let new_node = node.with_new_exprs(expressions, [child].to_vec())?;
+        Ok(Transformed::yes(new_node))
+    }
+}
 #[cfg(test)]
 mod test {
     use std::iter;
@@ -853,7 +1080,7 @@ mod test {
     fn assert_optimized_plan_eq(expected: &str, plan: &LogicalPlan) {
         let optimizer = CommonSubexprEliminate {};
         let optimized_plan = optimizer
-            .try_optimize(plan, &OptimizerContext::new())
+            .common_optimize(plan, &OptimizerContext::new())
             .unwrap()
             .expect("failed to optimize plan");
         let formatted_plan = format!("{optimized_plan:?}");
@@ -1272,7 +1499,7 @@ mod test {
             .unwrap();
         let rule = CommonSubexprEliminate {};
         let optimized_plan = rule
-            .try_optimize(&plan, &OptimizerContext::new())
+            .common_optimize(&plan, &OptimizerContext::new())
             .unwrap()
             .unwrap();
 

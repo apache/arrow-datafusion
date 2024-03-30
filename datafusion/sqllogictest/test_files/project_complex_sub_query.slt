@@ -1,0 +1,120 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+
+#   http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+##########
+## Prepare Statement Tests
+##########
+
+statement ok
+CREATE EXTERNAL TABLE t (
+c1 INT NOT NULL,
+c2 INT NOT NULL,
+c3 INT NOT NULL,
+c4 INT NOT NULL,
+c5 INT NOT NULL
+)
+STORED AS CSV
+WITH HEADER ROW
+LOCATION '../core/tests/data/project_complex_expression.csv';
+
+query TT
+explain SELECT c3+c4, SUM(c3+c4) OVER()
+FROM t;
+----
+logical_plan
+WindowAggr: windowExpr=[[SUM(CAST(t.c3 + t.c4 AS Int64)) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING]]
+--Projection: t.c3 + t.c4 AS t.c3 + t.c4
+----TableScan: t projection=[c3, c4]
+physical_plan
+WindowAggExec: wdw=[SUM(t.c3 + t.c4) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING: Ok(Field { name: "SUM(t.c3 + t.c4) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }), frame: WindowFrame { units: Rows, start_bound: Preceding(UInt64(NULL)), end_bound: Following(UInt64(NULL)), is_causal: false }]
+--CoalescePartitionsExec
+----ProjectionExec: expr=[c3@0 + c4@1 as t.c3 + t.c4]
+------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/project_complex_expression.csv]]}, projection=[c3, c4], has_header=true
+
+query TT
+explain SELECT c3+c4, SUM(c3+c4) OVER(order by c3+c4)
+FROM t;
+----
+logical_plan
+Projection: t.c3 + t.c4, SUM(t.c3 + t.c4) ORDER BY [t.c3 + t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+--WindowAggr: windowExpr=[[SUM(CAST(t.c3 + t.c4t.c4t.c3 AS t.c3 + t.c4 AS Int64)) ORDER BY [t.c3 + t.c4t.c4t.c3 AS t.c3 + t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW AS SUM(t.c3 + t.c4) ORDER BY [t.c3 + t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW]]
+----Projection: t.c3 + t.c4 AS t.c3 + t.c4t.c4t.c3, t.c3, t.c4
+------TableScan: t projection=[c3, c4]
+physical_plan
+ProjectionExec: expr=[c3@1 + c4@2 as t.c3 + t.c4, SUM(t.c3 + t.c4) ORDER BY [t.c3 + t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW@3 as SUM(t.c3 + t.c4) ORDER BY [t.c3 + t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW]
+--RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----BoundedWindowAggExec: wdw=[SUM(t.c3 + t.c4) ORDER BY [t.c3 + t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW: Ok(Field { name: "SUM(t.c3 + t.c4) ORDER BY [t.c3 + t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }), frame: WindowFrame { units: Range, start_bound: Preceding(Int32(NULL)), end_bound: CurrentRow, is_causal: false }], mode=[Sorted]
+------SortPreservingMergeExec: [t.c3 + t.c4t.c4t.c3@0 ASC NULLS LAST]
+--------SortExec: expr=[t.c3 + t.c4t.c4t.c3@0 ASC NULLS LAST]
+----------ProjectionExec: expr=[c3@0 + c4@1 as t.c3 + t.c4t.c4t.c3, c3@0 as c3, c4@1 as c4]
+------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/project_complex_expression.csv]]}, projection=[c3, c4], has_header=true
+
+query TT
+explain SELECT c3-c4, SUM(c3-c4) OVER(order by c3-c4)
+FROM t;
+----
+logical_plan
+Projection: t.c3 - t.c4, SUM(t.c3 - t.c4) ORDER BY [t.c3 - t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+--WindowAggr: windowExpr=[[SUM(CAST(t.c3 - t.c4t.c4t.c3 AS t.c3 - t.c4 AS Int64)) ORDER BY [t.c3 - t.c4t.c4t.c3 AS t.c3 - t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW AS SUM(t.c3 - t.c4) ORDER BY [t.c3 - t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW]]
+----Projection: t.c3 - t.c4 AS t.c3 - t.c4t.c4t.c3, t.c3, t.c4
+------TableScan: t projection=[c3, c4]
+physical_plan
+ProjectionExec: expr=[c3@1 - c4@2 as t.c3 - t.c4, SUM(t.c3 - t.c4) ORDER BY [t.c3 - t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW@3 as SUM(t.c3 - t.c4) ORDER BY [t.c3 - t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW]
+--RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+----BoundedWindowAggExec: wdw=[SUM(t.c3 - t.c4) ORDER BY [t.c3 - t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW: Ok(Field { name: "SUM(t.c3 - t.c4) ORDER BY [t.c3 - t.c4 ASC NULLS LAST] RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }), frame: WindowFrame { units: Range, start_bound: Preceding(Int32(NULL)), end_bound: CurrentRow, is_causal: false }], mode=[Sorted]
+------SortPreservingMergeExec: [t.c3 - t.c4t.c4t.c3@0 ASC NULLS LAST]
+--------SortExec: expr=[t.c3 - t.c4t.c4t.c3@0 ASC NULLS LAST]
+----------ProjectionExec: expr=[c3@0 - c4@1 as t.c3 - t.c4t.c4t.c3, c3@0 as c3, c4@1 as c4]
+------------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/project_complex_expression.csv]]}, projection=[c3, c4], has_header=true
+
+query TT
+explain SELECT c3-c4, SUM(c3-c4) OVER()
+FROM t;
+----
+logical_plan
+WindowAggr: windowExpr=[[SUM(CAST(t.c3 - t.c4 AS Int64)) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING]]
+--Projection: t.c3 - t.c4 AS t.c3 - t.c4
+----TableScan: t projection=[c3, c4]
+physical_plan
+WindowAggExec: wdw=[SUM(t.c3 - t.c4) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING: Ok(Field { name: "SUM(t.c3 - t.c4) ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }), frame: WindowFrame { units: Rows, start_bound: Preceding(UInt64(NULL)), end_bound: Following(UInt64(NULL)), is_causal: false }]
+--CoalescePartitionsExec
+----ProjectionExec: expr=[c3@0 - c4@1 as t.c3 - t.c4]
+------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+--------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/project_complex_expression.csv]]}, projection=[c3, c4], has_header=true
+
+query II
+SELECT c3+c4, SUM(c3+c4) OVER()
+FROM t;
+----
+7 135
+17 135
+27 135
+37 135
+47 135
+
+query II
+SELECT c3+c4, SUM(c3+c4) OVER(order by c3+c4)
+FROM t
+----
+7 7
+17 24
+27 51
+37 88
+47 135
