@@ -867,10 +867,19 @@ impl PartialOrd for Expr {
 }
 
 impl Expr {
-    /// Returns the name of this expression as it should appear in a schema. This name
-    /// will not include any CAST expressions.
+    /// Returns the name of this expression as it should appear in a schema.
     pub fn display_name(&self) -> Result<String> {
-        create_name(self)
+        match self {
+            Expr::TryCast(TryCast { expr, data_type })
+            | Expr::Cast(Cast { expr, data_type }) => {
+                let name = match **expr {
+                    Expr::Column(_) => create_name(expr)?,
+                    _ => format!("CAST({expr} AS {data_type:?})"),
+                };
+                Ok(name)
+            }
+            _ => create_name(self),
+        }
     }
 
     /// Returns a full and complete string representation of this expression.
@@ -1004,7 +1013,8 @@ impl Expr {
         match self {
             // call Expr::display_name() on a Expr::Sort will throw an error
             Expr::Sort(Sort { expr, .. }) => expr.name_for_alias(),
-            expr => expr.display_name(),
+            // Expr::Cast(Cast { expr, .. }) => expr.name_for_alias(),
+            expr => create_name(expr),
         }
     }
 
@@ -1712,11 +1722,7 @@ pub(crate) fn create_name(e: &Expr) -> Result<String> {
             name += "END";
             Ok(name)
         }
-        Expr::Cast(Cast { expr, .. }) => {
-            // CAST does not change the expression name
-            create_name(expr)
-        }
-        Expr::TryCast(TryCast { expr, .. }) => {
+        Expr::Cast(Cast { expr, .. }) | Expr::TryCast(TryCast { expr, .. }) => {
             // CAST does not change the expression name
             create_name(expr)
         }
@@ -1952,9 +1958,7 @@ mod test {
         let expected_canonical = "CAST(Float32(1.23) AS Utf8)";
         assert_eq!(expected_canonical, expr.canonical_name());
         assert_eq!(expected_canonical, format!("{expr}"));
-        // note that CAST intentionally has a name that is different from its `Display`
-        // representation. CAST does not change the name of expressions.
-        assert_eq!("Float32(1.23)", expr.display_name()?);
+        assert_eq!("CAST(Float32(1.23) AS Utf8)", expr.display_name()?);
         Ok(())
     }
 

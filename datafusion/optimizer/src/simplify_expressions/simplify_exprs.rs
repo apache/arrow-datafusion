@@ -458,7 +458,7 @@ mod tests {
             .project(proj)?
             .build()?;
 
-        let expected = "Projection: Int32(0) AS Utf8(\"0\")\
+        let expected = "Projection: Int32(0) AS CAST(Utf8(\"0\") AS Int32)\
             \n  TableScan: test";
         let actual = get_optimized_plan_formatted(plan, &Utc::now());
         assert_eq!(expected, actual);

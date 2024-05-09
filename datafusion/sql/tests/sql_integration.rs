@@ -2211,12 +2211,12 @@ fn sorted_union_with_different_types_and_group_by() {
 fn union_with_binary_expr_and_cast() {
     let sql = "SELECT cast(0.0 + a as integer) FROM (select 1 a) x GROUP BY 1 UNION ALL (SELECT 2.1 + a FROM (select 1 a) x GROUP BY 1)";
     let expected = "Union\
-        \n  Projection: CAST(Float64(0) + x.a AS Float64) AS Float64(0) + x.a\
+        \n  Projection: CAST(CAST(Float64(0) + x.a AS Int32) AS Float64) AS CAST(Float64(0) + x.a AS Int32)\
         \n    Aggregate: groupBy=[[CAST(Float64(0) + x.a AS Int32)]], aggr=[[]]\
         \n      SubqueryAlias: x\
         \n        Projection: Int64(1) AS a\
         \n          EmptyRelation\
-        \n  Projection: Float64(2.1) + x.a AS Float64(0) + x.a\
+        \n  Projection: Float64(2.1) + x.a AS CAST(Float64(0) + x.a AS Int32)\
         \n    Aggregate: groupBy=[[Float64(2.1) + x.a]], aggr=[[]]\
         \n      SubqueryAlias: x\
         \n        Projection: Int64(1) AS a\
