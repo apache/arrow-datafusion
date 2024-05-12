@@ -26,7 +26,9 @@ use datafusion_common::{
     assert_batches_eq, assert_batches_sorted_eq, cast::as_float64_array,
     cast::as_int32_array, not_impl_err, plan_err, ExprSchema, Result, ScalarValue,
 };
-use datafusion_common::{assert_contains, exec_err, internal_err, DataFusionError};
+use datafusion_common::{
+    assert_contains, assert_snapshot, exec_err, internal_err, DataFusionError,
+};
 use datafusion_execution::runtime_env::{RuntimeConfig, RuntimeEnv};
 use datafusion_expr::simplify::{ExprSimplifyResult, SimplifyInfo};
 use datafusion_expr::{
@@ -134,17 +136,7 @@ async fn scalar_udf() -> Result<()> {
 
     let result = DataFrame::new(ctx.state(), plan).collect().await?;
 
-    let expected = [
-        "+-----+-----+-----------------+",
-        "| a   | b   | my_add(t.a,t.b) |",
-        "+-----+-----+-----------------+",
-        "| 1   | 2   | 3               |",
-        "| 10  | 12  | 22              |",
-        "| 10  | 12  | 22              |",
-        "| 100 | 120 | 220             |",
-        "+-----+-----+-----------------+",
-    ];
-    assert_batches_eq!(expected, &result);
+    assert_snapshot!(&result);
 
     let batch = &result[0];
     let a = as_int32_array(batch.column(0))?;
@@ -889,16 +881,7 @@ async fn create_scalar_function_from_sql_statement() -> Result<()> {
         .collect()
         .await?;
 
-    assert_batches_eq!(
-        &[
-            "+-----------------------------------+",
-            "| better_add(Float64(2),Float64(2)) |",
-            "+-----------------------------------+",
-            "| 4.0                               |",
-            "+-----------------------------------+",
-        ],
-        &result
-    );
+    assert_snapshot!(&result);
 
     // statement drops  function
     assert!(ctx.sql("drop function better_add").await.is_ok());

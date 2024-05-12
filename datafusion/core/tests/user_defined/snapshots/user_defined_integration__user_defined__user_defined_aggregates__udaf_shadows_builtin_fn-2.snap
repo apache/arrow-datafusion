@@ -1,0 +1,9 @@
+---
+source: datafusion/core/tests/user_defined/user_defined_aggregates.rs
+expression: actual_lines
+---
+- +----------------------------+
+- "| sum(t.time)                |"
+- +----------------------------+
+- "| 1970-01-01T00:00:00.000019 |"
+- +----------------------------+

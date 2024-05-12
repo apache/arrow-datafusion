@@ -1,0 +1,9 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-----------------------------------------+
+- "| ltrim(Utf8(\"      a b c             \")) |"
+- +-----------------------------------------+
+- "| a b c                                   |"
+- +-----------------------------------------+

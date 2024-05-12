@@ -88,7 +88,7 @@ logical_plan
 01)Projection: struct(values.a, values.b, values.c)
 02)--TableScan: values projection=[a, b, c]
 physical_plan
-01)ProjectionExec: expr=[struct(a@0, b@1, c@2) as struct(values.a,values.b,values.c)]
+01)ProjectionExec: expr=[struct(a@0, b@1, c@2) as struct(values.a, values.b, values.c)]
 02)--MemoryExec: partitions=1, partition_sizes=[1]
 
 # error on 0 arguments

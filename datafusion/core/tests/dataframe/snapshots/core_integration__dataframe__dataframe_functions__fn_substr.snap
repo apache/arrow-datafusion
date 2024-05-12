@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------------+
+- "| substr(test.a, Int32(2)) |"
+- +--------------------------+
+- "| bcDEF                    |"
+- "| bc123                    |"
+- "| BAdef                    |"
+- "| 23AbcDef                 |"
+- +--------------------------+

@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------+
+- "| test.b |"
+- +--------+
+- "| 1.0    |"
+- "| 10.0   |"
+- "| 10.0   |"
+- "| 100.0  |"
+- +--------+

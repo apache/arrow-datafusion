@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-------------------------------------------------------------+
+- "| regexp_replace(test.a, Utf8(\"[a-z]\"), Utf8(\"x\"), Utf8(\"g\")) |"
+- +-------------------------------------------------------------+
+- "| xxxDEF                                                      |"
+- "| xxx123                                                      |"
+- "| CBAxxx                                                      |"
+- "| 123AxxDxx                                                   |"
+- +-------------------------------------------------------------+

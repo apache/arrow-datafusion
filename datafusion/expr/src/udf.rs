@@ -291,7 +291,7 @@ pub trait ScalarUDFImpl: Debug + Send + Sync {
     ///
     fn display_name(&self, args: &[Expr]) -> Result<String> {
         let names: Vec<String> = args.iter().map(create_name).collect::<Result<_>>()?;
-        Ok(format!("{}({})", self.name(), names.join(",")))
+        Ok(format!("{}({})", self.name(), names.join(", ")))
     }
 
     /// Returns the function's [`Signature`] for information about what input

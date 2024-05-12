@@ -52,6 +52,22 @@ macro_rules! assert_batches_eq {
     };
 }
 
+#[macro_export]
+macro_rules! assert_snapshot {
+    ($CHUNKS: expr) => {
+        let formatted = $crate::arrow::util::pretty::pretty_format_batches_with_options(
+            $CHUNKS,
+            &$crate::format::DEFAULT_FORMAT_OPTIONS,
+        )
+        .unwrap()
+        .to_string();
+
+        let actual_lines: Vec<&str> = formatted.trim().lines().collect();
+
+        insta::assert_yaml_snapshot!(actual_lines);
+    };
+}
+
 /// Compares formatted output of a record batch with an expected
 /// vector of strings in a way that order does not matter.
 /// This is a macro so errors appear on the correct line

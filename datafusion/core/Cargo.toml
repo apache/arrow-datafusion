@@ -140,6 +140,7 @@ ctor = { workspace = true }
 doc-comment = { workspace = true }
 env_logger = { workspace = true }
 half = { workspace = true, default-features = true }
+insta = { version = "1.38.0", features = ["yaml"] }
 paste = "^1.0"
 postgres-protocol = "0.6.4"
 postgres-types = { version = "0.2.4", features = ["derive", "with-chrono-0_4"] }

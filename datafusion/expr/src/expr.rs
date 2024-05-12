@@ -1656,7 +1656,7 @@ fn create_function_name(fun: &str, distinct: bool, args: &[Expr]) -> Result<Stri
         true => "DISTINCT ",
         false => "",
     };
-    Ok(format!("{}({}{})", fun, distinct_str, names.join(",")))
+    Ok(format!("{}({}{})", fun, distinct_str, names.join(", ")))
 }
 
 /// Returns a readable name of an expression based on the input schema.
@@ -1859,7 +1859,7 @@ pub(crate) fn create_name(e: &Expr) -> Result<String> {
                 AggregateFunctionDefinition::UDF(..) => {
                     let names: Vec<String> =
                         args.iter().map(create_name).collect::<Result<_>>()?;
-                    names.join(",")
+                    names.join(", ")
                 }
             };
             let mut info = String::new();

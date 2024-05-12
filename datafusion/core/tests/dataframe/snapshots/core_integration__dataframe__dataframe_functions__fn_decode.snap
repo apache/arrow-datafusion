@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------------------------------------+
+- "| decode(encode(test.a, Utf8(\"hex\")), Utf8(\"hex\")) |"
+- +--------------------------------------------------+
+- "| abcDEF                                           |"
+- "| abc123                                           |"
+- "| CBAdef                                           |"
+- "| 123AbcDef                                        |"
+- +--------------------------------------------------+

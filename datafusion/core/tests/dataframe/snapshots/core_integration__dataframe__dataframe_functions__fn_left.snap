@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +------------------------+
+- "| left(test.a, Int32(3)) |"
+- +------------------------+
+- "| abc                    |"
+- "| abc                    |"
+- "| CBA                    |"
+- "| 123                    |"
+- +------------------------+

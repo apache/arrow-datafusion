@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-----------------------------------------+
+- "| replace(test.a, Utf8(\"abc\"), Utf8(\"x\")) |"
+- +-----------------------------------------+
+- "| xDEF                                    |"
+- "| x123                                    |"
+- "| CBAdef                                  |"
+- "| 123AbcDef                               |"
+- +-----------------------------------------+

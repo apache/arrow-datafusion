@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------------+
+- "| struct(test.a, test.b)   |"
+- +--------------------------+
+- "| {c0: abcDEF, c1: 1}      |"
+- "| {c0: abc123, c1: 10}     |"
+- "| {c0: CBAdef, c1: 10}     |"
+- "| {c0: 123AbcDef, c1: 100} |"
+- +--------------------------+

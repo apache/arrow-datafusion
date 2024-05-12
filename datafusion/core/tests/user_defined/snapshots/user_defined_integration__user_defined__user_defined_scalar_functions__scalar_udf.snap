@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/user_defined/user_defined_scalar_functions.rs
+expression: actual_lines
+---
+- +-----+-----+------------------+
+- "| a   | b   | my_add(t.a, t.b) |"
+- +-----+-----+------------------+
+- "| 1   | 2   | 3                |"
+- "| 10  | 12  | 22               |"
+- "| 10  | 12  | 22               |"
+- "| 100 | 120 | 220              |"
+- +-----+-----+------------------+

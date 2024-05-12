@@ -43,7 +43,9 @@ use datafusion::{
     prelude::SessionContext,
     scalar::ScalarValue,
 };
-use datafusion_common::{assert_contains, cast::as_primitive_array, exec_err};
+use datafusion_common::{
+    assert_contains, assert_snapshot, cast::as_primitive_array, exec_err,
+};
 use datafusion_expr::{
     create_udaf, function::AccumulatorArgs, AggregateUDFImpl, GroupsAccumulator,
     SimpleAggregateUDF,
@@ -150,14 +152,7 @@ async fn test_udaf_as_window_with_frame_without_retract_batch() {
 async fn test_udaf_returning_struct() {
     let TestContext { ctx, test_state: _ } = TestContext::new();
     let sql = "SELECT first(value, time) from t";
-    let expected = [
-        "+------------------------------------------------+",
-        "| first(t.value,t.time)                          |",
-        "+------------------------------------------------+",
-        "| {value: 2.0, time: 1970-01-01T00:00:00.000002} |",
-        "+------------------------------------------------+",
-    ];
-    assert_batches_eq!(expected, &execute(&ctx, sql).await.unwrap());
+    assert_snapshot!(&execute(&ctx, sql).await.unwrap());
 }
 
 /// Demonstrate extracting the fields from a structure using a subquery
@@ -165,14 +160,7 @@ async fn test_udaf_returning_struct() {
 async fn test_udaf_returning_struct_subquery() {
     let TestContext { ctx, test_state: _ } = TestContext::new();
     let sql = "select sq.first['value'], sq.first['time'] from (SELECT first(value, time) as first from t) as sq";
-    let expected = [
-        "+-----------------+----------------------------+",
-        "| sq.first[value] | sq.first[time]             |",
-        "+-----------------+----------------------------+",
-        "| 2.0             | 1970-01-01T00:00:00.000002 |",
-        "+-----------------+----------------------------+",
-    ];
-    assert_batches_eq!(expected, &execute(&ctx, sql).await.unwrap());
+    assert_snapshot!(&execute(&ctx, sql).await.unwrap());
 }
 
 #[tokio::test]
@@ -184,26 +172,12 @@ async fn test_udaf_shadows_builtin_fn() {
     let sql = "SELECT sum(arrow_cast(time, 'Int64')) from t";
 
     // compute with builtin `sum` aggregator
-    let expected = [
-        "+---------------------------------------+",
-        "| SUM(arrow_cast(t.time,Utf8(\"Int64\"))) |",
-        "+---------------------------------------+",
-        "| 19000                                 |",
-        "+---------------------------------------+",
-    ];
-    assert_batches_eq!(expected, &execute(&ctx, sql).await.unwrap());
+    assert_snapshot!(&execute(&ctx, sql).await.unwrap());
 
     // Register `TimeSum` with name `sum`. This will shadow the builtin one
     let sql = "SELECT sum(time) from t";
     TimeSum::register(&mut ctx, test_state.clone(), "sum");
-    let expected = [
-        "+----------------------------+",
-        "| sum(t.time)                |",
-        "+----------------------------+",
-        "| 1970-01-01T00:00:00.000019 |",
-        "+----------------------------+",
-    ];
-    assert_batches_eq!(expected, &execute(&ctx, sql).await.unwrap());
+    assert_snapshot!(&execute(&ctx, sql).await.unwrap());
 }
 
 async fn execute(ctx: &SessionContext, sql: &str) -> Result<Vec<RecordBatch>> {

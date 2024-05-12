@@ -1,0 +1,5 @@
+---
+source: datafusion/core/tests/simplification.rs
+expression: actual
+---
+"TableScan: test, full_filters=[g = f AS g = power(f, Float64(1))]"

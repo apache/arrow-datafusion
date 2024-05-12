@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +----------------------------------+
+- "| starts_with(test.a, Utf8(\"abc\")) |"
+- +----------------------------------+
+- "| true                             |"
+- "| true                             |"
+- "| false                            |"
+- "| false                            |"
+- +----------------------------------+

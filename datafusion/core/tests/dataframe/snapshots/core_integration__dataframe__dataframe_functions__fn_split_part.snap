@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-----------------------------------------+
+- "| split_part(test.a, Utf8(\"b\"), Int32(1)) |"
+- +-----------------------------------------+
+- "| a                                       |"
+- "| a                                       |"
+- "| CBAdef                                  |"
+- "| 123A                                    |"
+- +-----------------------------------------+

@@ -1,0 +1,9 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------+
+- "| chr(Int32(128175)) |"
+- +--------------------+
+- "| 💯                 |"
+- +--------------------+

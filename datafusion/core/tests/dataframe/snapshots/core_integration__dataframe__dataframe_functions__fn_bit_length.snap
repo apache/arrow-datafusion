@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------+
+- "| bit_length(test.a) |"
+- +--------------------+
+- "| 48                 |"
+- "| 48                 |"
+- "| 48                 |"
+- "| 72                 |"
+- +--------------------+

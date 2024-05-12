@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-----------------+
+- "| reverse(test.a) |"
+- +-----------------+
+- "| FEDcba          |"
+- "| 321cba          |"
+- "| fedABC          |"
+- "| feDcbA321       |"
+- +-----------------+

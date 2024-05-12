@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +------------------------------------+
+- "| lpad(test.a, Int32(10), Utf8(\"*\")) |"
+- +------------------------------------+
+- "| ****abcDEF                         |"
+- "| ****abc123                         |"
+- "| ****CBAdef                         |"
+- "| *123AbcDef                         |"
+- +------------------------------------+

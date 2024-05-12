@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------------+
+- "| character_length(test.a) |"
+- +--------------------------+
+- "| 6                        |"
+- "| 6                        |"
+- "| 6                        |"
+- "| 9                        |"
+- +--------------------------+

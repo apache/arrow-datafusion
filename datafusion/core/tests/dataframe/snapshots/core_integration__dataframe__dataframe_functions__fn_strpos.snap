@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +---------------------------+
+- "| strpos(test.a, Utf8(\"f\")) |"
+- +---------------------------+
+- "| 0                         |"
+- "| 0                         |"
+- "| 6                         |"
+- "| 9                         |"
+- +---------------------------+

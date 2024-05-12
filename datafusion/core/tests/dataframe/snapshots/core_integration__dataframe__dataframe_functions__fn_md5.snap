@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +----------------------------------+
+- "| md5(test.a)                      |"
+- +----------------------------------+
+- "| ea2de8bd80f3a1f52c754214fc9b0ed1 |"
+- "| e99a18c428cb38d5f260853678922e03 |"
+- "| 11ed4a6e9985df40913eead67f022e27 |"
+- "| 8f5e60e523c9253e623ae38bb58c399a |"
+- +----------------------------------+

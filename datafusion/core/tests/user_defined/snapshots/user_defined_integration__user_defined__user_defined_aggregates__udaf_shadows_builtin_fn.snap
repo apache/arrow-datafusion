@@ -1,0 +1,9 @@
+---
+source: datafusion/core/tests/user_defined/user_defined_aggregates.rs
+expression: actual_lines
+---
+- +----------------------------------------+
+- "| SUM(arrow_cast(t.time, Utf8(\"Int64\"))) |"
+- +----------------------------------------+
+- "| 19000                                  |"
+- +----------------------------------------+

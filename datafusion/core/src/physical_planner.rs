@@ -121,7 +121,7 @@ fn create_function_physical_name(
         false => "",
     };
 
-    let phys_name = format!("{}({}{})", fun, distinct_str, names.join(","));
+    let phys_name = format!("{}({}{})", fun, distinct_str, names.join(", "));
 
     Ok(order_by
         .map(|order_by| format!("{} ORDER BY [{}]", phys_name, expr_vec_fmt!(order_by)))
@@ -274,7 +274,7 @@ fn create_physical_name(e: &Expr, is_first_expr: bool) -> Result<String> {
                     .iter()
                     .map(|e| create_physical_name(e, false))
                     .collect::<Result<Vec<_>>>()?;
-                Ok(format!("{}({})", fun.name(), names.join(",")))
+                Ok(format!("{}({})", fun.name(), names.join(", ")))
             }
         },
         Expr::GroupingSet(grouping_set) => match grouping_set {

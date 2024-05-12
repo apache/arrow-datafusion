@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-------------+
+- "| nvl2_expr   |"
+- +-------------+
+- "| TURNED_NULL |"
+- "| NON_NULL    |"
+- "| NON_NULL    |"
+- "| NON_NULL    |"
+- +-------------+

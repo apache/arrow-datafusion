@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +----------------+
+- "| to_hex(test.b) |"
+- +----------------+
+- "| 1              |"
+- "| a              |"
+- "| a              |"
+- "| 64             |"
+- +----------------+

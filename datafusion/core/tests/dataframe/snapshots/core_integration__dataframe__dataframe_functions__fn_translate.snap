@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-------------------------------------------+
+- "| translate(test.a, Utf8(\"bc\"), Utf8(\"xx\")) |"
+- +-------------------------------------------+
+- "| axxDEF                                    |"
+- "| axx123                                    |"
+- "| CBAdef                                    |"
+- "| 123AxxDef                                 |"
+- +-------------------------------------------+

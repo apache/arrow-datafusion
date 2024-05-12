@@ -1871,10 +1871,10 @@ query TT
 EXPLAIN SELECT letter, letter = LEFT('APACHE', 1) FROM simple_string;
 ----
 logical_plan
-01)Projection: simple_string.letter, simple_string.letter = Utf8("A") AS simple_string.letter = left(Utf8("APACHE"),Int64(1))
+01)Projection: simple_string.letter, simple_string.letter = Utf8("A") AS simple_string.letter = left(Utf8("APACHE"), Int64(1))
 02)--TableScan: simple_string projection=[letter]
 physical_plan
-01)ProjectionExec: expr=[letter@0 as letter, letter@0 = A as simple_string.letter = left(Utf8("APACHE"),Int64(1))]
+01)ProjectionExec: expr=[letter@0 as letter, letter@0 = A as simple_string.letter = left(Utf8("APACHE"), Int64(1))]
 02)--MemoryExec: partitions=1, partition_sizes=[1]
 
 query TB
@@ -1893,7 +1893,7 @@ logical_plan
 01)Projection: simple_string.letter, simple_string.letter = left(simple_string.letter2, Int64(1))
 02)--TableScan: simple_string projection=[letter, letter2]
 physical_plan
-01)ProjectionExec: expr=[letter@0 as letter, letter@0 = left(letter2@1, 1) as simple_string.letter = left(simple_string.letter2,Int64(1))]
+01)ProjectionExec: expr=[letter@0 as letter, letter@0 = left(letter2@1, 1) as simple_string.letter = left(simple_string.letter2, Int64(1))]
 02)--MemoryExec: partitions=1, partition_sizes=[1]
 
 query TB

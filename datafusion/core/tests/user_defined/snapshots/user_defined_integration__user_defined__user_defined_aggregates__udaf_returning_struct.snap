@@ -1,0 +1,9 @@
+---
+source: datafusion/core/tests/user_defined/user_defined_aggregates.rs
+expression: actual_lines
+---
+- +------------------------------------------------+
+- "| first(t.value, t.time)                         |"
+- +------------------------------------------------+
+- "| {value: 2.0, time: 1970-01-01T00:00:00.000002} |"
+- +------------------------------------------------+

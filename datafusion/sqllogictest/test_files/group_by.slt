@@ -4225,17 +4225,17 @@ EXPLAIN SELECT date_bin('15 minutes', ts) as time_chunks
 logical_plan
 01)Limit: skip=0, fetch=5
 02)--Sort: time_chunks DESC NULLS FIRST, fetch=5
-03)----Projection: date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts) AS time_chunks
-04)------Aggregate: groupBy=[[date_bin(IntervalMonthDayNano("900000000000"), unbounded_csv_with_timestamps.ts) AS date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts)]], aggr=[[]]
+03)----Projection: date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts) AS time_chunks
+04)------Aggregate: groupBy=[[date_bin(IntervalMonthDayNano("900000000000"), unbounded_csv_with_timestamps.ts) AS date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts)]], aggr=[[]]
 05)--------TableScan: unbounded_csv_with_timestamps projection=[ts]
 physical_plan
 01)GlobalLimitExec: skip=0, fetch=5
 02)--SortPreservingMergeExec: [time_chunks@0 DESC], fetch=5
-03)----ProjectionExec: expr=[date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts)@0 as time_chunks]
-04)------AggregateExec: mode=FinalPartitioned, gby=[date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts)@0 as date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts)], aggr=[], ordering_mode=Sorted
+03)----ProjectionExec: expr=[date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts)@0 as time_chunks]
+04)------AggregateExec: mode=FinalPartitioned, gby=[date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts)@0 as date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts)], aggr=[], ordering_mode=Sorted
 05)--------CoalesceBatchesExec: target_batch_size=2
-06)----------RepartitionExec: partitioning=Hash([date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts)@0], 8), input_partitions=8, preserve_order=true, sort_exprs=date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts)@0 DESC
-07)------------AggregateExec: mode=Partial, gby=[date_bin(900000000000, ts@0) as date_bin(Utf8("15 minutes"),unbounded_csv_with_timestamps.ts)], aggr=[], ordering_mode=Sorted
+06)----------RepartitionExec: partitioning=Hash([date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts)@0], 8), input_partitions=8, preserve_order=true, sort_exprs=date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts)@0 DESC
+07)------------AggregateExec: mode=Partial, gby=[date_bin(900000000000, ts@0) as date_bin(Utf8("15 minutes"), unbounded_csv_with_timestamps.ts)], aggr=[], ordering_mode=Sorted
 08)--------------RepartitionExec: partitioning=RoundRobinBatch(8), input_partitions=1
 09)----------------StreamingTableExec: partition_sizes=1, projection=[ts], infinite_source=true, output_ordering=[ts@0 DESC]
 
@@ -4280,18 +4280,18 @@ EXPLAIN SELECT extract(month from ts) as months
 logical_plan
 01)Limit: skip=0, fetch=5
 02)--Sort: months DESC NULLS FIRST, fetch=5
-03)----Projection: date_part(Utf8("MONTH"),csv_with_timestamps.ts) AS months
+03)----Projection: date_part(Utf8("MONTH"), csv_with_timestamps.ts) AS months
 04)------Aggregate: groupBy=[[date_part(Utf8("MONTH"), csv_with_timestamps.ts)]], aggr=[[]]
 05)--------TableScan: csv_with_timestamps projection=[ts]
 physical_plan
 01)GlobalLimitExec: skip=0, fetch=5
 02)--SortPreservingMergeExec: [months@0 DESC], fetch=5
 03)----SortExec: TopK(fetch=5), expr=[months@0 DESC], preserve_partitioning=[true]
-04)------ProjectionExec: expr=[date_part(Utf8("MONTH"),csv_with_timestamps.ts)@0 as months]
-05)--------AggregateExec: mode=FinalPartitioned, gby=[date_part(Utf8("MONTH"),csv_with_timestamps.ts)@0 as date_part(Utf8("MONTH"),csv_with_timestamps.ts)], aggr=[]
+04)------ProjectionExec: expr=[date_part(Utf8("MONTH"), csv_with_timestamps.ts)@0 as months]
+05)--------AggregateExec: mode=FinalPartitioned, gby=[date_part(Utf8("MONTH"), csv_with_timestamps.ts)@0 as date_part(Utf8("MONTH"), csv_with_timestamps.ts)], aggr=[]
 06)----------CoalesceBatchesExec: target_batch_size=2
-07)------------RepartitionExec: partitioning=Hash([date_part(Utf8("MONTH"),csv_with_timestamps.ts)@0], 8), input_partitions=8
-08)--------------AggregateExec: mode=Partial, gby=[date_part(MONTH, ts@0) as date_part(Utf8("MONTH"),csv_with_timestamps.ts)], aggr=[]
+07)------------RepartitionExec: partitioning=Hash([date_part(Utf8("MONTH"), csv_with_timestamps.ts)@0], 8), input_partitions=8
+08)--------------AggregateExec: mode=Partial, gby=[date_part(MONTH, ts@0) as date_part(Utf8("MONTH"), csv_with_timestamps.ts)], aggr=[]
 09)----------------RepartitionExec: partitioning=RoundRobinBatch(8), input_partitions=1
 10)------------------CsvExec: file_groups={1 group: [[WORKSPACE_ROOT/datafusion/core/tests/data/timestamps.csv]]}, projection=[ts], output_ordering=[ts@0 DESC], has_header=false
 

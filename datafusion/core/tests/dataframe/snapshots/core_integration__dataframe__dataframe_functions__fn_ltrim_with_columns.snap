@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +---------------+
+- "| ltrim(test.a) |"
+- +---------------+
+- "| abcDEF        |"
+- "| abc123        |"
+- "| CBAdef        |"
+- "| 123AbcDef     |"
+- +---------------+

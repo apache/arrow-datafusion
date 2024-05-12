@@ -2316,7 +2316,7 @@ select struct(time,load1,load2,host) from t1;
 
 # can have an aggregate function with an inner coalesce
 query TR
-select t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] as host, sum(coalesce(t2."struct(t1.time,t1.load1,t1.load2,t1.host)")['c1']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] order by host;
+select t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] as host, sum(coalesce(t2."struct(t1.time, t1.load1, t1.load2, t1.host)")['c1']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] order by host;
 ----
 host1 1.1
 host2 2.2
@@ -2324,7 +2324,7 @@ host3 3.3
 
 # can have an aggregate function with an inner CASE WHEN
 query TR
-select t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] as host, sum((case when t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] is not null then t2."struct(t1.time,t1.load1,t1.load2,t1.host)" end)['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] order by host;
+select t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] as host, sum((case when t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] is not null then t2."struct(t1.time, t1.load1, t1.load2, t1.host)" end)['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] order by host;
 ----
 host1 101
 host2 202
@@ -2332,7 +2332,7 @@ host3 303
 
 # can have 2 projections with aggr(short_circuited), with different short-circuited expr
 query TRR
-select t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] as host, sum(coalesce(t2."struct(t1.time,t1.load1,t1.load2,t1.host)")['c1']), sum((case when t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] is not null then t2."struct(t1.time,t1.load1,t1.load2,t1.host)" end)['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] order by host;
+select t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] as host, sum(coalesce(t2."struct(t1.time, t1.load1, t1.load2, t1.host)")['c1']), sum((case when t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] is not null then t2."struct(t1.time, t1.load1, t1.load2, t1.host)" end)['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] order by host;
 ----
 host1 1.1 101
 host2 2.2 202
@@ -2340,7 +2340,7 @@ host3 3.3 303
 
 # can have 2 projections with aggr(short_circuited), with the same short-circuited expr (e.g. CASE WHEN)
 query TRR
-select t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] as host, sum((case when t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] is not null then t2."struct(t1.time,t1.load1,t1.load2,t1.host)" end)['c1']), sum((case when t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] is not null then t2."struct(t1.time,t1.load1,t1.load2,t1.host)" end)['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] order by host;
+select t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] as host, sum((case when t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] is not null then t2."struct(t1.time, t1.load1, t1.load2, t1.host)" end)['c1']), sum((case when t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] is not null then t2."struct(t1.time, t1.load1, t1.load2, t1.host)" end)['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] order by host;
 ----
 host1 1.1 101
 host2 2.2 202
@@ -2348,7 +2348,7 @@ host3 3.3 303
 
 # can have 2 projections with aggr(short_circuited), with the same short-circuited expr (e.g. coalesce)
 query TRR
-select t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] as host, sum(coalesce(t2."struct(t1.time,t1.load1,t1.load2,t1.host)")['c1']), sum(coalesce(t2."struct(t1.time,t1.load1,t1.load2,t1.host)")['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time,t1.load1,t1.load2,t1.host)"['c3'] order by host;
+select t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] as host, sum(coalesce(t2."struct(t1.time, t1.load1, t1.load2, t1.host)")['c1']), sum(coalesce(t2."struct(t1.time, t1.load1, t1.load2, t1.host)")['c2']) from (select struct(time,load1,load2,host) from t1) t2 where t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] IS NOT NULL group by t2."struct(t1.time, t1.load1, t1.load2, t1.host)"['c3'] order by host;
 ----
 host1 1.1 101
 host2 2.2 202

@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +------------------------------------------------------------------+
+- "| named_struct(Utf8(\"column_a\"), test.a, Utf8(\"column_b\"), test.b) |"
+- +------------------------------------------------------------------+
+- "| {column_a: abcDEF, column_b: 1}                                  |"
+- "| {column_a: abc123, column_b: 10}                                 |"
+- "| {column_a: CBAdef, column_b: 10}                                 |"
+- "| {column_a: 123AbcDef, column_b: 100}                             |"
+- +------------------------------------------------------------------+

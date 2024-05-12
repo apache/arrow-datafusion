@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +---------------+
+- "| upper(test.a) |"
+- +---------------+
+- "| ABCDEF        |"
+- "| ABC123        |"
+- "| CBADEF        |"
+- "| 123ABCDEF     |"
+- +---------------+

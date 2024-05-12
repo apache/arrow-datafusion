@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------------+
+- "| repeat(test.a, Int32(2)) |"
+- +--------------------------+
+- "| abcDEFabcDEF             |"
+- "| abc123abc123             |"
+- "| CBAdefCBAdef             |"
+- "| 123AbcDef123AbcDef       |"
+- +--------------------------+

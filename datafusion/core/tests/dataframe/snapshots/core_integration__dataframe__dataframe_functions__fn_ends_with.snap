@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +--------------------------------+
+- "| ends_with(test.a, Utf8(\"DEF\")) |"
+- +--------------------------------+
+- "| true                           |"
+- "| false                          |"
+- "| false                          |"
+- "| false                          |"
+- +--------------------------------+

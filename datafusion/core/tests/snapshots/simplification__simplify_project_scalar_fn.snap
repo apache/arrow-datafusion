@@ -1,0 +1,5 @@
+---
+source: datafusion/core/tests/simplification.rs
+expression: actual
+---
+"Projection: test.f AS power(test.f, Float64(1))\n  TableScan: test"

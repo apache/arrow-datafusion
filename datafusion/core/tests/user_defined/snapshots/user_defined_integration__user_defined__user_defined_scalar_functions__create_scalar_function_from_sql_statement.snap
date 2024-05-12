@@ -1,0 +1,9 @@
+---
+source: datafusion/core/tests/user_defined/user_defined_scalar_functions.rs
+expression: actual_lines
+---
+- +------------------------------------+
+- "| better_add(Float64(2), Float64(2)) |"
+- +------------------------------------+
+- "| 4.0                                |"
+- +------------------------------------+

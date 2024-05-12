@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +----------------------------------+
+- "| coalesce(Utf8(NULL), Utf8(\"ab\")) |"
+- +----------------------------------+
+- "| ab                               |"
+- "| ab                               |"
+- "| ab                               |"
+- "| ab                               |"
+- +----------------------------------+

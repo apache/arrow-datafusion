@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-------------+
+- "| nvl_expr    |"
+- +-------------+
+- "| TURNED_NULL |"
+- "| abc123      |"
+- "| CBAdef      |"
+- "| 123AbcDef   |"
+- +-------------+

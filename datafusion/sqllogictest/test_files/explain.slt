@@ -371,20 +371,20 @@ query TT
 explain select make_array(make_array(1, 2, 3), make_array(4, 5, 6));
 ----
 logical_plan
-01)Projection: List([[1, 2, 3], [4, 5, 6]]) AS make_array(make_array(Int64(1),Int64(2),Int64(3)),make_array(Int64(4),Int64(5),Int64(6)))
+01)Projection: List([[1, 2, 3], [4, 5, 6]]) AS make_array(make_array(Int64(1), Int64(2), Int64(3)), make_array(Int64(4), Int64(5), Int64(6)))
 02)--EmptyRelation
 physical_plan
-01)ProjectionExec: expr=[[[1, 2, 3], [4, 5, 6]] as make_array(make_array(Int64(1),Int64(2),Int64(3)),make_array(Int64(4),Int64(5),Int64(6)))]
+01)ProjectionExec: expr=[[[1, 2, 3], [4, 5, 6]] as make_array(make_array(Int64(1), Int64(2), Int64(3)), make_array(Int64(4), Int64(5), Int64(6)))]
 02)--PlaceholderRowExec
 
 query TT
 explain select [[1, 2, 3], [4, 5, 6]];
 ----
 logical_plan
-01)Projection: List([[1, 2, 3], [4, 5, 6]]) AS make_array(make_array(Int64(1),Int64(2),Int64(3)),make_array(Int64(4),Int64(5),Int64(6)))
+01)Projection: List([[1, 2, 3], [4, 5, 6]]) AS make_array(make_array(Int64(1), Int64(2), Int64(3)), make_array(Int64(4), Int64(5), Int64(6)))
 02)--EmptyRelation
 physical_plan
-01)ProjectionExec: expr=[[[1, 2, 3], [4, 5, 6]] as make_array(make_array(Int64(1),Int64(2),Int64(3)),make_array(Int64(4),Int64(5),Int64(6)))]
+01)ProjectionExec: expr=[[[1, 2, 3], [4, 5, 6]] as make_array(make_array(Int64(1), Int64(2), Int64(3)), make_array(Int64(4), Int64(5), Int64(6)))]
 02)--PlaceholderRowExec
 
 # Explain Struct
@@ -393,8 +393,8 @@ query TT
 explain select struct(1, 2.3, 'abc');
 ----
 logical_plan
-01)Projection: Struct({c0:1,c1:2.3,c2:abc}) AS struct(Int64(1),Float64(2.3),Utf8("abc"))
+01)Projection: Struct({c0:1,c1:2.3,c2:abc}) AS struct(Int64(1), Float64(2.3), Utf8("abc"))
 02)--EmptyRelation
 physical_plan
-01)ProjectionExec: expr=[{c0:1,c1:2.3,c2:abc} as struct(Int64(1),Float64(2.3),Utf8("abc"))]
+01)ProjectionExec: expr=[{c0:1,c1:2.3,c2:abc} as struct(Int64(1), Float64(2.3), Utf8("abc"))]
 02)--PlaceholderRowExec

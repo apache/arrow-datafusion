@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +-------------------------------------+
+- "| regexp_match(test.a, Utf8(\"[a-z]\")) |"
+- +-------------------------------------+
+- "| [a]                                 |"
+- "| [a]                                 |"
+- "| [d]                                 |"
+- "| [b]                                 |"
+- +-------------------------------------+

@@ -1,0 +1,12 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +---------------------------------------------------+
+- "| arrow_typeof(arrow_cast(test.b, Utf8(\"Float64\"))) |"
+- +---------------------------------------------------+
+- "| Float64                                           |"
+- "| Float64                                           |"
+- "| Float64                                           |"
+- "| Float64                                           |"
+- +---------------------------------------------------+

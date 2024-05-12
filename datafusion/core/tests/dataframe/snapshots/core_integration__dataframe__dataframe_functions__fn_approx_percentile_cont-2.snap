@@ -1,0 +1,9 @@
+---
+source: datafusion/core/tests/dataframe/dataframe_functions.rs
+expression: actual_lines
+---
+- +---------------------------------------+
+- "| APPROX_PERCENTILE_CONT(test.b, arg_2) |"
+- +---------------------------------------+
+- "| 10                                    |"
+- +---------------------------------------+
