@@ -22,6 +22,7 @@ use arrow_schema::{Field, FieldRef};
 use crate::error::_schema_err;
 use crate::utils::{parse_identifiers_normalized, quote_identifier};
 use crate::{DFSchema, DataFusionError, Result, SchemaError, TableReference};
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::convert::Infallible;
 use std::fmt;
@@ -132,6 +133,13 @@ impl Column {
         match &self.relation {
             Some(r) => format!("{}.{}", r, self.name),
             None => self.name.clone(),
+        }
+    }
+
+    pub fn flat_name_cow(&self) -> Cow<str> {
+        match &self.relation {
+            Some(r) => Cow::Owned(format!("{}.{}", r, self.name)),
+            None => Cow::Borrowed(self.name.as_str()),
         }
     }
 

@@ -17,6 +17,7 @@
 
 //! Logical Expressions: [`Expr`]
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use std::hash::Hash;
@@ -869,6 +870,10 @@ impl Expr {
         create_name(self)
     }
 
+    pub fn display_name_cow(&self) -> Result<Cow<str>> {
+        create_name_cow(self)
+    }
+
     /// Returns a full and complete string representation of this expression.
     pub fn canonical_name(&self) -> String {
         format!("{self}")
@@ -996,17 +1001,21 @@ impl Expr {
 
     /// Return the name to use for the specific Expr, recursing into
     /// `Expr::Sort` as appropriate
-    pub fn name_for_alias(&self) -> Result<String> {
+    pub fn name_for_alias(&self) -> Result<Cow<str>> {
         match self {
             // call Expr::display_name() on a Expr::Sort will throw an error
             Expr::Sort(Sort { expr, .. }) => expr.name_for_alias(),
-            expr => expr.display_name(),
+            expr => expr.display_name_cow(),
         }
     }
 
     /// Ensure `expr` has the name as `original_name` by adding an
     /// alias if necessary.
-    pub fn alias_if_changed(self, original_name: String) -> Result<Expr> {
+    pub fn alias_if_changed<'a>(
+        self,
+        original_name: impl Into<Cow<'a, str>>,
+    ) -> Result<Expr> {
+        let original_name = original_name.into();
         let new_name = self.name_for_alias()?;
 
         if new_name == original_name {
@@ -1673,11 +1682,38 @@ pub(crate) fn create_name(e: &Expr) -> Result<String> {
     Ok(s)
 }
 
+fn create_name_cow(e: &Expr) -> Result<Cow<str>> {
+    match e {
+        Expr::Alias(Alias { name, .. }) => Ok(name.into()),
+        Expr::Column(c) => Ok(c.flat_name_cow()),
+        Expr::Cast(Cast { expr, .. }) => {
+            // CAST does not change the expression name
+            create_name_cow(expr)
+        }
+        Expr::TryCast(TryCast { expr, .. }) => {
+            // CAST does not change the expression name
+            create_name_cow(expr)
+        }
+        Expr::Exists(Exists { negated: true, .. }) => Ok("NOT EXISTS".into()),
+        Expr::Exists(Exists { negated: false, .. }) => Ok("EXISTS".into()),
+        Expr::InSubquery(InSubquery { negated: true, .. }) => Ok("NOT IN".into()),
+        Expr::InSubquery(InSubquery { negated: false, .. }) => Ok("IN".into()),
+        Expr::ScalarSubquery(subquery) => {
+            Ok(subquery.subquery.schema().field(0).name().into())
+        }
+        Expr::Placeholder(Placeholder { id, .. }) => Ok(id.as_str().into()),
+        // all other branches allocate strings, so use writer implementation
+        _ => Ok(create_name(e)?.into()),
+    }
+}
+
 fn write_name<W: Write>(w: &mut W, e: &Expr) -> Result<()> {
     match e {
         Expr::Alias(Alias { name, .. }) => write!(w, "{}", name)?,
-        Expr::Column(c) => write!(w, "{}", c.flat_name())?,
-        Expr::OuterReferenceColumn(_, c) => write!(w, "outer_ref({})", c.flat_name())?,
+        Expr::Column(c) => write!(w, "{}", c.flat_name_cow())?,
+        Expr::OuterReferenceColumn(_, c) => {
+            write!(w, "outer_ref({})", c.flat_name_cow())?
+        }
         Expr::ScalarVariable(_, variable_names) => {
             write!(w, "{}", variable_names.join("."))?
         }
@@ -1918,7 +1954,7 @@ fn write_name<W: Write>(w: &mut W, e: &Expr) -> Result<()> {
             negated,
         }) => {
             write_name(w, expr)?;
-            let list = list.iter().map(create_name);
+            let list = list.iter().map(create_name_cow);
             if *negated {
                 write!(w, " NOT IN ({list:?})")?;
             } else {

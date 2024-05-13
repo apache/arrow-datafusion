@@ -18,6 +18,7 @@
 //! DFSchema is an extended schema struct that DataFusion uses to provide support for
 //! fields with optional relation names.
 
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
@@ -785,6 +786,14 @@ impl DFSchema {
             .collect::<Vec<_>>()
     }
 
+    /// Get list of fully_qualified names as Cow<'_, str>, avoiding a [String]
+    /// allocation if the field name is unqualified.
+    pub fn field_names_cow(&self) -> Vec<Cow<str>> {
+        self.iter()
+            .map(|(qualifier, field)| qualified_name_cow(qualifier, field.name()))
+            .collect::<Vec<_>>()
+    }
+
     /// Get metadata of this schema
     pub fn metadata(&self) -> &HashMap<String, String> {
         &self.inner.metadata
@@ -918,8 +927,8 @@ impl Display for DFSchema {
             f,
             "fields:[{}], metadata:{:?}",
             self.iter()
-                .map(|(q, f)| qualified_name(q, f.name()))
-                .collect::<Vec<String>>()
+                .map(|(q, f)| qualified_name_cow(q, f.name()))
+                .collect::<Vec<_>>()
                 .join(", "),
             self.inner.metadata
         )
@@ -1036,9 +1045,16 @@ impl SchemaExt for Schema {
 }
 
 pub fn qualified_name(qualifier: Option<&TableReference>, name: &str) -> String {
+    qualified_name_cow(qualifier, name).into_owned()
+}
+
+pub fn qualified_name_cow<'n>(
+    qualifier: Option<&TableReference>,
+    name: &'n str,
+) -> Cow<'n, str> {
     match qualifier {
-        Some(q) => format!("{}.{}", q, name),
-        None => name.to_string(),
+        Some(q) => Cow::Owned(format!("{}.{}", q, name)),
+        None => Cow::Borrowed(name),
     }
 }
 

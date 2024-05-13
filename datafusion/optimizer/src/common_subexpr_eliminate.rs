@@ -254,7 +254,7 @@ impl CommonSubexprEliminate {
                 .zip(orig_window_expr.iter())
                 .map(|(new_window_expr, window_expr)| {
                     let original_name = window_expr.name_for_alias()?;
-                    new_window_expr.alias_if_changed(original_name)
+                    new_window_expr.alias_if_changed(original_name.as_ref())
                 })
                 .collect::<Result<Vec<_>>>()?;
             plan = LogicalPlan::Window(Window::try_new(new_window_expr, Arc::new(plan))?);
@@ -322,7 +322,9 @@ impl CommonSubexprEliminate {
                 .iter()
                 .zip(aggr_expr.iter())
                 .map(|(new_expr, old_expr)| {
-                    new_expr.clone().alias_if_changed(old_expr.display_name()?)
+                    new_expr
+                        .clone()
+                        .alias_if_changed(old_expr.display_name_cow()?.as_ref())
                 })
                 .collect::<Result<Vec<Expr>>>()?;
             // Since group_epxr changes, schema changes also. Use try_new method.
@@ -837,7 +839,7 @@ fn replace_common_expr(
 mod test {
     use std::iter;
 
-    use arrow::datatypes::Schema;
+    use arrow::datatypes::{Field, Schema};
 
     use datafusion_expr::logical_plan::{table_scan, JoinType};
     use datafusion_expr::{avg, lit, logical_plan::builder::LogicalPlanBuilder, sum};

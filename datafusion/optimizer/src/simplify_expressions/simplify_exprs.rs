@@ -133,7 +133,7 @@ impl SimplifyExpressions {
         plan.map_expressions(|e| {
             let new_e = if use_alias {
                 // TODO: unify with `rewrite_preserving_name`
-                let original_name = e.name_for_alias()?;
+                let original_name = e.name_for_alias()?.into_owned();
                 simplifier.simplify(e)?.alias_if_changed(original_name)
             } else {
                 simplifier.simplify(e)

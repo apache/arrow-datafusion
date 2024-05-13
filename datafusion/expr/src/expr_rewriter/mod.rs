@@ -274,7 +274,7 @@ pub fn rewrite_preserving_name<R>(expr: Expr, rewriter: &mut R) -> Result<Expr>
 where
     R: TreeNodeRewriter<Node = Expr>,
 {
-    let original_name = expr.name_for_alias()?;
+    let original_name = expr.name_for_alias()?.into_owned();
     let expr = expr.rewrite(rewriter)?.data;
     expr.alias_if_changed(original_name)
 }

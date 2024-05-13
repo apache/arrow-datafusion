@@ -178,9 +178,9 @@ impl OptimizerRule for ScalarSubqueryToJoin {
 
                 let mut proj_exprs = vec![];
                 for expr in projection.expr.iter() {
-                    let old_expr_name = expr.display_name()?;
+                    let old_expr_name = expr.display_name_cow()?;
                     let new_expr = expr_to_rewrite_expr_map.get(expr).unwrap();
-                    let new_expr_name = new_expr.display_name()?;
+                    let new_expr_name = new_expr.display_name_cow()?;
                     if new_expr_name != old_expr_name {
                         proj_exprs.push(new_expr.clone().alias(old_expr_name))
                     } else {

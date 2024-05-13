@@ -304,7 +304,7 @@ impl NamePreserver {
 
     pub fn save(&self, expr: &Expr) -> Result<SavedName> {
         let original_name = if self.use_alias {
-            Some(expr.name_for_alias()?)
+            Some(expr.name_for_alias()?.into_owned())
         } else {
             None
         };
