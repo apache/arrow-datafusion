@@ -92,6 +92,9 @@ pub trait GroupsAccumulator: Send {
     /// * `total_num_groups`: the number of groups (the largest
     /// group_index is thus `total_num_groups - 1`).
     ///
+    /// * `grouping_set`: An indicator of whether the columns in the
+    /// GroupingSet is null, typically used in GROUPING aggregate function.
+    ///
     /// Note that subsequent calls to update_batch may have larger
     /// total_num_groups as new groups are seen.
     fn update_batch(
@@ -100,6 +103,7 @@ pub trait GroupsAccumulator: Send {
         group_indices: &[usize],
         opt_filter: Option<&BooleanArray>,
         total_num_groups: usize,
+        grouping_set: &[bool],
     ) -> Result<()>;
 
     /// Returns the final aggregate value for each group as a single

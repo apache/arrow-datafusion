@@ -305,10 +305,12 @@ impl AggregateFunction {
     pub fn signature(&self) -> Signature {
         // note: the physical expression must accept the type returned by this function or the execution panics.
         match self {
-            AggregateFunction::Count => Signature::variadic_any(Volatility::Immutable),
-            AggregateFunction::ApproxDistinct
-            | AggregateFunction::Grouping
-            | AggregateFunction::ArrayAgg => Signature::any(1, Volatility::Immutable),
+            AggregateFunction::Count | AggregateFunction::Grouping => {
+                Signature::variadic_any(Volatility::Immutable)
+            }
+            AggregateFunction::ApproxDistinct | AggregateFunction::ArrayAgg => {
+                Signature::any(1, Volatility::Immutable)
+            }
             AggregateFunction::Min | AggregateFunction::Max => {
                 let valid = STRINGS
                     .iter()

@@ -265,7 +265,7 @@ pub(crate) mod tests {
             })
             .collect::<Result<Vec<_>>>()?;
         let indices = vec![0; batch.num_rows()];
-        accum.update_batch(&values, &indices, None, 1)?;
+        accum.update_batch(&values, &indices, None, 1, &[])?;
         accum.evaluate(EmitTo::All)
     }
 }

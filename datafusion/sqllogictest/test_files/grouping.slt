@@ -1,0 +1,198 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+
+#   http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+statement ok
+CREATE TABLE test (c1 VARCHAR,c2 VARCHAR,c3 INT) as values
+('a','A',1), ('b','B',2)
+
+# grouping_with_grouping_sets
+query TTIIII
+select
+  c1,
+  c2,
+  grouping(c1) as g0,
+  grouping(c2) as g1,
+  grouping(c1, c2) as g2,
+  grouping(c2, c1) as g3
+from
+  test
+group by
+  grouping sets (
+    (c1, c2),
+    (c1),
+    (c2),
+    ()
+  )
+order by
+  c1, c2, g0, g1, g2, g3;
+----
+a A 0 0 0 0
+a NULL 0 1 1 2
+b B 0 0 0 0
+b NULL 0 1 1 2
+NULL A 1 0 2 1
+NULL B 1 0 2 1
+NULL NULL 1 1 3 3
+
+# grouping_with_cube
+query TTIIII
+select
+  c1,
+  c2,
+  grouping(c1) as g0,
+  grouping(c2) as g1,
+  grouping(c1, c2) as g2,
+  grouping(c2, c1) as g3
+from
+  test
+group by
+  cube(c1, c2)
+order by
+  c1, c2, g0, g1, g2, g3;
+----
+a A 0 0 0 0
+a NULL 0 1 1 2
+b B 0 0 0 0
+b NULL 0 1 1 2
+NULL A 1 0 2 1
+NULL B 1 0 2 1
+NULL NULL 1 1 3 3
+
+# grouping_with_rollup
+query TTIIII
+select
+  c1,
+  c2,
+  grouping(c1) as g0,
+  grouping(c2) as g1,
+  grouping(c1, c2) as g2,
+  grouping(c2, c1) as g3
+from
+  test
+group by
+  rollup(c1, c2)
+order by
+  c1, c2, g0, g1, g2, g3;
+----
+a A 0 0 0 0
+a NULL 0 1 1 2
+b B 0 0 0 0
+b NULL 0 1 1 2
+NULL NULL 1 1 3 3
+
+query TTIIIIIIII
+select
+  c1,
+  c2,
+  c3,
+  grouping(c1) as g0,
+  grouping(c2) as g1,
+  grouping(c1, c2) as g2,
+  grouping(c2, c1) as g3,
+  grouping(c1, c2, c3) as g4,
+  grouping(c2, c3, c1) as g5,
+  grouping(c3, c2, c1) as g6
+from
+  test
+group by
+  rollup(c1, c2, c3)
+order by
+  c1, c2, g0, g1, g2, g3, g4, g5, g6;
+----
+a A 1 0 0 0 0 0 0 0
+a A NULL 0 0 0 0 1 2 4
+a NULL NULL 0 1 1 2 3 6 6
+b B 2 0 0 0 0 0 0 0
+b B NULL 0 0 0 0 1 2 4
+b NULL NULL 0 1 1 2 3 6 6
+NULL NULL NULL 1 1 3 3 7 7 7
+
+# grouping_with_add
+query TTI
+select
+  c1,
+  c2,
+  grouping(c1)+grouping(c2) as g0
+from
+  test
+group by
+  rollup(c1, c2)
+order by
+  c1, c2, g0;
+----
+a A 0
+a NULL 1
+b B 0
+b NULL 1
+NULL NULL 2
+
+#grouping_with_windown_function
+query TTIII
+select
+  c1,
+  c2,
+  count(c1) as cnt,
+  grouping(c1)+ grouping(c2) as g0,
+  rank() over (
+    partition by grouping(c1)+grouping(c2),
+    case when grouping(c2) = 0 then c1 end
+    order by
+      count(c1) desc
+  ) as rank_within_parent
+from
+  test
+group by
+  rollup(c1, c2)
+order by
+  c1,
+  c2,
+  cnt,
+  g0 desc,
+  rank_within_parent;
+----
+a A 1 0 1
+a NULL 1 1 1
+b B 1 0 1
+b NULL 1 1 1
+NULL NULL 2 2 1
+
+# grouping_with_non_columns
+query TIIIII
+select
+  c1,
+  c3 + 1 as c3_add_one,
+  grouping(c1) as g0,
+  grouping(c3 + 1) as g1,
+  grouping(c1, c3 + 1) as g2,
+  grouping(c3 + 1, c1) as g3
+from
+  test
+group by
+  grouping sets (
+    (c1, c3 + 1),
+    (c3 + 1),
+    (c1)
+  )
+order by
+  c1, c3_add_one, g0, g1, g2, g3;
+----
+a 2 0 0 0 0
+a NULL 0 1 1 2
+b 3 0 0 0 0
+b NULL 0 1 1 2
+NULL 2 1 0 2 1
+NULL 3 1 0 2 1

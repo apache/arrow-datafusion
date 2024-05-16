@@ -89,6 +89,7 @@ where
         group_indices: &[usize],
         opt_filter: Option<&BooleanArray>,
         total_num_groups: usize,
+        _grouping_set: &[bool],
     ) -> Result<()> {
         assert_eq!(values.len(), 1, "single argument to update_batch");
         let values = values[0].as_primitive::<T>();
@@ -131,7 +132,7 @@ where
         total_num_groups: usize,
     ) -> Result<()> {
         // update / merge are the same
-        self.update_batch(values, group_indices, opt_filter, total_num_groups)
+        self.update_batch(values, group_indices, opt_filter, total_num_groups, &[])
     }
 
     fn size(&self) -> usize {

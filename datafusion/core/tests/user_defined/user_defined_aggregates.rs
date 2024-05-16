@@ -763,6 +763,7 @@ impl GroupsAccumulator for TestGroupsAccumulator {
         _group_indices: &[usize],
         _opt_filter: Option<&arrow_array::BooleanArray>,
         _total_num_groups: usize,
+        _grouping_set: &[bool],
     ) -> Result<()> {
         Ok(())
     }

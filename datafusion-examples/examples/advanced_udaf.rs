@@ -272,6 +272,7 @@ impl GroupsAccumulator for GeometricMeanGroupsAccumulator {
         group_indices: &[usize],
         opt_filter: Option<&arrow::array::BooleanArray>,
         total_num_groups: usize,
+        _grouping_set: &[bool],
     ) -> Result<()> {
         assert_eq!(values.len(), 1, "single argument to update_batch");
         let values = values[0].as_primitive::<Float64Type>();

@@ -251,6 +251,7 @@ impl GroupsAccumulator for GroupsAccumulatorAdapter {
         group_indices: &[usize],
         opt_filter: Option<&BooleanArray>,
         total_num_groups: usize,
+        _grouping_set: &[bool],
     ) -> Result<()> {
         self.invoke_per_accumulator(
             values,

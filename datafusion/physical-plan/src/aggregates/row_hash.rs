@@ -45,7 +45,7 @@ use datafusion_execution::memory_pool::{MemoryConsumer, MemoryReservation};
 use datafusion_execution::runtime_env::RuntimeEnv;
 use datafusion_execution::TaskContext;
 use datafusion_expr::{EmitTo, GroupsAccumulator};
-use datafusion_physical_expr::expressions::Column;
+use datafusion_physical_expr::expressions::{Column, Grouping};
 use datafusion_physical_expr::{
     AggregateExpr, GroupsAccumulatorAdapter, PhysicalSortExpr,
 };
@@ -322,7 +322,7 @@ impl GroupedHashAggregateStream {
         // Instantiate the accumulators
         let accumulators: Vec<_> = aggregate_exprs
             .iter()
-            .map(create_group_accumulator)
+            .map(|agg_expr| create_group_accumulator(agg_expr, agg.group_by.expr()))
             .collect::<Result<_>>()?;
 
         let group_schema = group_schema(&agg_schema, agg_group_by.expr.len());
@@ -392,7 +392,13 @@ impl GroupedHashAggregateStream {
 /// [`GroupsAccumulatorAdapter`] if not.
 pub(crate) fn create_group_accumulator(
     agg_expr: &Arc<dyn AggregateExpr>,
+    group_by_exprs: &[(Arc<dyn PhysicalExpr>, String)],
 ) -> Result<Box<dyn GroupsAccumulator>> {
+    // GROUPING aggregate function
+    if let Some(grouping) = agg_expr.as_any().downcast_ref::<Grouping>() {
+        return grouping.create_grouping_groups_accumulator(group_by_exprs);
+    }
+
     if agg_expr.groups_accumulator_supported() {
         agg_expr.create_groups_accumulator()
     } else {
@@ -544,7 +550,10 @@ impl GroupedHashAggregateStream {
             evaluate_optional(&self.filter_expressions, &batch)?
         };
 
-        for group_values in &group_by_values {
+        let grouping_sets = &self.group_by.groups;
+        for (group_values, grouping_set) in
+            group_by_values.iter().zip(grouping_sets.iter())
+        {
             // calculate the group indices for each input row
             let starting_num_groups = self.group_values.len();
             self.group_values
@@ -584,6 +593,7 @@ impl GroupedHashAggregateStream {
                             group_indices,
                             opt_filter,
                             total_num_groups,
+                            grouping_set,
                         )?;
                     }
                     _ => {

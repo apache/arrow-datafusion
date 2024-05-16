@@ -69,11 +69,9 @@ pub fn create_aggregate_expr(
             input_phy_exprs[0].clone(),
             name,
         )),
-        (AggregateFunction::Grouping, _) => Arc::new(expressions::Grouping::new(
-            input_phy_exprs[0].clone(),
-            name,
-            data_type,
-        )),
+        (AggregateFunction::Grouping, _) => {
+            Arc::new(expressions::Grouping::new(input_phy_exprs, name, data_type))
+        }
         (AggregateFunction::BitAnd, _) => Arc::new(expressions::BitAnd::new(
             input_phy_exprs[0].clone(),
             name,
