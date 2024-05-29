@@ -80,7 +80,7 @@ impl Median {
     pub fn new() -> Self {
         Self {
             aliases: vec!["median".to_string()],
-            signature: Signature::numeric(1, Volatility::Immutable),
+            signature: Signature::uniform_numeric(1, Volatility::Immutable),
         }
     }
 }

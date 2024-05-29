@@ -925,7 +925,10 @@ fn string_concat_internal_coercion(
 /// Coercion rules for string types (Utf8/LargeUtf8): If at least one argument is
 /// a string type and both arguments can be coerced into a string type, coerce
 /// to string type.
-fn string_coercion(lhs_type: &DataType, rhs_type: &DataType) -> Option<DataType> {
+pub(crate) fn string_coercion(
+    lhs_type: &DataType,
+    rhs_type: &DataType,
+) -> Option<DataType> {
     use arrow::datatypes::DataType::*;
     match (lhs_type, rhs_type) {
         (Utf8, Utf8) => Some(Utf8),

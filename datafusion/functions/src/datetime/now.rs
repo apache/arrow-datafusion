@@ -39,7 +39,7 @@ impl Default for NowFunc {
 impl NowFunc {
     pub fn new() -> Self {
         Self {
-            signature: Signature::uniform(0, vec![], Volatility::Stable),
+            signature: Signature::any(0, Volatility::Stable),
         }
     }
 }

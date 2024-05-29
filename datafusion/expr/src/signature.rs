@@ -30,11 +30,6 @@ use arrow::datatypes::DataType;
 /// return results with this timezone.
 pub const TIMEZONE_WILDCARD: &str = "+TZ";
 
-/// Constant that is used as a placeholder for any valid fixed size list.
-/// This is used where a function can accept a fixed size list type with any
-/// valid length. It exists to avoid the need to enumerate all possible fixed size list lengths.
-pub const FIXED_SIZE_LIST_WILDCARD: i32 = i32::MIN;
-
 ///A function's volatility, which defines the functions eligibility for certain optimizations
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub enum Volatility {
@@ -104,7 +99,7 @@ pub enum TypeSignature {
     /// # Examples
     /// 1. A function of one argument of f64 is `Uniform(1, vec![DataType::Float64])`
     /// 2. A function of one argument of f64 or f32 is `Uniform(1, vec![DataType::Float32, DataType::Float64])`
-    Uniform(usize, Vec<DataType>),
+    Uniform(usize, ValidType),
     /// Exact number of arguments of an exact type
     Exact(Vec<DataType>),
     /// Fixed number of arguments of arbitrary types
@@ -119,9 +114,20 @@ pub enum TypeSignature {
     OneOf(Vec<TypeSignature>),
     /// Specifies Signatures for array functions
     ArraySignature(ArrayFunctionSignature),
-    /// Fixed number of arguments of numeric types.
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ValidType {
     /// See <https://docs.rs/arrow/latest/arrow/datatypes/enum.DataType.html#method.is_numeric> to know which type is considered numeric
-    Numeric(usize),
+    Numeric,
+    /// See <https://docs.rs/arrow/latest/arrow/datatypes/enum.DataType.html#method.is_integer> to know which type is considered integer
+    Integer,
+    /// UTF8 and LargetUTF8
+    String,
+    FixedSizeListWildcard,
+    /// TO DEPRECATE: For function that has complex signature,
+    /// they should consider using `UserDefined`
+    Arbitrary(Vec<DataType>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -175,15 +181,26 @@ impl TypeSignature {
             TypeSignature::Variadic(types) => {
                 vec![format!("{}, ..", Self::join_types(types, "/"))]
             }
-            TypeSignature::Uniform(arg_count, valid_types) => {
-                vec![std::iter::repeat(Self::join_types(valid_types, "/"))
-                    .take(*arg_count)
-                    .collect::<Vec<String>>()
-                    .join(", ")]
-            }
-            TypeSignature::Numeric(num) => {
-                vec![format!("Numeric({})", num)]
-            }
+            TypeSignature::Uniform(arg_count, valid_type) => match valid_type {
+                ValidType::Arbitrary(valid_types) => {
+                    vec![std::iter::repeat(Self::join_types(valid_types, "/"))
+                        .take(*arg_count)
+                        .collect::<Vec<String>>()
+                        .join(", ")]
+                }
+                ValidType::Numeric => {
+                    vec![format!("Numeric, .., Numeric")]
+                }
+                ValidType::Integer => {
+                    vec![format!("Integer, .., Integer")]
+                }
+                ValidType::String => {
+                    vec![format!("String, .., String")]
+                }
+                ValidType::FixedSizeListWildcard => {
+                    vec![format!("FixedSizeListWildcard, .., FixedSizeListWildcard")]
+                }
+            },
             TypeSignature::Exact(types) => {
                 vec![Self::join_types(types, ", ")]
             }
@@ -266,9 +283,30 @@ impl Signature {
         }
     }
 
-    pub fn numeric(num: usize, volatility: Volatility) -> Self {
+    pub fn uniform_numeric(num: usize, volatility: Volatility) -> Self {
         Self {
-            type_signature: TypeSignature::Numeric(num),
+            type_signature: TypeSignature::Uniform(num, ValidType::Numeric),
+            volatility,
+        }
+    }
+
+    pub fn uniform_string(num: usize, volatility: Volatility) -> Self {
+        Self {
+            type_signature: TypeSignature::Uniform(num, ValidType::String),
+            volatility,
+        }
+    }
+
+    pub fn uniform_fixed_size_list_wildcard(num: usize, volatility: Volatility) -> Self {
+        Self {
+            type_signature: TypeSignature::Uniform(num, ValidType::FixedSizeListWildcard),
+            volatility,
+        }
+    }
+
+    pub fn uniform_interger(num: usize, volatility: Volatility) -> Self {
+        Self {
+            type_signature: TypeSignature::Uniform(num, ValidType::Integer),
             volatility,
         }
     }
@@ -287,7 +325,10 @@ impl Signature {
         volatility: Volatility,
     ) -> Self {
         Self {
-            type_signature: TypeSignature::Uniform(arg_count, valid_types),
+            type_signature: TypeSignature::Uniform(
+                arg_count,
+                ValidType::Arbitrary(valid_types),
+            ),
             volatility,
         }
     }
@@ -366,12 +407,12 @@ mod tests {
         // Testing `TypeSignature`s which supports 0 arg
         let positive_cases = vec![
             TypeSignature::Exact(vec![]),
-            TypeSignature::Uniform(0, vec![DataType::Float64]),
+            TypeSignature::Uniform(0, ValidType::Arbitrary(vec![DataType::Float64])),
             TypeSignature::Any(0),
             TypeSignature::OneOf(vec![
                 TypeSignature::Exact(vec![DataType::Int8]),
                 TypeSignature::Any(0),
-                TypeSignature::Uniform(1, vec![DataType::Int8]),
+                TypeSignature::Uniform(1, ValidType::Arbitrary(vec![DataType::Int8])),
             ]),
         ];
 
@@ -386,12 +427,12 @@ mod tests {
         // Testing `TypeSignature`s which doesn't support 0 arg
         let negative_cases = vec![
             TypeSignature::Exact(vec![DataType::Utf8]),
-            TypeSignature::Uniform(1, vec![DataType::Float64]),
+            TypeSignature::Uniform(1, ValidType::Arbitrary(vec![DataType::Float64])),
             TypeSignature::Any(1),
             TypeSignature::VariadicAny,
             TypeSignature::OneOf(vec![
                 TypeSignature::Exact(vec![DataType::Int8]),
-                TypeSignature::Uniform(1, vec![DataType::Int8]),
+                TypeSignature::Uniform(1, ValidType::Arbitrary(vec![DataType::Int8])),
             ]),
         ];
 

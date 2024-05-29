@@ -15,11 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::sync::Arc;
-
-use crate::signature::{
-    ArrayFunctionSignature, FIXED_SIZE_LIST_WILDCARD, TIMEZONE_WILDCARD,
-};
+use crate::signature::{ArrayFunctionSignature, ValidType, TIMEZONE_WILDCARD};
+use crate::type_coercion::binary::string_coercion;
 use crate::{AggregateUDF, ScalarUDF, Signature, TypeSignature};
 use arrow::{
     compute::can_cast_types,
@@ -315,40 +312,117 @@ fn get_valid_types(
             .iter()
             .map(|valid_type| current_types.iter().map(|_| valid_type.clone()).collect())
             .collect(),
-        TypeSignature::Numeric(number) => {
-            if *number < 1 {
-                return plan_err!(
-                    "The signature expected at least one argument but received {}",
-                    current_types.len()
-                );
-            }
-            if *number != current_types.len() {
-                return plan_err!(
-                    "The signature expected {} arguments but received {}",
-                    number,
-                    current_types.len()
-                );
-            }
-
-            let mut valid_type = current_types.first().unwrap().clone();
-            for t in current_types.iter().skip(1) {
-                if let Some(coerced_type) = binary_numeric_coercion(&valid_type, t) {
-                    valid_type = coerced_type;
-                } else {
+        TypeSignature::Uniform(number, valid_type) => {
+            fn check_number_of_args(
+                expected_number: usize,
+                args_number: usize,
+            ) -> Result<()> {
+                if expected_number < 1 {
                     return plan_err!(
-                        "{} and {} are not coercible to a common numeric type",
-                        valid_type,
-                        t
+                        "The signature expected at least one argument but received {}",
+                        args_number
                     );
                 }
+                if expected_number != args_number {
+                    return plan_err!(
+                        "The signature expected {} arguments but received {}",
+                        expected_number,
+                        args_number
+                    );
+                }
+                Ok(())
             }
 
-            vec![vec![valid_type; *number]]
+            match valid_type {
+                ValidType::Arbitrary(valid_types) => valid_types
+                    .iter()
+                    .map(|valid_type| (0..*number).map(|_| valid_type.clone()).collect())
+                    .collect(),
+                ValidType::Numeric | ValidType::Integer => {
+                    check_number_of_args(*number, current_types.len())?;
+
+                    if *valid_type == ValidType::Integer
+                        && current_types.iter().any(|t| !t.is_integer())
+                    {
+                        return plan_err!(
+                            "The function expected integer arguments but received {:?}",
+                            current_types
+                        );
+                    }
+
+                    let mut valid_type = current_types.first().unwrap().clone();
+                    for t in current_types.iter().skip(1) {
+                        if let Some(coerced_type) =
+                            binary_numeric_coercion(&valid_type, t)
+                        {
+                            valid_type = coerced_type;
+                        }
+                        // Handle null coercion
+                        else if !t.is_null() && valid_type.is_null() {
+                            valid_type = t.clone();
+                        } else if t.is_null() && !valid_type.is_null() {
+                            // do nothing
+                        }
+                        // Handle numeric string coercion, actual validation is delegate to arrow::cast itself
+                        else if t == &DataType::Utf8 || t == &DataType::LargeUtf8 {
+                            // do nothing
+                        } else if (valid_type == DataType::Utf8
+                            || valid_type == DataType::LargeUtf8)
+                            && t.is_numeric()
+                        {
+                            valid_type = t.clone();
+                        } else {
+                            return plan_err!(
+                                "{} and {} are not coercible to a common numeric type",
+                                valid_type,
+                                t
+                            );
+                        }
+                    }
+
+                    vec![vec![valid_type; *number]]
+                }
+                ValidType::String => {
+                    check_number_of_args(*number, current_types.len())?;
+
+                    let mut valid_type = current_types.first().unwrap().clone();
+                    for t in current_types.iter().skip(1) {
+                        if let Some(coerced_type) = string_coercion(&valid_type, t) {
+                            valid_type = coerced_type;
+                        } else if !t.is_null() && valid_type.is_null() {
+                            valid_type = t.clone();
+                        } else if t.is_null() && !valid_type.is_null() {
+                            // do nothing
+                        } else {
+                            return plan_err!(
+                                "{} and {} are not coercible to a common string type",
+                                valid_type,
+                                t
+                            );
+                        }
+                    }
+
+                    vec![vec![valid_type; *number]]
+                }
+                ValidType::FixedSizeListWildcard => {
+                    check_number_of_args(*number, current_types.len())?;
+
+                    // make sure all the types are fixed size lists with same size, and any size is allowed
+                    let first_type = current_types.first().unwrap();
+                    if let DataType::FixedSizeList(_, size) = first_type {
+                        if current_types.iter().all(
+                            |t| matches!(t, DataType::FixedSizeList(_, s) if s == size),
+                        ) {
+                            vec![vec![first_type.clone(); *number]]
+                        } else {
+                            vec![vec![]]
+                        }
+                    } else {
+                        vec![vec![]]
+                    }
+                }
+            }
         }
-        TypeSignature::Uniform(number, valid_types) => valid_types
-            .iter()
-            .map(|valid_type| (0..*number).map(|_| valid_type.clone()).collect())
-            .collect(),
         TypeSignature::UserDefined => {
             return internal_err!(
             "User-defined signature should be handled by function-specific coerce_types."
@@ -597,21 +671,6 @@ fn coerced_from<'a>(
         {
             Some(type_into.clone())
         }
-        // should be able to coerce wildcard fixed size list to non wildcard fixed size list
-        (FixedSizeList(f_into, FIXED_SIZE_LIST_WILDCARD), _) => match type_from {
-            FixedSizeList(f_from, size_from) => {
-                match coerced_from(f_into.data_type(), f_from.data_type()) {
-                    Some(data_type) if &data_type != f_into.data_type() => {
-                        let new_field =
-                            Arc::new(f_into.as_ref().clone().with_data_type(data_type));
-                        Some(FixedSizeList(new_field, *size_from))
-                    }
-                    Some(_) => Some(FixedSizeList(f_into.clone(), *size_from)),
-                    _ => None,
-                }
-            }
-            _ => None,
-        },
         (Timestamp(unit, Some(tz)), _) if tz.as_ref() == TIMEZONE_WILDCARD => {
             match type_from {
                 Timestamp(_, Some(from_tz)) => {
@@ -638,6 +697,8 @@ fn coerced_from<'a>(
 
 #[cfg(test)]
 mod tests {
+
+    use std::sync::Arc;
 
     use crate::Volatility;
 
@@ -722,32 +783,34 @@ mod tests {
     #[test]
     fn test_fixed_list_wildcard_coerce() -> Result<()> {
         let inner = Arc::new(Field::new("item", DataType::Int32, false));
+        // try with size 2
         let current_types = vec![
             DataType::FixedSizeList(inner.clone(), 2), // able to coerce for any size
         ];
-
-        let signature = Signature::exact(
-            vec![DataType::FixedSizeList(
-                inner.clone(),
-                FIXED_SIZE_LIST_WILDCARD,
-            )],
-            Volatility::Stable,
-        );
-
+        let signature =
+            Signature::uniform_fixed_size_list_wildcard(1, Volatility::Immutable);
+        let coerced_data_types = data_types(&current_types, &signature).unwrap();
+        assert_eq!(coerced_data_types, current_types);
+        // try with size 3
+        let current_types = vec![
+            DataType::FixedSizeList(inner.clone(), 3), // able to coerce for any size
+        ];
+        let signature =
+            Signature::uniform_fixed_size_list_wildcard(1, Volatility::Immutable);
         let coerced_data_types = data_types(&current_types, &signature).unwrap();
         assert_eq!(coerced_data_types, current_types);
 
         // make sure it can't coerce to a different size
         let signature = Signature::exact(
-            vec![DataType::FixedSizeList(inner.clone(), 3)],
-            Volatility::Stable,
+            vec![DataType::FixedSizeList(inner.clone(), 4)],
+            Volatility::Immutable,
         );
         let coerced_data_types = data_types(&current_types, &signature);
         assert!(coerced_data_types.is_err());
 
         // make sure it works with the same type.
         let signature = Signature::exact(
-            vec![DataType::FixedSizeList(inner.clone(), 2)],
+            vec![DataType::FixedSizeList(inner.clone(), 3)],
             Volatility::Stable,
         );
         let coerced_data_types = data_types(&current_types, &signature).unwrap();
@@ -758,44 +821,31 @@ mod tests {
 
     #[test]
     fn test_nested_wildcard_fixed_size_lists() -> Result<()> {
-        let type_into = DataType::FixedSizeList(
-            Arc::new(Field::new(
-                "item",
-                DataType::FixedSizeList(
-                    Arc::new(Field::new("item", DataType::Int32, false)),
-                    FIXED_SIZE_LIST_WILDCARD,
-                ),
-                false,
-            )),
-            FIXED_SIZE_LIST_WILDCARD,
-        );
-
-        let type_from = DataType::FixedSizeList(
-            Arc::new(Field::new(
-                "item",
-                DataType::FixedSizeList(
-                    Arc::new(Field::new("item", DataType::Int8, false)),
-                    4,
-                ),
-                false,
-            )),
+        let inner = Arc::new(Field::new("item", DataType::Int32, false));
+        let fixed_size_list = DataType::FixedSizeList(inner.clone(), 2);
+        let fixed_size_2d_list = DataType::FixedSizeList(
+            Arc::new(Field::new("item", fixed_size_list.clone(), false)),
             3,
         );
 
-        assert_eq!(
-            coerced_from(&type_into, &type_from),
-            Some(DataType::FixedSizeList(
-                Arc::new(Field::new(
-                    "item",
-                    DataType::FixedSizeList(
-                        Arc::new(Field::new("item", DataType::Int32, false)),
-                        4,
-                    ),
-                    false,
-                )),
-                3,
-            ))
+        // try with size 2
+        let current_types = vec![
+            fixed_size_2d_list.clone(), // able to coerce for any size
+        ];
+        let signature =
+            Signature::uniform_fixed_size_list_wildcard(1, Volatility::Immutable);
+        let coerced_data_types = data_types(&current_types, &signature).unwrap();
+        assert_eq!(coerced_data_types, current_types);
+
+        // make sure it can't coerce to a different size
+        let fixed_size_list = DataType::FixedSizeList(inner.clone(), 5);
+        let fixed_size_2d_list = DataType::FixedSizeList(
+            Arc::new(Field::new("item", fixed_size_list.clone(), false)),
+            6,
         );
+        let signature = Signature::exact(vec![fixed_size_2d_list], Volatility::Immutable);
+        let coerced_data_types = data_types(&current_types, &signature);
+        assert!(coerced_data_types.is_err());
 
         Ok(())
     }

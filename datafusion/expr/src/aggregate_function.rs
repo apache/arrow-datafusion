@@ -308,10 +308,10 @@ impl AggregateFunction {
             AggregateFunction::BitAnd
             | AggregateFunction::BitOr
             | AggregateFunction::BitXor => {
-                Signature::uniform(1, INTEGERS.to_vec(), Volatility::Immutable)
+                Signature::uniform_interger(1, Volatility::Immutable)
             }
             AggregateFunction::BoolAnd | AggregateFunction::BoolOr => {
-                Signature::uniform(1, vec![DataType::Boolean], Volatility::Immutable)
+                Signature::exact(vec![DataType::Boolean], Volatility::Immutable)
             }
             AggregateFunction::Avg
             | AggregateFunction::Sum
@@ -320,7 +320,7 @@ impl AggregateFunction {
             | AggregateFunction::Stddev
             | AggregateFunction::StddevPop
             | AggregateFunction::ApproxMedian => {
-                Signature::uniform(1, NUMERICS.to_vec(), Volatility::Immutable)
+                Signature::uniform_numeric(1, Volatility::Immutable)
             }
             AggregateFunction::NthValue => Signature::any(2, Volatility::Immutable),
             AggregateFunction::Correlation
@@ -333,7 +333,7 @@ impl AggregateFunction {
             | AggregateFunction::RegrSXX
             | AggregateFunction::RegrSYY
             | AggregateFunction::RegrSXY => {
-                Signature::uniform(2, NUMERICS.to_vec(), Volatility::Immutable)
+                Signature::uniform_numeric(2, Volatility::Immutable)
             }
             AggregateFunction::ApproxPercentileCont => {
                 let mut variants =
@@ -369,7 +369,7 @@ impl AggregateFunction {
                 Volatility::Immutable,
             ),
             AggregateFunction::StringAgg => {
-                Signature::uniform(2, STRINGS.to_vec(), Volatility::Immutable)
+                Signature::uniform_string(2, Volatility::Immutable)
             }
         }
     }

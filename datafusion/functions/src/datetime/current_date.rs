@@ -40,7 +40,7 @@ impl Default for CurrentDateFunc {
 impl CurrentDateFunc {
     pub fn new() -> Self {
         Self {
-            signature: Signature::uniform(0, vec![], Volatility::Stable),
+            signature: Signature::any(0, Volatility::Stable),
             aliases: vec![String::from("today")],
         }
     }

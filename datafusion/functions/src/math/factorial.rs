@@ -40,7 +40,7 @@ impl Default for FactorialFunc {
 impl FactorialFunc {
     pub fn new() -> Self {
         Self {
-            signature: Signature::uniform(1, vec![Int64], Volatility::Immutable),
+            signature: Signature::exact(vec![Int64], Volatility::Immutable),
         }
     }
 }

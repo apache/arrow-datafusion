@@ -24,7 +24,7 @@ use arrow::array::{
     UInt8Array,
 };
 use arrow::datatypes::{DataType, Field};
-use datafusion_expr::TypeSignature;
+use datafusion_expr::{TypeSignature, ValidType};
 
 use datafusion_common::{plan_err, DataFusionError, Result};
 
@@ -176,8 +176,8 @@ impl StringToArray {
         Self {
             signature: Signature::one_of(
                 vec![
-                    TypeSignature::Uniform(2, vec![Utf8, LargeUtf8]),
-                    TypeSignature::Uniform(3, vec![Utf8, LargeUtf8]),
+                    TypeSignature::Uniform(2, ValidType::String),
+                    TypeSignature::Uniform(3, ValidType::String),
                 ],
                 Volatility::Immutable,
             ),
