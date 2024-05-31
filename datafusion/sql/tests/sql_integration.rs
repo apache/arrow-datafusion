@@ -29,7 +29,7 @@ use datafusion_common::{
 };
 use datafusion_expr::{col, table_scan};
 use datafusion_expr::{
-    logical_plan::{LogicalPlan, Prepare},
+    logical_plan::{DdlStatement, LogicalPlan, Prepare},
     AggregateUDF, ColumnarValue, ScalarUDF, ScalarUDFImpl, Signature, TableSource,
     Volatility, WindowUDF,
 };
@@ -1867,6 +1867,40 @@ fn create_external_table_with_pk() {
     let expected =
         "CreateExternalTable: Bare { table: \"t\" } constraints=[PrimaryKey([0])]";
     quick_test(sql, expected);
+}
+
+#[test]
+fn create_external_table_column_option() {
+    let sql = "CREATE EXTERNAL TABLE t(c1 int METADATA(foo='bar')) STORED AS CSV LOCATION 'foo.csv'";
+    let plan = logical_plan(sql);
+    let metadata = plan
+        .iter()
+        .filter_map(|plan| match plan {
+            LogicalPlan::Ddl(stmt) => Some(stmt),
+            _ => None,
+        })
+        .filter_map(|stmt| match stmt {
+            DdlStatement::CreateExternalTable(cet) => Some(cet),
+            _ => None,
+        })
+        .flat_map(|cet| {
+            cet.schema
+                .fields()
+                .iter()
+                .filter_map(|field| {
+                    if !field.metadata().is_empty() {
+                        Some(field.metadata())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let expect = HashMap::from([("sql_option.foo".to_owned(), "'bar'".to_owned())]);
+    assert_eq!(metadata.len(), 1);
+    assert_eq!(metadata[0], &expect);
 }
 
 #[test]

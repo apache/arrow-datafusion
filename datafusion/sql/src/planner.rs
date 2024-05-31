@@ -253,11 +253,29 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 .options
                 .iter()
                 .any(|x| x.option == ColumnOption::NotNull);
-            fields.push(Field::new(
-                self.normalizer.normalize(column.name),
-                data_type,
-                !not_nullable,
-            ));
+            let metadata = column
+                .options
+                .iter()
+                .filter_map(|opt| match opt.option {
+                    ColumnOption::Options(ref opts) => Some(opts.clone()),
+                    _ => None,
+                })
+                .fold(HashMap::<String, String>::new(), |meta, opts| {
+                    opts.iter().fold(meta, |mut meta, opt| {
+                        let key = format!("sql_option.{}", opt.name.value);
+                        let val = format!("{}", opt.value);
+                        meta.insert(key, val);
+                        meta
+                    })
+                });
+            fields.push(
+                Field::new(
+                    self.normalizer.normalize(column.name),
+                    data_type,
+                    !not_nullable,
+                )
+                .with_metadata(metadata),
+            );
         }
 
         Ok(Schema::new(fields))

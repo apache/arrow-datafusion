@@ -22,7 +22,7 @@ use std::fmt;
 
 use sqlparser::{
     ast::{
-        ColumnDef, ColumnOptionDef, ObjectName, OrderByExpr, Query,
+        ColumnDef, ColumnOption, ColumnOptionDef, ObjectName, OrderByExpr, Query,
         Statement as SQLStatement, TableConstraint, Value,
     },
     dialect::{keywords::Keyword, Dialect, GenericDialect},
@@ -667,6 +667,13 @@ impl<'a> DFParser<'a> {
                 }
             } else if let Some(option) = self.parser.parse_optional_column_option()? {
                 options.push(ColumnOptionDef { name: None, option });
+            } else if self.parser.parse_keyword(Keyword::METADATA) {
+                self.parser.prev_token();
+                let metadata = self.parser.parse_options(Keyword::METADATA)?;
+                options.push(ColumnOptionDef {
+                    name: None,
+                    option: ColumnOption::Options(metadata),
+                });
             } else {
                 break;
             };
