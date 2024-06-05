@@ -17,7 +17,8 @@
 
 use arrow::array::ArrayRef;
 use arrow::datatypes::DataType;
-use datafusion_common::{Result, ScalarValue};
+use bitflags::bitflags;
+use datafusion_common::{DataFusionError, Result, ScalarValue};
 use datafusion_expr::{ColumnarValue, ScalarFunctionImplementation};
 use datafusion_physical_expr::functions::Hint;
 use std::sync::Arc;
@@ -179,4 +180,50 @@ pub mod test {
 
     #[allow(unused_imports)]
     pub(crate) use test_function;
+}
+
+bitflags! {
+    /// Represents the position of the Scalar in args.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub(crate) struct ScalarFlags: u8 {
+        // There are no Scalars in the args
+        const None = 0b00000000;
+
+        // Represents the 1th arg is Scalar
+        const A = 0b00000001;
+        // Represents the 2th arg is Scalar
+        const B = 0b00000010;
+        // Represents the 3th arg is Scalar
+        const C = 0b00000100;
+        // Represents the 4th arg is Scalar
+        const D = 0b00001000;
+
+        const AB = Self::A.bits() | Self::B.bits();
+        const AC = Self::A.bits() | Self::C.bits();
+        const AD = Self::A.bits() | Self::D.bits();
+        const BC = Self::B.bits() | Self::C.bits();
+        const BD = Self::B.bits() | Self::D.bits();
+        const CD = Self::C.bits() | Self::D.bits();
+
+        const ABC = Self::A.bits() | Self::B.bits() | Self::C.bits();
+        const ABD = Self::A.bits() | Self::B.bits() | Self::D.bits();
+        const ACD = Self::A.bits() | Self::C.bits() | Self::D.bits();
+        const BCD = Self::B.bits() | Self::C.bits() | Self::D.bits();
+
+        const ABCD = Self::A.bits() | Self::B.bits() | Self::C.bits() | Self::D.bits();
+    }
+}
+
+impl ScalarFlags {
+    pub fn try_create(args: &[ArrayRef]) -> Result<Self> {
+        let mut flag: u8 = 0;
+        args.iter().enumerate().for_each(|(i, arg)| {
+            if arg.len() == 1 {
+                flag |= 1 << i;
+            }
+        });
+        Self::from_bits(flag).ok_or_else(|| {
+            DataFusionError::Execution(format!("Unsupported ScalarFlags: {}", flag))
+        })
+    }
 }

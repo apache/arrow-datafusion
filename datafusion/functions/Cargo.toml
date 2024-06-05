@@ -66,6 +66,7 @@ path = "src/lib.rs"
 
 [dependencies]
 arrow = { workspace = true }
+bitflags = "2.5.0"
 base64 = { version = "0.22", optional = true }
 blake2 = { version = "^0.10.2", optional = true }
 blake3 = { version = "1.0", optional = true }
@@ -140,4 +141,9 @@ required-features = ["string_expressions"]
 [[bench]]
 harness = false
 name = "upper"
+required-features = ["string_expressions"]
+
+[[bench]]
+harness = false
+name = "overlay"
 required-features = ["string_expressions"]

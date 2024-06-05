@@ -406,3 +406,237 @@ macro_rules! make_function_inputs2 {
             .collect::<$ARRAY_TYPE1>()
     }};
 }
+
+macro_rules! array_iter {
+    ($ARRAY:expr) => {{
+        $ARRAY.iter()
+    }};
+}
+
+macro_rules! scalar_iter {
+    ($ARRAY:expr) => {{
+        let value = if $ARRAY.is_null(0) {
+            None
+        } else {
+            Some($ARRAY.value(0))
+        };
+        std::iter::repeat(value)
+    }};
+}
+
+macro_rules! make_function_3args {
+    (ScalarFlags::None, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(array_iter!($ARG0), array_iter!($ARG1), array_iter!($ARG2))
+    };
+    (ScalarFlags::A, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(scalar_iter!($ARG0), array_iter!($ARG1), array_iter!($ARG2))
+    };
+    (ScalarFlags::B, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(array_iter!($ARG0), scalar_iter!($ARG1), array_iter!($ARG2))
+    };
+    (ScalarFlags::C, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(array_iter!($ARG0), array_iter!($ARG1), scalar_iter!($ARG2))
+    };
+    (ScalarFlags::AB, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(scalar_iter!($ARG0), scalar_iter!($ARG1), array_iter!($ARG2))
+    };
+    (ScalarFlags::AC, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(scalar_iter!($ARG0), array_iter!($ARG1), scalar_iter!($ARG2))
+    };
+    (ScalarFlags::BC, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(array_iter!($ARG0), scalar_iter!($ARG1), scalar_iter!($ARG2))
+    };
+    (ScalarFlags::ABC, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        $FUNC(array_iter!($ARG0), array_iter!($ARG1), array_iter!($ARG2))
+    };
+}
+
+macro_rules! make_function_4args {
+    (ScalarFlags::None, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            array_iter!($ARG1),
+            array_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::A, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            scalar_iter!($ARG0),
+            array_iter!($ARG1),
+            array_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::B, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            scalar_iter!($ARG1),
+            array_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::C, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            array_iter!($ARG1),
+            scalar_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::D, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            array_iter!($ARG1),
+            array_iter!($ARG2),
+            scalar_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::AB, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            scalar_iter!($ARG0),
+            scalar_iter!($ARG1),
+            array_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::AC, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            scalar_iter!($ARG0),
+            array_iter!($ARG1),
+            scalar_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::AD, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            scalar_iter!($ARG0),
+            array_iter!($ARG1),
+            array_iter!($ARG2),
+            scalar_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::BC, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            scalar_iter!($ARG1),
+            scalar_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::BD, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            scalar_iter!($ARG1),
+            array_iter!($ARG2),
+            scalar_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::CD, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            array_iter!($ARG1),
+            scalar_iter!($ARG2),
+            scalar_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::ABC, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            scalar_iter!($ARG0),
+            scalar_iter!($ARG1),
+            scalar_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::ABD, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            scalar_iter!($ARG0),
+            scalar_iter!($ARG1),
+            array_iter!($ARG2),
+            scalar_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::ACD, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            scalar_iter!($ARG0),
+            array_iter!($ARG1),
+            scalar_iter!($ARG2),
+            scalar_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::BCD, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        $FUNC(
+            array_iter!($ARG0),
+            scalar_iter!($ARG1),
+            scalar_iter!($ARG2),
+            scalar_iter!($ARG3),
+        )
+    };
+    (ScalarFlags::ABCD, $FUNC:ident, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        // all args use array_iter
+        $FUNC(
+            array_iter!($ARG0),
+            array_iter!($ARG1),
+            array_iter!($ARG2),
+            array_iter!($ARG3),
+        )
+    };
+}
+
+macro_rules! invoke_function_impl {
+    ($FLAG:expr, $FUNC:expr, $ARG0:expr, $ARG1:expr, $ARG2:expr, [$($FLAG_ITEM:tt),+]) => {
+        match $FLAG {
+            $(ScalarFlags::$FLAG_ITEM => {
+                let func = $FUNC;
+                make_function_3args!(
+                    ScalarFlags::$FLAG_ITEM,
+                    func,
+                    $ARG0,
+                    $ARG1,
+                    $ARG2
+                )
+            }),+
+            _ => unreachable!("{:?}", $FLAG),
+        }
+    };
+    ($FLAG:expr, $FUNC:expr, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr, [$($FLAG_ITEM:tt),+]) => {
+        match $FLAG {
+            $(ScalarFlags::$FLAG_ITEM => {
+                let func = $FUNC;
+                make_function_4args!(
+                    ScalarFlags::$FLAG_ITEM,
+                    func,
+                    $ARG0,
+                    $ARG1,
+                    $ARG2,
+                    $ARG3
+                )
+            }),+
+            _ => unreachable!("{:?}", $FLAG),
+        }
+    };
+}
+
+macro_rules! invoke_function {
+    ($FLAG:expr, $FUNC:expr, $ARG0:expr, $ARG1:expr, $ARG2:expr) => {
+        invoke_function_impl!(
+            $FLAG,
+            $FUNC,
+            $ARG0,
+            $ARG1,
+            $ARG2,
+            [None, A, B, C, AB, AC, BC, ABC]
+        )
+    };
+    ($FLAG:expr, $FUNC:expr, $ARG0:expr, $ARG1:expr, $ARG2:expr, $ARG3:expr) => {
+        invoke_function_impl!(
+            $FLAG,
+            $FUNC,
+            $ARG0,
+            $ARG1,
+            $ARG2,
+            $ARG3,
+            [None, A, B, C, D, AB, AC, AD, BC, BD, CD, ABC, ABD, ACD, BCD, ABCD]
+        )
+    };
+}
