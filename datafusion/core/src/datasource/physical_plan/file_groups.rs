@@ -256,7 +256,7 @@ impl FileGroupPartitioner {
                 },
             )
             .flatten()
-            .group_by(|(partition_idx, _)| *partition_idx)
+            .chunk_by(|(partition_idx, _)| *partition_idx)
             .into_iter()
             .map(|(_, group)| group.map(|(_, vals)| vals).collect_vec())
             .collect_vec();
