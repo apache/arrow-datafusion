@@ -1,0 +1,9 @@
+select count(*) from "hf://datasets/cais/mmlu/astronomy/dev-00000-of-00001.parquet";
+
+select count(*) from "hf://datasets/cais/mmlu@~parquet/astronomy/test/0000.parquet";
+
+create external table test stored as parquet location "hf://datasets/cais/mmlu/astronomy/";
+SELECT count(*) FROM test;
+
+create external table test_revision stored as parquet location "hf://datasets/cais/mmlu@~parquet/astronomy/test/";
+SELECT count(*) FROM test_revision;

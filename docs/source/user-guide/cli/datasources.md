@@ -347,3 +347,60 @@ Supported configuration options are:
 | `GOOGLE_APPLICATION_CREDENTIALS` | `gcp.application_credentials_path` | location of application credentials file |
 | `GOOGLE_BUCKET`                  |                                    | bucket name                              |
 | `GOOGLE_BUCKET_NAME`             |                                    | (alias) bucket name                      |
+
+## Hugging Face
+
+The `datafusion-cli` supports querying datasets from the [Hugging Face Hub](https://huggingface.co/datasets) for both public and private datasets.
+
+For example, to query directly a public dataset from the Hugging Face Hub:
+
+```sql
+SELECT question, answer
+FROM "hf://datasets/cais/mmlu/astronomy/dev-00000-of-00001.parquet";
+```
+
+It is also possible to query a list of files from a dataset:
+
+```sql
+CREATE EXTERNAL TABLE astronomy
+STORED AS parquet
+LOCATION "hf://datasets/cais/mmlu/astronomy/";
+```
+
+and then
+
+```sql
+SELECT question, answer
+FROM astronomy;
+```
+
+To query a private dataset, you need to set the either the hf.user_access_token or the HF_USER_ACCESS_TOKEN environment variable:
+
+```sql
+CREATE EXTERNAL TABLE astronomy
+OPTIONS (
+    'hf.user_access_token' '******'
+)
+STORED AS parquet
+LOCATION "hf://datasets/cais/mmlu/astronomy/";
+```
+
+or
+
+```bash
+$ export HF_USER_ACCESS_TOKEN=******
+
+$ datafusion-cli
+DataFusion CLI v38.0.0
+
+> CREATE EXTERNAL TABLE astronomy
+STORED AS parquet
+LOCATION "hf://datasets/cais/mmlu/astronomy/";
+```
+
+Supported configuration options are:
+
+| Environment Variable   | Configuration Option   | Description                    |
+| ---------------------- | ---------------------- | ------------------------------ |
+| `HF_ENDPOINT`          | `hf.endpoint`          | Hugging Face endpoint          |
+| `HF_USER_ACCESS_TOKEN` | `hf.user_access_token` | Hugging Face user access token |

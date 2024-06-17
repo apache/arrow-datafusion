@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::fs;
 use std::process::Command;
 
 use assert_cmd::prelude::{CommandCargoExt, OutputAssertExt};
@@ -55,4 +56,42 @@ fn cli_quick_test<'a>(
     let mut cmd = Command::cargo_bin("datafusion-cli").unwrap();
     cmd.args(args);
     cmd.assert().stdout(predicate::eq(expected));
+}
+
+// Disabled due to https://github.com/apache/datafusion/issues/10793
+// $ ./target/debug/datafusion-cli.exe --file tests/data/hf_store_sql.txt --format json
+// DataFusion CLI v39.0.0
+//
+// thread 'main' has overflowed its stack
+#[cfg(not(target_family = "windows"))]
+#[rstest]
+#[case::exec_hf_store_test(
+    ["--file", "tests/data/hf_store_sql.txt", "--format", "json", "-q"],
+    "tests/data/hf_store_expected.jsonl",
+)]
+#[test]
+fn cli_hf_store_test<'a>(
+    #[case] args: impl IntoIterator<Item = &'a str>,
+    #[case] expected_file: &str,
+) {
+    let mut cmd = Command::cargo_bin("datafusion-cli").unwrap();
+    cmd.args(args);
+
+    let actual: Vec<serde_json::Value> = serde_json::Deserializer::from_str(
+        String::from_utf8(cmd.assert().get_output().stdout.to_vec())
+            .unwrap()
+            .as_str(),
+    )
+    .into_iter::<serde_json::Value>()
+    .collect::<Result<Vec<serde_json::Value>, _>>()
+    .unwrap();
+
+    let expected: Vec<serde_json::Value> = serde_json::Deserializer::from_str(
+        fs::read_to_string(expected_file).unwrap().as_str(),
+    )
+    .into_iter::<serde_json::Value>()
+    .collect::<Result<Vec<serde_json::Value>, _>>()
+    .unwrap();
+
+    assert_eq!(actual, expected);
 }

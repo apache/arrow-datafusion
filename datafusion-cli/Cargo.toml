@@ -48,12 +48,16 @@ datafusion = { path = "../datafusion/core", version = "39.0.0", features = [
 dirs = "4.0.0"
 env_logger = "0.9"
 futures = "0.3"
+http = "1.1.0"
 mimalloc = { version = "0.1", default-features = false }
 object_store = { version = "0.10.1", features = ["aws", "gcp", "http"] }
 parking_lot = { version = "0.12" }
 parquet = { version = "52.0.0", default-features = false }
 regex = "1.8"
 rustyline = "11.0"
+serde = "1.0.117"
+serde_json = "1.0.117"
+snafu = "0.7"
 tokio = { version = "1.24", features = ["macros", "rt", "rt-multi-thread", "sync", "parking_lot", "signal"] }
 url = "2.2"
 

@@ -1190,6 +1190,7 @@ dependencies = [
  "dirs",
  "env_logger",
  "futures",
+ "http 1.1.0",
  "mimalloc",
  "object_store",
  "parking_lot",
@@ -1198,6 +1199,9 @@ dependencies = [
  "regex",
  "rstest",
  "rustyline",
+ "serde",
+ "serde_json",
+ "snafu",
  "tokio",
  "url",
 ]

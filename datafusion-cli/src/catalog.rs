@@ -18,6 +18,7 @@
 use std::any::Any;
 use std::sync::{Arc, Weak};
 
+use crate::hf_store::HFOptions;
 use crate::object_storage::{get_object_store, AwsOptions, GcpOptions};
 
 use datafusion::catalog::schema::SchemaProvider;
@@ -182,6 +183,9 @@ impl SchemaProvider for DynamicFileSchemaProvider {
                     }
                     "gs" | "gcs" => {
                         state = state.add_table_options_extension(GcpOptions::default())
+                    }
+                    "hf" => {
+                        state = state.add_table_options_extension(HFOptions::default());
                     }
                     _ => {}
                 };

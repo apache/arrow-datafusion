@@ -35,6 +35,8 @@ use object_store::http::HttpBuilder;
 use object_store::{CredentialProvider, ObjectStore};
 use url::Url;
 
+use crate::hf_store::{get_hf_object_store_builder, HFOptions};
+
 pub async fn get_s3_object_store_builder(
     url: &Url,
     aws_options: &AwsOptions,
@@ -429,6 +431,10 @@ pub(crate) fn register_options(ctx: &SessionContext, scheme: &str) {
             // Register GCP specific table options in the session context:
             ctx.register_table_options_extension(GcpOptions::default())
         }
+        "hf" => {
+            // Register HF specific table options in the session context:
+            ctx.register_table_options_extension(HFOptions::default())
+        }
         // For unsupported schemes, do nothing:
         _ => {}
     }
@@ -475,6 +481,16 @@ pub(crate) async fn get_object_store(
                 );
             };
             let builder = get_gcs_object_store_builder(url, options)?;
+            Arc::new(builder.build()?)
+        }
+        "hf" => {
+            let Some(options) = table_options.extensions.get::<HFOptions>() else {
+                return exec_err!(
+                    "Given table options incompatible with the 'hf' scheme"
+                );
+            };
+
+            let builder = get_hf_object_store_builder(url, options)?;
             Arc::new(builder.build()?)
         }
         "http" | "https" => Arc::new(
