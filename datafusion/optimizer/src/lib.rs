@@ -49,6 +49,7 @@ pub mod propagate_empty_relation;
 pub mod push_down_filter;
 pub mod push_down_limit;
 pub mod replace_distinct_aggregate;
+pub mod rewrite_cycle;
 pub mod rewrite_disjunctive_predicate;
 pub mod scalar_subquery_to_join;
 pub mod simplify_expressions;

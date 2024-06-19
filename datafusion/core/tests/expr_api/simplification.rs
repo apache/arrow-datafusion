@@ -512,27 +512,34 @@ fn test_simplify(input_expr: Expr, expected_expr: Expr) {
         "Mismatch evaluating {input_expr}\n  Expected:{expected_expr}\n  Got:{simplified_expr}"
     );
 }
-fn test_simplify_with_cycle_count(
+fn test_simplify_with_cycle_info(
     input_expr: Expr,
     expected_expr: Expr,
-    expected_count: u32,
+    expected_cycle_count: usize,
+    expected_iteration_count: usize,
 ) {
     let info: MyInfo = MyInfo {
         schema: expr_test_schema(),
         execution_props: ExecutionProps::new(),
     };
     let simplifier = ExprSimplifier::new(info);
-    let (simplified_expr, count) = simplifier
-        .simplify_with_cycle_count(input_expr.clone())
+    let (simplified_expr, info) = simplifier
+        .simplify_with_cycle_info(input_expr.clone())
         .expect("successfully evaluated");
 
+    let total_iterations = info.total_iterations();
+    let completed_cycles = info.completed_cycles();
     assert_eq!(
         simplified_expr, expected_expr,
         "Mismatch evaluating {input_expr}\n  Expected:{expected_expr}\n  Got:{simplified_expr}"
     );
     assert_eq!(
-        count, expected_count,
-        "Mismatch simplifier cycle count\n Expected: {expected_count}\n Got:{count}"
+        completed_cycles, expected_cycle_count,
+        "Mismatch simplifier cycle count\n Expected: {expected_cycle_count}\n Got:{completed_cycles}"
+    );
+    assert_eq!(
+        total_iterations, expected_iteration_count,
+        "Mismatch simplifier cycle count\n Expected: {expected_iteration_count}\n Got:{total_iterations}"
     );
 }
 
@@ -691,5 +698,5 @@ fn test_simplify_cycles() {
     let expr = cast(now(), DataType::Int64)
         .lt(cast(to_timestamp(vec![lit(0)]), DataType::Int64) + lit(i64::MAX));
     let expected = lit(true);
-    test_simplify_with_cycle_count(expr, expected, 3);
+    test_simplify_with_cycle_info(expr, expected, 2, 7);
 }
