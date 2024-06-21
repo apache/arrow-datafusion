@@ -1640,7 +1640,7 @@ mod test {
         \n    Projection: test.a + test.b AS __common_expr_1, test.a, test.b, test.c\
         \n      Projection: test.a, test.b, test.c\
         \n        TableScan: test";
-        assert_optimized_plan_eq(expected, &plan, Some(config));
+        assert_optimized_plan_eq(expected, plan, Some(config));
 
         Ok(())
     }
