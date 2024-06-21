@@ -582,7 +582,11 @@ impl TreeNodeRecursion {
 
 /// Result of tree walk / transformation APIs
 ///
-/// API users control the transformation by returning:
+/// `Transformed` is a wrapper around the tree node data (e.g. `Expr` or
+/// `LogicalPlan`). It is used to indicate whether the node was transformed
+/// and how the recursion should proceed.
+///
+/// [`TreeNode`] API users control the transformation by returning:
 /// - The resulting (possibly transformed) node,
 /// - `transformed`: flag indicating whether any change was made to the node
 /// - `tnr`: [`TreeNodeRecursion`] specifying how to proceed with the recursion.
@@ -592,7 +596,66 @@ impl TreeNodeRecursion {
 /// - `transformed`: flag indicating whether any change was made to the node
 /// - `tnr`: [`TreeNodeRecursion`] specifying how the recursion ended.
 ///
-/// Example APIs:
+/// See also
+/// * [`Transformed::update_data`] to modify the node without changing the `transformed` flag
+/// * [`Transformed::map_data`] for fallable operation that return the same type
+/// * [`Transformed::transform_data`] to chain fallable transformations
+/// * [`TransformedResult`] for working with `Result<Transformed<U>>`
+///
+/// # Examples
+///
+/// Use [`Transformed::yes`] and [`Transformed::no`] to signal that a node was
+/// rewritten and the recursion should continue:
+///
+/// ```
+/// # use datafusion_common::tree_node::Transformed;
+/// # // note use i64 instead of Expr as Expr is not in datafusion-common
+/// # fn orig_expr() -> i64 { 1 }
+/// # fn make_new_expr(i: i64) -> i64 { 2 }
+/// let expr = orig_expr();
+///
+/// // Create a new `Transformed` object signaling the node was not rewritten
+/// let ret = Transformed::no(expr.clone());
+/// assert!(!ret.transformed);
+///
+/// // Create a new `Transformed` object signaling the node was rewritten
+/// let ret = Transformed::yes(expr);
+/// assert!(ret.transformed)
+/// ```
+///
+/// Access the node within the `Transformed` object:
+/// ```
+/// # use datafusion_common::tree_node::Transformed;
+/// # // note use i64 instead of Expr as Expr is not in datafusion-common
+/// # fn orig_expr() -> i64 { 1 }
+/// # fn make_new_expr(i: i64) -> i64 { 2 }
+/// let expr = orig_expr();
+///
+/// // `Transformed` object signaling the node was not rewritten
+/// let ret = Transformed::no(expr.clone());
+/// // Access the inner object using .data
+/// assert_eq!(expr, ret.data);
+/// ```
+///
+/// Transform the node within the `Transformed` object.
+///
+/// ```
+/// # use datafusion_common::tree_node::Transformed;
+/// # // note use i64 instead of Expr as Expr is not in datafusion-common
+/// # fn orig_expr() -> i64 { 1 }
+/// # fn make_new_expr(i: i64) -> i64 { 2 }
+/// let expr = orig_expr();
+/// let ret = Transformed::no(expr.clone())
+///   .transform_data(|expr| {
+///    // closure returns a result and potentially transforms the node
+///    // in this example, it does transform the node
+///    let new_expr = make_new_expr(expr);
+///    Ok(Transformed::yes(new_expr))
+///  }).unwrap();
+/// // transformed flag is the union of the original ans closure's  transformed flag
+/// assert!(ret.transformed);
+/// ```
+/// # Example APIs that use `TreeNode`
 /// - [`TreeNode`],
 /// - [`TreeNode::rewrite`],
 /// - [`TreeNode::transform_down`],
@@ -613,6 +676,11 @@ impl<T> Transformed<T> {
             transformed,
             tnr,
         }
+    }
+
+    /// Create a `Transformed` with `transformed and [`TreeNodeRecursion::Continue`].
+    pub fn new_transformed(data: T, transformed: bool) -> Self {
+        Self::new(data, transformed, TreeNodeRecursion::Continue)
     }
 
     /// Wrapper for transformed data with [`TreeNodeRecursion::Continue`] statement.
@@ -828,6 +896,22 @@ macro_rules! map_until_stop_and_collect {
 }
 
 /// Transformation helper to access [`Transformed`] fields in a [`Result`] easily.
+///
+/// # Example
+/// Access the internal data of a `Result<Transformed<T>>`
+/// as a `Result<T>` using the `data` method:
+/// ```
+/// # use datafusion_common::Result;
+/// # use datafusion_common::tree_node::{Transformed, TransformedResult};
+/// # // note use i64 instead of Expr as Expr is not in datafusion-common
+/// # fn update_expr() -> i64 { 1 }
+/// # fn main() -> Result<()> {
+/// let transformed: Result<Transformed<_>> = Ok(Transformed::yes(update_expr()));
+/// // access the internal data of the transformed result, or return the error
+/// let transformed_expr = transformed.data()?;
+/// # Ok(())
+/// # }
+/// ```
 pub trait TransformedResult<T> {
     fn data(self) -> Result<T>;
 

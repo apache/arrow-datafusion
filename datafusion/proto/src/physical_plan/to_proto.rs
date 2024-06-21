@@ -23,10 +23,10 @@ use datafusion::datasource::file_format::parquet::ParquetSink;
 use datafusion::physical_expr::window::{NthValueKind, SlidingAggregateWindowExpr};
 use datafusion::physical_expr::{PhysicalSortExpr, ScalarFunctionExpr};
 use datafusion::physical_plan::expressions::{
-    ArrayAgg, Avg, BinaryExpr, BoolAnd, BoolOr, CaseExpr, CastExpr, Column, Correlation,
-    CumeDist, DistinctArrayAgg, Grouping, InListExpr, IsNotNullExpr, IsNullExpr, Literal,
-    Max, Min, NegativeExpr, NotExpr, NthValue, NthValueAgg, Ntile,
-    OrderSensitiveArrayAgg, Rank, RankType, RowNumber, TryCastExpr, WindowShift,
+    ArrayAgg, Avg, BinaryExpr, CaseExpr, CastExpr, Column, Correlation, CumeDist,
+    DistinctArrayAgg, Grouping, InListExpr, IsNotNullExpr, IsNullExpr, Literal, Max, Min,
+    NegativeExpr, NotExpr, NthValue, NthValueAgg, Ntile, OrderSensitiveArrayAgg, Rank,
+    RankType, RowNumber, TryCastExpr, WindowShift,
 };
 use datafusion::physical_plan::udaf::AggregateFunctionExpr;
 use datafusion::physical_plan::windows::{BuiltInWindowExpr, PlainAggregateWindowExpr};
@@ -240,10 +240,6 @@ fn aggr_expr_to_aggr_fn(expr: &dyn AggregateExpr) -> Result<AggrFn> {
 
     let inner = if aggr_expr.downcast_ref::<Grouping>().is_some() {
         protobuf::AggregateFunction::Grouping
-    } else if aggr_expr.downcast_ref::<BoolAnd>().is_some() {
-        protobuf::AggregateFunction::BoolAnd
-    } else if aggr_expr.downcast_ref::<BoolOr>().is_some() {
-        protobuf::AggregateFunction::BoolOr
     } else if aggr_expr.downcast_ref::<ArrayAgg>().is_some() {
         protobuf::AggregateFunction::ArrayAgg
     } else if aggr_expr.downcast_ref::<DistinctArrayAgg>().is_some() {

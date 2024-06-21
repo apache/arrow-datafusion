@@ -47,10 +47,6 @@ pub enum AggregateFunction {
     Correlation,
     /// Grouping
     Grouping,
-    /// Bool And
-    BoolAnd,
-    /// Bool Or
-    BoolOr,
 }
 
 impl AggregateFunction {
@@ -64,8 +60,6 @@ impl AggregateFunction {
             NthValue => "NTH_VALUE",
             Correlation => "CORR",
             Grouping => "GROUPING",
-            BoolAnd => "BOOL_AND",
-            BoolOr => "BOOL_OR",
         }
     }
 }
@@ -82,8 +76,6 @@ impl FromStr for AggregateFunction {
         Ok(match name {
             // general
             "avg" => AggregateFunction::Avg,
-            "bool_and" => AggregateFunction::BoolAnd,
-            "bool_or" => AggregateFunction::BoolOr,
             "max" => AggregateFunction::Max,
             "mean" => AggregateFunction::Avg,
             "min" => AggregateFunction::Min,
@@ -127,9 +119,6 @@ impl AggregateFunction {
                 // For min and max agg function, the returned type is same as input type.
                 // The coerced_data_types is same with input_types.
                 Ok(coerced_data_types[0].clone())
-            }
-            AggregateFunction::BoolAnd | AggregateFunction::BoolOr => {
-                Ok(DataType::Boolean)
             }
             AggregateFunction::Correlation => {
                 correlation_return_type(&coerced_data_types[0])
@@ -179,10 +168,6 @@ impl AggregateFunction {
                     .collect::<Vec<_>>();
                 Signature::uniform(1, valid, Volatility::Immutable)
             }
-            AggregateFunction::BoolAnd | AggregateFunction::BoolOr => {
-                Signature::uniform(1, vec![DataType::Boolean], Volatility::Immutable)
-            }
-
             AggregateFunction::Avg => {
                 Signature::uniform(1, NUMERICS.to_vec(), Volatility::Immutable)
             }

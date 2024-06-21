@@ -90,6 +90,7 @@ enum Scenario {
     /// -MIN, -100, -1, 0, 1, 100, MAX
     NumericLimits,
     Float16,
+    Float32,
     Float64,
     Decimal,
     Decimal256,
@@ -586,6 +587,12 @@ fn make_f64_batch(v: Vec<f64>) -> RecordBatch {
     RecordBatch::try_new(schema, vec![array.clone()]).unwrap()
 }
 
+fn make_f32_batch(v: Vec<f32>) -> RecordBatch {
+    let schema = Arc::new(Schema::new(vec![Field::new("f", DataType::Float32, true)]));
+    let array = Arc::new(Float32Array::from(v)) as ArrayRef;
+    RecordBatch::try_new(schema, vec![array.clone()]).unwrap()
+}
+
 fn make_f16_batch(v: Vec<f16>) -> RecordBatch {
     let schema = Arc::new(Schema::new(vec![Field::new("f", DataType::Float16, true)]));
     let array = Arc::new(Float16Array::from(v)) as ArrayRef;
@@ -1001,6 +1008,14 @@ fn create_data_batch(scenario: Scenario) -> Vec<RecordBatch> {
                         .map(f16::from_f32)
                         .collect(),
                 ),
+            ]
+        }
+        Scenario::Float32 => {
+            vec![
+                make_f32_batch(vec![-5.0, -4.0, -3.0, -2.0, -1.0]),
+                make_f32_batch(vec![-4.0, -3.0, -2.0, -1.0, 0.0]),
+                make_f32_batch(vec![0.0, 1.0, 2.0, 3.0, 4.0]),
+                make_f32_batch(vec![5.0, 6.0, 7.0, 8.0, 9.0]),
             ]
         }
         Scenario::Float64 => {

@@ -66,16 +66,6 @@ pub fn create_aggregate_expr(
             name,
             data_type,
         )),
-        (AggregateFunction::BoolAnd, _) => Arc::new(expressions::BoolAnd::new(
-            input_phy_exprs[0].clone(),
-            name,
-            data_type,
-        )),
-        (AggregateFunction::BoolOr, _) => Arc::new(expressions::BoolOr::new(
-            input_phy_exprs[0].clone(),
-            name,
-            data_type,
-        )),
         (AggregateFunction::ArrayAgg, false) => {
             let expr = input_phy_exprs[0].clone();
             let nullable = expr.nullable(input_schema)?;
@@ -165,9 +155,7 @@ mod tests {
     use datafusion_common::plan_err;
     use datafusion_expr::{type_coercion, Signature};
 
-    use crate::expressions::{
-        try_cast, ArrayAgg, Avg, BoolAnd, BoolOr, DistinctArrayAgg, Max, Min,
-    };
+    use crate::expressions::{try_cast, ArrayAgg, Avg, DistinctArrayAgg, Max, Min};
 
     use super::*;
     #[test]
@@ -268,48 +256,6 @@ mod tests {
                     }
                     AggregateFunction::Max => {
                         assert!(result_agg_phy_exprs.as_any().is::<Max>());
-                        assert_eq!("c1", result_agg_phy_exprs.name());
-                        assert_eq!(
-                            Field::new("c1", data_type.clone(), true),
-                            result_agg_phy_exprs.field().unwrap()
-                        );
-                    }
-                    _ => {}
-                };
-            }
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_bool_and_or_expr() -> Result<()> {
-        let funcs = vec![AggregateFunction::BoolAnd, AggregateFunction::BoolOr];
-        let data_types = vec![DataType::Boolean];
-        for fun in funcs {
-            for data_type in &data_types {
-                let input_schema =
-                    Schema::new(vec![Field::new("c1", data_type.clone(), true)]);
-                let input_phy_exprs: Vec<Arc<dyn PhysicalExpr>> = vec![Arc::new(
-                    expressions::Column::new_with_schema("c1", &input_schema).unwrap(),
-                )];
-                let result_agg_phy_exprs = create_physical_agg_expr_for_test(
-                    &fun,
-                    false,
-                    &input_phy_exprs[0..1],
-                    &input_schema,
-                    "c1",
-                )?;
-                match fun {
-                    AggregateFunction::BoolAnd => {
-                        assert!(result_agg_phy_exprs.as_any().is::<BoolAnd>());
-                        assert_eq!("c1", result_agg_phy_exprs.name());
-                        assert_eq!(
-                            Field::new("c1", data_type.clone(), true),
-                            result_agg_phy_exprs.field().unwrap()
-                        );
-                    }
-                    AggregateFunction::BoolOr => {
-                        assert!(result_agg_phy_exprs.as_any().is::<BoolOr>());
                         assert_eq!("c1", result_agg_phy_exprs.name());
                         assert_eq!(
                             Field::new("c1", data_type.clone(), true),

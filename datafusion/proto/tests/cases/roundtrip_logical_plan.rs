@@ -59,7 +59,9 @@ use datafusion_expr::{
     TryCast, Volatility, WindowFrame, WindowFrameBound, WindowFrameUnits,
     WindowFunctionDefinition, WindowUDF, WindowUDFImpl,
 };
-use datafusion_functions_aggregate::expr_fn::{bit_and, bit_or, bit_xor};
+use datafusion_functions_aggregate::expr_fn::{
+    bit_and, bit_or, bit_xor, bool_and, bool_or,
+};
 use datafusion_functions_aggregate::string_agg::string_agg;
 use datafusion_proto::bytes::{
     logical_plan_from_bytes, logical_plan_from_bytes_with_extension_codec,
@@ -671,6 +673,8 @@ async fn roundtrip_expr_api() -> Result<()> {
         bit_or(lit(2)),
         bit_xor(lit(2)),
         string_agg(col("a").cast_to(&DataType::Utf8, &schema)?, lit("|")),
+        bool_and(lit(true)),
+        bool_or(lit(true)),
     ];
 
     // ensure expressions created with the expr api can be round tripped

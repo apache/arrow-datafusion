@@ -121,18 +121,6 @@ pub fn coerce_types(
             };
             Ok(vec![v])
         }
-        AggregateFunction::BoolAnd | AggregateFunction::BoolOr => {
-            // Refer to https://www.postgresql.org/docs/8.2/functions-aggregate.html doc
-            // smallint, int, bigint, real, double precision, decimal, or interval.
-            if !is_bool_and_or_support_arg_type(&input_types[0]) {
-                return plan_err!(
-                    "The function {:?} does not support inputs of type {:?}.",
-                    agg_fun,
-                    input_types[0]
-                );
-            }
-            Ok(input_types.to_vec())
-        }
         AggregateFunction::Correlation => {
             if !is_correlation_support_arg_type(&input_types[0]) {
                 return plan_err!(
@@ -317,10 +305,6 @@ pub fn avg_sum_type(arg_type: &DataType) -> Result<DataType> {
         }
         other => plan_err!("AVG does not support {other:?}"),
     }
-}
-
-pub fn is_bool_and_or_support_arg_type(arg_type: &DataType) -> bool {
-    matches!(arg_type, DataType::Boolean)
 }
 
 pub fn is_sum_support_arg_type(arg_type: &DataType) -> bool {

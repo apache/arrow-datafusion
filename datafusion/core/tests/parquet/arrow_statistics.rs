@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-//! This file contains an end to end test of extracting statitics from parquet files.
+//! This file contains an end to end test of extracting statistics from parquet files.
 //! It writes data into a parquet file, reads statistics and verifies they are correct
 
 use std::default::Default;
@@ -614,6 +614,94 @@ async fn test_int_8() {
     .run();
 }
 
+#[tokio::test]
+async fn test_float_16() {
+    // This creates a parquet files of 1 column named f
+    let reader = TestReader {
+        scenario: Scenario::Float16,
+        row_per_group: 5,
+    }
+    .build()
+    .await;
+
+    Test {
+        reader: &reader,
+        // mins are [-5, -4, 0, 5]
+        expected_min: Arc::new(Float16Array::from(vec![
+            f16::from_f32(-5.),
+            f16::from_f32(-4.),
+            f16::from_f32(-0.),
+            f16::from_f32(5.),
+        ])),
+        // maxes are [-1, 0, 4, 9]
+        expected_max: Arc::new(Float16Array::from(vec![
+            f16::from_f32(-1.),
+            f16::from_f32(0.),
+            f16::from_f32(4.),
+            f16::from_f32(9.),
+        ])),
+        // nulls are [0, 0, 0, 0]
+        expected_null_counts: UInt64Array::from(vec![0, 0, 0, 0]),
+        // row counts are [5, 5, 5, 5]
+        expected_row_counts: Some(UInt64Array::from(vec![5, 5, 5, 5])),
+        column_name: "f",
+        check: Check::Both,
+    }
+    .run();
+}
+
+#[tokio::test]
+async fn test_float_32() {
+    // This creates a parquet files of 1 column named f
+    let reader = TestReader {
+        scenario: Scenario::Float32,
+        row_per_group: 5,
+    }
+    .build()
+    .await;
+
+    Test {
+        reader: &reader,
+        // mins are [-5, -4, 0, 5]
+        expected_min: Arc::new(Float32Array::from(vec![-5., -4., -0., 5.0])),
+        // maxes are [-1, 0, 4, 9]
+        expected_max: Arc::new(Float32Array::from(vec![-1., 0., 4., 9.])),
+        // nulls are [0, 0, 0, 0]
+        expected_null_counts: UInt64Array::from(vec![0, 0, 0, 0]),
+        // row counts are [5, 5, 5, 5]
+        expected_row_counts: Some(UInt64Array::from(vec![5, 5, 5, 5])),
+        column_name: "f",
+        check: Check::Both,
+    }
+    .run();
+}
+
+#[tokio::test]
+async fn test_float_64() {
+    // This creates a parquet files of 1 column named f
+    let reader = TestReader {
+        scenario: Scenario::Float64,
+        row_per_group: 5,
+    }
+    .build()
+    .await;
+
+    Test {
+        reader: &reader,
+        // mins are [-5, -4, 0, 5]
+        expected_min: Arc::new(Float64Array::from(vec![-5., -4., -0., 5.0])),
+        // maxes are [-1, 0, 4, 9]
+        expected_max: Arc::new(Float64Array::from(vec![-1., 0., 4., 9.])),
+        // nulls are [0, 0, 0, 0]
+        expected_null_counts: UInt64Array::from(vec![0, 0, 0, 0]),
+        // row counts are [5, 5, 5, 5]
+        expected_row_counts: Some(UInt64Array::from(vec![5, 5, 5, 5])),
+        column_name: "f",
+        check: Check::Both,
+    }
+    .run();
+}
+
 // timestamp
 #[tokio::test]
 async fn test_timestamp() {
@@ -628,8 +716,8 @@ async fn test_timestamp() {
     // "seconds_timezoned" --> TimestampSecondArray
     // "names" --> StringArray
     //
-    // The file is created by 4 record batches, each has 5 rowws.
-    // Since the row group isze is set to 5, those 4 batches will go into 4 row groups
+    // The file is created by 4 record batches, each has 5 rows.
+    // Since the row group size is set to 5, those 4 batches will go into 4 row groups
     // This creates a parquet files of 4 columns named "nanos", "nanos_timezoned", "micros", "micros_timezoned", "millis", "millis_timezoned", "seconds", "seconds_timezoned"
     let reader = TestReader {
         scenario: Scenario::Timestamps,
@@ -1264,7 +1352,7 @@ async fn test_uint() {
         expected_null_counts: UInt64Array::from(vec![0, 0, 0, 0, 0]),
         expected_row_counts: Some(UInt64Array::from(vec![4, 4, 4, 4, 4])),
         column_name: "u8",
-        check: Check::RowGroup,
+        check: Check::Both,
     }
     .run();
 
@@ -1275,7 +1363,7 @@ async fn test_uint() {
         expected_null_counts: UInt64Array::from(vec![0, 0, 0, 0, 0]),
         expected_row_counts: Some(UInt64Array::from(vec![4, 4, 4, 4, 4])),
         column_name: "u16",
-        check: Check::RowGroup,
+        check: Check::Both,
     }
     .run();
 
@@ -1286,7 +1374,7 @@ async fn test_uint() {
         expected_null_counts: UInt64Array::from(vec![0, 0, 0, 0, 0]),
         expected_row_counts: Some(UInt64Array::from(vec![4, 4, 4, 4, 4])),
         column_name: "u32",
-        check: Check::RowGroup,
+        check: Check::Both,
     }
     .run();
 
@@ -1297,7 +1385,7 @@ async fn test_uint() {
         expected_null_counts: UInt64Array::from(vec![0, 0, 0, 0, 0]),
         expected_row_counts: Some(UInt64Array::from(vec![4, 4, 4, 4, 4])),
         column_name: "u64",
-        check: Check::RowGroup,
+        check: Check::Both,
     }
     .run();
 }
@@ -1951,7 +2039,7 @@ async fn test_missing_statistics() {
         expected_min: Arc::new(Int64Array::from(vec![None])),
         expected_max: Arc::new(Int64Array::from(vec![None])),
         expected_null_counts: UInt64Array::from(vec![None]),
-        expected_row_counts: Some(UInt64Array::from(vec![3])), // stil has row count statistics
+        expected_row_counts: Some(UInt64Array::from(vec![3])), // still has row count statistics
         column_name: "i64",
         check: Check::RowGroup,
     }

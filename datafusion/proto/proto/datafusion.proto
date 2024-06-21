@@ -494,8 +494,8 @@ enum AggregateFunction {
   // BIT_AND = 19;
   // BIT_OR = 20;
   // BIT_XOR = 21;
-  BOOL_AND = 22;
-  BOOL_OR = 23;
+//  BOOL_AND = 22;
+//  BOOL_OR = 23;
   // REGR_SLOPE = 26;
   // REGR_INTERCEPT = 27;
   // REGR_COUNT = 28;

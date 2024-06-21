@@ -40,7 +40,7 @@ use crate::{error::Result, physical_plan::ExecutionPlan};
 /// Use [`SessionState::add_physical_optimizer_rule`] to register additional
 /// `PhysicalOptimizerRule`s.
 ///
-/// [`SessionState::add_physical_optimizer_rule`]: https://docs.rs/datafusion/latest/datafusion/execution/context/struct.SessionState.html#method.add_physical_optimizer_rule
+/// [`SessionState::add_physical_optimizer_rule`]: https://docs.rs/datafusion/latest/datafusion/execution/session_state/struct.SessionState.html#method.add_physical_optimizer_rule
 pub trait PhysicalOptimizerRule {
     /// Rewrite `plan` to an optimized form
     fn optimize(

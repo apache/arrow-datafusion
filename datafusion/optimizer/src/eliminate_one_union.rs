@@ -88,10 +88,11 @@ mod tests {
     }
 
     fn assert_optimized_plan_equal(plan: LogicalPlan, expected: &str) -> Result<()> {
-        assert_optimized_plan_eq_with_rules(
+        assert_optimized_plan_with_rules(
             vec![Arc::new(EliminateOneUnion::new())],
             plan,
             expected,
+            true,
         )
     }
 

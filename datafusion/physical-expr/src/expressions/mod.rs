@@ -40,7 +40,6 @@ pub use crate::aggregate::array_agg_distinct::DistinctArrayAgg;
 pub use crate::aggregate::array_agg_ordered::OrderSensitiveArrayAgg;
 pub use crate::aggregate::average::Avg;
 pub use crate::aggregate::average::AvgAccumulator;
-pub use crate::aggregate::bool_and_or::{BoolAnd, BoolOr};
 pub use crate::aggregate::build_in::create_aggregate_expr;
 pub use crate::aggregate::correlation::Correlation;
 pub use crate::aggregate::grouping::Grouping;

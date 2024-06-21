@@ -140,8 +140,6 @@ impl From<protobuf::AggregateFunction> for AggregateFunction {
             protobuf::AggregateFunction::Min => Self::Min,
             protobuf::AggregateFunction::Max => Self::Max,
             protobuf::AggregateFunction::Avg => Self::Avg,
-            protobuf::AggregateFunction::BoolAnd => Self::BoolAnd,
-            protobuf::AggregateFunction::BoolOr => Self::BoolOr,
             protobuf::AggregateFunction::ArrayAgg => Self::ArrayAgg,
             protobuf::AggregateFunction::Correlation => Self::Correlation,
             protobuf::AggregateFunction::Grouping => Self::Grouping,

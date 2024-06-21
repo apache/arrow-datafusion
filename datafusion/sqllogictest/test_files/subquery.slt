@@ -626,10 +626,7 @@ SELECT t1_id, t1_name FROM t1 WHERE EXISTS (SELECT * FROM t2 WHERE t2_id = t1_id
 query TT
 explain SELECT t1_id, t1_name FROM t1 WHERE EXISTS (SELECT * FROM t2 WHERE t2_id = t1_id limit 0)
 ----
-logical_plan
-01)LeftSemi Join: t1.t1_id = __correlated_sq_1.t2_id
-02)--TableScan: t1 projection=[t1_id, t1_name]
-03)--EmptyRelation
+logical_plan EmptyRelation
 
 query IT rowsort
 SELECT t1_id, t1_name FROM t1 WHERE EXISTS (SELECT * FROM t2 WHERE t2_id = t1_id limit 0)

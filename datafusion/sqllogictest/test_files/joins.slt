@@ -3686,3 +3686,99 @@ set datafusion.explain.logical_plan_only = true;
 
 statement ok
 set datafusion.execution.target_partitions = 2;
+
+# Inner join with empty left table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 as a WHERE 1=0
+) AS a INNER JOIN (SELECT 1 as a) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Inner join with empty right table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a
+) AS a INNER JOIN (SELECT 1 AS a WHERE 1=0) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Left join with empty left table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 as a WHERE 1=0
+) AS a LEFT JOIN (SELECT 1 as a) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Left join with empty left and empty right table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 as a WHERE 1=0
+) AS a LEFT JOIN (SELECT 1 as a WHERE 1=0) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Right join with empty right table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a
+) AS a RIGHT JOIN (SELECT 1 AS a WHERE 1=0) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Right join with empty right and empty left table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 as a WHERE 1=0
+) AS a RIGHT JOIN (SELECT 1 as a WHERE 1=0) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Left SEMI join with empty left table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a
+) AS a LEFT SEMI JOIN (SELECT 1 AS a WHERE 1=0) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Left SEMI join with empty right table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a WHERE 1=0
+) AS a LEFT SEMI JOIN (SELECT 1 AS a) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Right SEMI join with empty left table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a WHERE 1=0
+) AS a RIGHT SEMI JOIN (SELECT 1 AS a) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Right SEMI join with empty right table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a
+) AS a RIGHT SEMI JOIN (SELECT 1 AS a WHERE 1=0) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Left ANTI join with empty left table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a WHERE 1=0
+) AS a LEFT ANTI JOIN (SELECT 1 AS a) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation
+
+# Right ANTI join with empty right table
+query TT
+EXPLAIN SELECT * FROM (
+    SELECT 1 AS a
+) AS a RIGHT ANTI JOIN (SELECT 1 AS a WHERE 1=0) AS b ON a.a=b.a;
+----
+logical_plan EmptyRelation

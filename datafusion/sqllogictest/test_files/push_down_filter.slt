@@ -42,10 +42,66 @@ logical_plan
 04)------Filter: v.column1 = Int64(2)
 05)--------TableScan: v projection=[column1, column2]
 
-# TODO: fix the query
-query error DataFusion error: External error: Arrow error: Invalid argument error: Invalid comparison operation: List\(Field \{ name: "item", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: \{\} \}\) > Int64
+query I
 select uc2 from (select unnest(column2) as uc2, column1 from v) where uc2 > 3;
+----
+4
+5
 
 # test push down filter for unnest with filter on unnest column
-# query TT
-# explain select uc2 from (select unnest(column2) as uc2, column1 from v) where uc2 > 3;
+query TT
+explain select uc2 from (select unnest(column2) as uc2, column1 from v) where uc2 > 3;
+----
+logical_plan
+01)Projection: unnest(v.column2) AS uc2
+02)--Filter: unnest(v.column2) > Int64(3)
+03)----Projection: unnest(v.column2)
+04)------Unnest: lists[unnest(v.column2)] structs[]
+05)--------Projection: v.column2 AS unnest(v.column2), v.column1
+06)----------TableScan: v projection=[column1, column2]
+
+query II
+select uc2, column1 from  (select unnest(column2) as uc2, column1 from v) where uc2 > 3 AND column1 = 2;
+----
+4 2
+5 2
+
+# Could push the filter (column1 = 2) down below unnest
+# https://github.com/apache/datafusion/issues/11016
+query TT
+explain select uc2, column1 from  (select unnest(column2) as uc2, column1 from v) where uc2 > 3 AND column1 = 2;
+----
+logical_plan
+01)Projection: unnest(v.column2) AS uc2, v.column1
+02)--Filter: unnest(v.column2) > Int64(3) AND v.column1 = Int64(2)
+03)----Unnest: lists[unnest(v.column2)] structs[]
+04)------Projection: v.column2 AS unnest(v.column2), v.column1
+05)--------TableScan: v projection=[column1, column2]
+
+
+statement ok
+drop table v;
+
+# test with unnest struct, should not push down filter
+statement ok
+CREATE TABLE d AS VALUES(1,[named_struct('a', 1, 'b', 2)]),(2,[named_struct('a', 3, 'b', 4), named_struct('a', 5, 'b', 6)]);
+
+query I?
+select * from (select column1, unnest(column2) as o from d) where o['a'] = 1;
+----
+1 {a: 1, b: 2}
+
+query TT
+explain select * from (select column1, unnest(column2) as o from d) where o['a'] = 1;
+----
+logical_plan
+01)Projection: d.column1, unnest(d.column2) AS o
+02)--Filter: get_field(unnest(d.column2), Utf8("a")) = Int64(1)
+03)----Unnest: lists[unnest(d.column2)] structs[]
+04)------Projection: d.column1, d.column2 AS unnest(d.column2)
+05)--------TableScan: d projection=[column1, column2]
+
+
+
+statement ok
+drop table d;

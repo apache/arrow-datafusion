@@ -870,37 +870,7 @@ impl LogicalPlan {
             LogicalPlan::Filter { .. } => {
                 assert_eq!(1, expr.len());
                 let predicate = expr.pop().unwrap();
-
-                // filter predicates should not contain aliased expressions so we remove any aliases
-                // before this logic was added we would have aliases within filters such as for
-                // benchmark q6:
-                //
-                // lineitem.l_shipdate >= Date32(\"8766\")
-                // AND lineitem.l_shipdate < Date32(\"9131\")
-                // AND CAST(lineitem.l_discount AS Decimal128(30, 15)) AS lineitem.l_discount >=
-                // Decimal128(Some(49999999999999),30,15)
-                // AND CAST(lineitem.l_discount AS Decimal128(30, 15)) AS lineitem.l_discount <=
-                // Decimal128(Some(69999999999999),30,15)
-                // AND lineitem.l_quantity < Decimal128(Some(2400),15,2)
-
-                let predicate = predicate
-                    .transform_down(|expr| {
-                        match expr {
-                            Expr::Exists { .. }
-                            | Expr::ScalarSubquery(_)
-                            | Expr::InSubquery(_) => {
-                                // subqueries could contain aliases so we don't recurse into those
-                                Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump))
-                            }
-                            Expr::Alias(_) => Ok(Transformed::new(
-                                expr.unalias(),
-                                true,
-                                TreeNodeRecursion::Jump,
-                            )),
-                            _ => Ok(Transformed::no(expr)),
-                        }
-                    })
-                    .data()?;
+                let predicate = Filter::remove_aliases(predicate)?.data;
 
                 Filter::try_new(predicate, Arc::new(inputs.swap_remove(0)))
                     .map(LogicalPlan::Filter)
@@ -2229,6 +2199,38 @@ impl Filter {
             }
         }
         false
+    }
+
+    /// Remove aliases from a predicate for use in a `Filter`
+    ///
+    /// filter predicates should not contain aliased expressions so we remove
+    /// any aliases.
+    ///
+    /// before this logic was added we would have aliases within filters such as
+    /// for benchmark q6:
+    ///
+    /// ```sql
+    /// lineitem.l_shipdate >= Date32(\"8766\")
+    /// AND lineitem.l_shipdate < Date32(\"9131\")
+    /// AND CAST(lineitem.l_discount AS Decimal128(30, 15)) AS lineitem.l_discount >=
+    /// Decimal128(Some(49999999999999),30,15)
+    /// AND CAST(lineitem.l_discount AS Decimal128(30, 15)) AS lineitem.l_discount <=
+    /// Decimal128(Some(69999999999999),30,15)
+    /// AND lineitem.l_quantity < Decimal128(Some(2400),15,2)
+    /// ```
+    pub fn remove_aliases(predicate: Expr) -> Result<Transformed<Expr>> {
+        predicate.transform_down(|expr| {
+            match expr {
+                Expr::Exists { .. } | Expr::ScalarSubquery(_) | Expr::InSubquery(_) => {
+                    // subqueries could contain aliases so we don't recurse into those
+                    Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump))
+                }
+                Expr::Alias(Alias { expr, .. }) => {
+                    Ok(Transformed::new(*expr, true, TreeNodeRecursion::Jump))
+                }
+                _ => Ok(Transformed::no(expr)),
+            }
+        })
     }
 }
 

@@ -32,7 +32,9 @@ use datafusion_expr::logical_plan::tree_node::unwrap_arc;
 use datafusion_expr::logical_plan::{
     CrossJoin, Join, JoinType, LogicalPlan, TableScan, Union,
 };
-use datafusion_expr::utils::{conjunction, split_conjunction, split_conjunction_owned};
+use datafusion_expr::utils::{
+    conjunction, expr_to_columns, split_conjunction, split_conjunction_owned,
+};
 use datafusion_expr::{
     and, build_join_schema, or, BinaryExpr, Expr, Filter, LogicalPlanBuilder, Operator,
     Projection, TableProviderFilterPushDown,
@@ -707,6 +709,15 @@ impl OptimizerRule for PushDownFilter {
                 }
             }
             LogicalPlan::Unnest(mut unnest) => {
+                // collect all the Expr::Column in predicate recursively
+                let mut accum: HashSet<Column> = HashSet::new();
+                expr_to_columns(&filter.predicate, &mut accum)?;
+
+                if unnest.exec_columns.iter().any(|c| accum.contains(c)) {
+                    filter.input = Arc::new(LogicalPlan::Unnest(unnest));
+                    return Ok(Transformed::no(LogicalPlan::Filter(filter)));
+                }
+
                 // Unnest is built above Projection, so we only take Projection into consideration
                 match unwrap_arc(unnest.input) {
                     LogicalPlan::Projection(projection) => {
