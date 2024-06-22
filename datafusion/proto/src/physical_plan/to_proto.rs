@@ -24,7 +24,7 @@ use datafusion::physical_expr::window::{NthValueKind, SlidingAggregateWindowExpr
 use datafusion::physical_expr::{PhysicalSortExpr, ScalarFunctionExpr};
 use datafusion::physical_plan::expressions::{
     ArrayAgg, Avg, BinaryExpr, CaseExpr, CastExpr, Column, Correlation, CumeDist,
-    DistinctArrayAgg, Grouping, InListExpr, IsNotNullExpr, IsNullExpr, Literal, Max, Min,
+    DistinctArrayAgg, Grouping, InListExpr, IsNotNullExpr, IsNullExpr, Literal,
     NegativeExpr, NotExpr, NthValue, NthValueAgg, Ntile, OrderSensitiveArrayAgg, Rank,
     RankType, RowNumber, TryCastExpr, WindowShift,
 };
@@ -247,10 +247,6 @@ fn aggr_expr_to_aggr_fn(expr: &dyn AggregateExpr) -> Result<AggrFn> {
         protobuf::AggregateFunction::ArrayAgg
     } else if aggr_expr.downcast_ref::<OrderSensitiveArrayAgg>().is_some() {
         protobuf::AggregateFunction::ArrayAgg
-    } else if aggr_expr.downcast_ref::<Min>().is_some() {
-        protobuf::AggregateFunction::Min
-    } else if aggr_expr.downcast_ref::<Max>().is_some() {
-        protobuf::AggregateFunction::Max
     } else if aggr_expr.downcast_ref::<Avg>().is_some() {
         protobuf::AggregateFunction::Avg
     } else if aggr_expr.downcast_ref::<Correlation>().is_some() {

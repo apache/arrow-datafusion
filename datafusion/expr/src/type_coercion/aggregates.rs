@@ -15,8 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use std::ops::Deref;
-
 use crate::{AggregateFunction, Signature, TypeSignature};
 
 use arrow::datatypes::{
@@ -96,11 +94,6 @@ pub fn coerce_types(
 
     match agg_fun {
         AggregateFunction::ArrayAgg => Ok(input_types.to_vec()),
-        AggregateFunction::Min | AggregateFunction::Max => {
-            // min and max support the dictionary data type
-            // unpack the dictionary to get the value
-            get_min_max_result_type(input_types)
-        }
         AggregateFunction::Avg => {
             // Refer to https://www.postgresql.org/docs/8.2/functions-aggregate.html doc
             // smallint, int, bigint, real, double precision, decimal, or interval
@@ -194,22 +187,6 @@ pub fn check_arg_count(
         }
     }
     Ok(())
-}
-
-fn get_min_max_result_type(input_types: &[DataType]) -> Result<Vec<DataType>> {
-    // make sure that the input types only has one element.
-    assert_eq!(input_types.len(), 1);
-    // min and max support the dictionary data type
-    // unpack the dictionary to get the value
-    match &input_types[0] {
-        DataType::Dictionary(_, dict_value_type) => {
-            // TODO add checker, if the value type is complex data type
-            Ok(vec![dict_value_type.deref().clone()])
-        }
-        // TODO add checker for datatype which min and max supported
-        // For example, the `Struct` and `Map` type are not supported in the MIN and MAX function
-        _ => Ok(input_types.to_vec()),
-    }
 }
 
 /// function return type of a sum
@@ -364,13 +341,6 @@ mod tests {
 
     #[test]
     fn test_aggregate_coerce_types() {
-        // test input args with error number input types
-        let fun = AggregateFunction::Min;
-        let input_types = vec![DataType::Int64, DataType::Int32];
-        let signature = fun.signature();
-        let result = coerce_types(&fun, &input_types, &signature);
-        assert_eq!("Error during planning: The function MIN expects 1 arguments, but 2 were provided", result.unwrap_err().strip_backtrace());
-
         let fun = AggregateFunction::Avg;
         // test input args is invalid data type for avg
         let input_types = vec![DataType::Utf8];
@@ -381,13 +351,9 @@ mod tests {
             result.unwrap_err().strip_backtrace()
         );
 
-        // test count, array_agg, approx_distinct, min, max.
+        // test count, array_agg, approx_distinct.
         // the coerced types is same with input types
-        let funs = vec![
-            AggregateFunction::ArrayAgg,
-            AggregateFunction::Min,
-            AggregateFunction::Max,
-        ];
+        let funs = vec![AggregateFunction::ArrayAgg];
         let input_types = vec![
             vec![DataType::Int32],
             vec![DataType::Decimal128(10, 2)],

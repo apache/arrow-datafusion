@@ -160,6 +160,7 @@ mod tests {
         ExprSchemable, JoinType,
     };
     use datafusion_expr::{or, BinaryExpr, Cast, Operator};
+    use datafusion_functions_aggregate::expr_fn::{max, min};
 
     use crate::test::{assert_fields_eq, test_table_scan_with_name};
     use crate::OptimizerContext;
@@ -395,10 +396,7 @@ mod tests {
             .project(vec![col("a"), col("c"), col("b")])?
             .aggregate(
                 vec![col("a"), col("c")],
-                vec![
-                    datafusion_expr::max(col("b").eq(lit(true))),
-                    datafusion_expr::min(col("b")),
-                ],
+                vec![max(col("b").eq(lit(true))), min(col("b"))],
             )?
             .build()?;
 

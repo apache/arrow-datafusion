@@ -532,8 +532,7 @@ impl serde::Serialize for AggregateFunction {
         S: serde::Serializer,
     {
         let variant = match self {
-            Self::Min => "MIN",
-            Self::Max => "MAX",
+            Self::Unused => "UNUSED",
             Self::Avg => "AVG",
             Self::ArrayAgg => "ARRAY_AGG",
             Self::Correlation => "CORRELATION",
@@ -550,8 +549,7 @@ impl<'de> serde::Deserialize<'de> for AggregateFunction {
         D: serde::Deserializer<'de>,
     {
         const FIELDS: &[&str] = &[
-            "MIN",
-            "MAX",
+            "UNUSED",
             "AVG",
             "ARRAY_AGG",
             "CORRELATION",
@@ -597,8 +595,7 @@ impl<'de> serde::Deserialize<'de> for AggregateFunction {
                 E: serde::de::Error,
             {
                 match value {
-                    "MIN" => Ok(AggregateFunction::Min),
-                    "MAX" => Ok(AggregateFunction::Max),
+                    "UNUSED" => Ok(AggregateFunction::Unused),
                     "AVG" => Ok(AggregateFunction::Avg),
                     "ARRAY_AGG" => Ok(AggregateFunction::ArrayAgg),
                     "CORRELATION" => Ok(AggregateFunction::Correlation),

@@ -32,6 +32,7 @@ fn main() -> Result<(), String> {
         .file_descriptor_set_path(&descriptor_path)
         .out_dir(out_dir)
         .compile_well_known_types()
+        .protoc_arg("--experimental_allow_proto3_optional")
         .extern_path(".google.protobuf", "::pbjson_types")
         .compile_protos(&[proto_path], &["proto"])
         .map_err(|e| format!("protobuf compilation failed: {e}"))?;

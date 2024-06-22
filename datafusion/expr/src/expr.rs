@@ -2278,8 +2278,6 @@ mod test {
             "first_value",
             "last_value",
             "nth_value",
-            "min",
-            "max",
             "avg",
         ];
         for name in names {
@@ -2297,18 +2295,6 @@ mod test {
 
     #[test]
     fn test_find_df_window_function() {
-        assert_eq!(
-            find_df_window_func("max"),
-            Some(WindowFunctionDefinition::AggregateFunction(
-                aggregate_function::AggregateFunction::Max
-            ))
-        );
-        assert_eq!(
-            find_df_window_func("min"),
-            Some(WindowFunctionDefinition::AggregateFunction(
-                aggregate_function::AggregateFunction::Min
-            ))
-        );
         assert_eq!(
             find_df_window_func("avg"),
             Some(WindowFunctionDefinition::AggregateFunction(

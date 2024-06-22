@@ -472,8 +472,8 @@ message InListNode {
 }
 
 enum AggregateFunction {
-  MIN = 0;
-  MAX = 1;
+  UNUSED = 0;
+  // MAX = 1;
   // SUM = 2;
   AVG = 3;
   // COUNT = 4;

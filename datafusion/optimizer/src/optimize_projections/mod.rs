@@ -818,13 +818,13 @@ mod tests {
         expr::{self, Cast},
         lit,
         logical_plan::{builder::LogicalPlanBuilder, table_scan},
-        max, min, not, try_cast, when, AggregateFunction, BinaryExpr, Expr, Extension,
-        Like, LogicalPlan, Operator, Projection, UserDefinedLogicalNodeCore, WindowFrame,
-        WindowFunctionDefinition,
+        not, try_cast, when, BinaryExpr, Expr, Extension, Like, LogicalPlan, Operator,
+        Projection, UserDefinedLogicalNodeCore, WindowFrame, WindowFunctionDefinition,
     };
 
     use datafusion_functions_aggregate::count::count_udaf;
-    use datafusion_functions_aggregate::expr_fn::count;
+    use datafusion_functions_aggregate::expr_fn::{count, max, min};
+    use datafusion_functions_aggregate::min_max::max_udaf;
 
     fn assert_optimized_plan_equal(plan: LogicalPlan, expected: &str) -> Result<()> {
         assert_optimized_plan_eq(Arc::new(OptimizeProjections::new()), plan, expected)
@@ -1921,7 +1921,7 @@ mod tests {
         let table_scan = test_table_scan()?;
 
         let max1 = Expr::WindowFunction(expr::WindowFunction::new(
-            WindowFunctionDefinition::AggregateFunction(AggregateFunction::Max),
+            WindowFunctionDefinition::AggregateUDF(max_udaf()),
             vec![col("test.a")],
             vec![col("test.b")],
             vec![],
@@ -1930,7 +1930,7 @@ mod tests {
         ));
 
         let max2 = Expr::WindowFunction(expr::WindowFunction::new(
-            WindowFunctionDefinition::AggregateFunction(AggregateFunction::Max),
+            WindowFunctionDefinition::AggregateUDF(max_udaf()),
             vec![col("test.b")],
             vec![],
             vec![],

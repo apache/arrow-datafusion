@@ -393,8 +393,10 @@ mod tests {
     use crate::test::*;
 
     use arrow::datatypes::DataType;
+    // TODO: stubs or real functions
     use datafusion_expr::test::function_stub::sum;
-    use datafusion_expr::{col, lit, max, min, out_ref_col, scalar_subquery, Between};
+    use datafusion_expr::{col, lit, out_ref_col, scalar_subquery, Between};
+    use datafusion_functions_aggregate::expr_fn::{max, min};
 
     /// Test multiple correlated subqueries
     #[test]

@@ -36,9 +36,10 @@ use datafusion::execution::FunctionRegistry;
 use datafusion::functions_aggregate::count::count_udaf;
 use datafusion::functions_aggregate::expr_fn::{
     approx_median, approx_percentile_cont, approx_percentile_cont_with_weight, count,
-    count_distinct, covar_pop, covar_samp, first_value, median, stddev, stddev_pop, sum,
-    var_pop, var_sample,
+    count_distinct, covar_pop, covar_samp, first_value, max, median, min, stddev,
+    stddev_pop, sum, var_pop, var_sample,
 };
+use datafusion::functions_aggregate::min_max::max_udaf;
 use datafusion::prelude::*;
 use datafusion::test_util::{TestTableFactory, TestTableProvider};
 use datafusion_common::config::{FormatOptions, TableOptions};
@@ -54,10 +55,10 @@ use datafusion_expr::expr::{
 };
 use datafusion_expr::logical_plan::{Extension, UserDefinedLogicalNodeCore};
 use datafusion_expr::{
-    Accumulator, AggregateExt, AggregateFunction, ColumnarValue, ExprSchemable,
-    LogicalPlan, Operator, PartitionEvaluator, ScalarUDF, ScalarUDFImpl, Signature,
-    TryCast, Volatility, WindowFrame, WindowFrameBound, WindowFrameUnits,
-    WindowFunctionDefinition, WindowUDF, WindowUDFImpl,
+    Accumulator, AggregateExt, ColumnarValue, ExprSchemable, LogicalPlan, Operator,
+    PartitionEvaluator, ScalarUDF, ScalarUDFImpl, Signature, TryCast, Volatility,
+    WindowFrame, WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition, WindowUDF,
+    WindowUDFImpl,
 };
 use datafusion_functions_aggregate::expr_fn::{
     bit_and, bit_or, bit_xor, bool_and, bool_or,
@@ -661,7 +662,9 @@ async fn roundtrip_expr_api() -> Result<()> {
         covar_samp(lit(1.5), lit(2.2)),
         covar_pop(lit(1.5), lit(2.2)),
         sum(lit(1)),
+        max(lit(1)),
         median(lit(2)),
+        min(lit(2)),
         var_sample(lit(2.2)),
         var_pop(lit(2.2)),
         stddev(lit(2.2)),
@@ -2031,7 +2034,7 @@ fn roundtrip_window() {
     );
 
     let test_expr4 = Expr::WindowFunction(expr::WindowFunction::new(
-        WindowFunctionDefinition::AggregateFunction(AggregateFunction::Max),
+        WindowFunctionDefinition::AggregateUDF(max_udaf()),
         vec![col("col1")],
         vec![col("col1")],
         vec![col("col2")],

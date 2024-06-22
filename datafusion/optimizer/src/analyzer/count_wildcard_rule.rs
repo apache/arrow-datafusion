@@ -102,11 +102,11 @@ mod tests {
     use datafusion_common::ScalarValue;
     use datafusion_expr::expr::Sort;
     use datafusion_expr::{
-        col, exists, expr, in_subquery, logical_plan::LogicalPlanBuilder, max,
-        out_ref_col, scalar_subquery, wildcard, WindowFrame, WindowFrameBound,
-        WindowFrameUnits,
+        col, exists, expr, in_subquery, logical_plan::LogicalPlanBuilder, out_ref_col,
+        scalar_subquery, wildcard, WindowFrame, WindowFrameBound, WindowFrameUnits,
     };
     use datafusion_functions_aggregate::count::count_udaf;
+    use datafusion_functions_aggregate::expr_fn::max;
     use std::sync::Arc;
 
     use datafusion_functions_aggregate::expr_fn::{count, sum};

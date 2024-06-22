@@ -156,11 +156,12 @@ mod test {
     use arrow::datatypes::{DataType, Field, Schema};
 
     use crate::{
-        avg, cast, col, lit, logical_plan::builder::LogicalTableSource, min, try_cast,
+        avg, cast, col, lit, logical_plan::builder::LogicalTableSource, try_cast,
         LogicalPlanBuilder,
     };
 
     use super::*;
+    use crate::test::function_stub::min;
 
     #[test]
     fn rewrite_sort_cols_by_agg() {

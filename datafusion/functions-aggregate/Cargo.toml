@@ -48,3 +48,6 @@ datafusion-physical-expr-common = { workspace = true }
 log = { workspace = true }
 paste = "1.0.14"
 sqlparser = { workspace = true }
+
+[dev-dependencies]
+rand = { workspace = true }

@@ -108,8 +108,6 @@ impl From<&StringifiedPlan> for protobuf::StringifiedPlan {
 impl From<&AggregateFunction> for protobuf::AggregateFunction {
     fn from(value: &AggregateFunction) -> Self {
         match value {
-            AggregateFunction::Min => Self::Min,
-            AggregateFunction::Max => Self::Max,
             AggregateFunction::Avg => Self::Avg,
             AggregateFunction::ArrayAgg => Self::ArrayAgg,
             AggregateFunction::Correlation => Self::Correlation,
@@ -372,8 +370,6 @@ pub fn serialize_expr(
             AggregateFunctionDefinition::BuiltIn(fun) => {
                 let aggr_function = match fun {
                     AggregateFunction::ArrayAgg => protobuf::AggregateFunction::ArrayAgg,
-                    AggregateFunction::Min => protobuf::AggregateFunction::Min,
-                    AggregateFunction::Max => protobuf::AggregateFunction::Max,
                     AggregateFunction::Avg => protobuf::AggregateFunction::Avg,
                     AggregateFunction::Correlation => {
                         protobuf::AggregateFunction::Correlation

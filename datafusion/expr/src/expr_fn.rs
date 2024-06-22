@@ -147,30 +147,6 @@ pub fn not(expr: Expr) -> Expr {
     expr.not()
 }
 
-/// Create an expression to represent the min() aggregate function
-pub fn min(expr: Expr) -> Expr {
-    Expr::AggregateFunction(AggregateFunction::new(
-        aggregate_function::AggregateFunction::Min,
-        vec![expr],
-        false,
-        None,
-        None,
-        None,
-    ))
-}
-
-/// Create an expression to represent the max() aggregate function
-pub fn max(expr: Expr) -> Expr {
-    Expr::AggregateFunction(AggregateFunction::new(
-        aggregate_function::AggregateFunction::Max,
-        vec![expr],
-        false,
-        None,
-        None,
-        None,
-    ))
-}
-
 /// Create an expression to represent the array_agg() aggregate function
 pub fn array_agg(expr: Expr) -> Expr {
     Expr::AggregateFunction(AggregateFunction::new(

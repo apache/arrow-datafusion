@@ -52,11 +52,11 @@ use datafusion_execution::runtime_env::RuntimeEnv;
 use datafusion_expr::expr::{GroupingSet, Sort};
 use datafusion_expr::var_provider::{VarProvider, VarType};
 use datafusion_expr::{
-    array_agg, avg, cast, col, exists, expr, in_subquery, lit, max, out_ref_col,
-    placeholder, scalar_subquery, when, wildcard, Expr, ExprSchemable, WindowFrame,
-    WindowFrameBound, WindowFrameUnits, WindowFunctionDefinition,
+    array_agg, avg, cast, col, exists, expr, in_subquery, lit, out_ref_col, placeholder,
+    scalar_subquery, when, wildcard, Expr, ExprSchemable, WindowFrame, WindowFrameBound,
+    WindowFrameUnits, WindowFunctionDefinition,
 };
-use datafusion_functions_aggregate::expr_fn::{count, sum};
+use datafusion_functions_aggregate::expr_fn::{count, max, sum};
 
 #[tokio::test]
 async fn test_count_wildcard_on_sort() -> Result<()> {
