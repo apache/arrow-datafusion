@@ -842,10 +842,9 @@ impl<'n> TreeNodeVisitor<'n> for ExprIdentifierVisitor<'_> {
 
     fn f_down(&mut self, expr: &'n Expr) -> Result<TreeNodeRecursion> {
         // related to https://github.com/apache/arrow-datafusion/issues/8814
-        // If the expr contain volatile expression or is a short-circuit expression, skip it.
+        // If the expr contain volatile expression, skip it.
         // TODO: propagate is_volatile state bottom-up + consider non-volatile sub-expressions for CSE
-        // TODO: consider surely executed children of "short circuited"s for CSE
-        if expr.short_circuits() || expr.is_volatile()? {
+        if expr.is_volatile()? {
             self.visit_stack.push(VisitRecord::JumpMark);
 
             return Ok(TreeNodeRecursion::Jump);
@@ -867,7 +866,9 @@ impl<'n> TreeNodeVisitor<'n> for ExprIdentifierVisitor<'_> {
         let expr_id = expr_identifier(expr, sub_expr_id);
 
         self.id_array[down_index].0 = self.up_index;
-        if !self.expr_mask.ignores(expr) {
+        // related to https://github.com/apache/arrow-datafusion/issues/8814
+        // If the expr is a short-circuit expression, skip it.
+        if !expr.short_circuits() && !self.expr_mask.ignores(expr) {
             self.id_array[down_index].1.clone_from(&expr_id);
             let count = self.expr_stats.entry(expr_id.clone()).or_insert(0);
             *count += 1;
@@ -940,7 +941,7 @@ impl TreeNodeRewriter for CommonSubexprRewriter<'_> {
         // The `CommonSubexprRewriter` relies on `ExprIdentifierVisitor` to generate
         // the `id_array`, which records the expr's identifier used to rewrite expr. So if we
         // skip an expr in `ExprIdentifierVisitor`, we should skip it here, too.
-        if expr.short_circuits() || expr.is_volatile()? {
+        if expr.is_volatile()? {
             return Ok(Transformed::new(expr, false, TreeNodeRecursion::Jump));
         }
 
@@ -1603,6 +1604,36 @@ mod test {
         extract_expressions(&col("a"), &schema, &mut result)?;
 
         assert!(result.len() == 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_filter_expressions() -> Result<()> {
+        let table_scan = test_table_scan()?;
+
+        let config = &OptimizerContext::new();
+        let plan = LogicalPlanBuilder::from(table_scan.clone())
+            .project(vec![
+                col("a"),
+                col("b"),
+                col("c"),
+            ])?.
+            filter((
+                (col("a")+col("b")).eq(lit(2))
+            ).or(
+                (col("a")+col("b")).eq(lit(3))
+            ).or(
+                col("c").gt(lit(4))
+            ))?.
+            build()?;
+
+        let expected = "Projection: test.a, test.b, test.c\
+        \n  Filter: __common_expr_1 = Int32(2) OR __common_expr_1 = Int32(3) OR test.c > Int32(4)\
+        \n    Projection: test.a + test.b AS __common_expr_1, test.a, test.b, test.c\
+        \n      Projection: test.a, test.b, test.c\
+        \n        TableScan: test";
+        assert_optimized_plan_eq(expected, plan, Some(config));
+
         Ok(())
     }
 }
