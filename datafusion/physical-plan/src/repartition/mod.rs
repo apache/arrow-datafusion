@@ -748,27 +748,22 @@ impl RepartitionExec {
         }
     }
 
-    /// Pulls data from the specified input plan, feeding it to the
-    /// output partitions based on the desired partitioning
-    ///
-    /// txs hold the output sending channels for each output partition
-    async fn pull_from_input(
-        input: Arc<dyn ExecutionPlan>,
-        partition: usize,
+    async fn pull(
+        input: Box<dyn Fn(usize) -> Result<SendableRecordBatchStream> + Send >,
+        partition:usize,
         mut output_channels: HashMap<
             usize,
             (DistributionSender<MaybeBatch>, SharedMemoryReservation),
         >,
         partitioning: Partitioning,
         metrics: RepartitionMetrics,
-        context: Arc<TaskContext>,
-    ) -> Result<()> {
+    ) -> Result<()>{
         let mut partitioner =
             BatchPartitioner::try_new(partitioning, metrics.repartition_time.clone())?;
 
         // execute the child operator
         let timer = metrics.fetch_time.timer();
-        let mut stream = input.execute(partition, context)?;
+        let mut stream = input(partition)?;
         timer.done();
 
         // While there are still outputs to send to, keep pulling inputs
@@ -828,6 +823,27 @@ impl RepartitionExec {
         }
 
         Ok(())
+    }
+
+    /// Pulls data from the specified input plan, feeding it to the
+    /// output partitions based on the desired partitioning
+    ///
+    /// txs hold the output sending channels for each output partition
+    async fn pull_from_input(
+        input: Arc<dyn ExecutionPlan>,
+        partition: usize,
+        output_channels: HashMap<
+            usize,
+            (DistributionSender<MaybeBatch>, SharedMemoryReservation),
+        >,
+        partitioning: Partitioning,
+        metrics: RepartitionMetrics,
+        context: Arc<TaskContext>,
+    ) -> Result<()> {
+        let input = Box::new(move |partition| {
+            input.execute(partition, context.clone())
+        }) as Box<dyn Fn(usize) -> Result<SendableRecordBatchStream> + Send>;
+        RepartitionExec::pull(input, partition, output_channels, partitioning, metrics).await
     }
 
     /// Waits for `input_task` which is consuming one of the inputs to
