@@ -2779,6 +2779,19 @@ select array_agg(c1) from t;
 statement ok
 drop table t;
 
+# array_agg_str
+
+statement ok
+create table t (c1 string) as values ('a'), ('b'), ('c'), ('d'), ('e');
+
+query ?
+select array_agg(c1) from t;
+----
+[a, b, c, d, e]
+
+statement ok
+drop table t;
+
 # array_agg_nested
 statement ok
 create table t as values (make_array([1, 2, 3], [4, 5])), (make_array([6], [7, 8])), (make_array([9]));
@@ -3701,7 +3714,14 @@ query T?
 SELECT tag, array_agg(millis - arrow_cast(secs, 'Timestamp(Millisecond, None)')) FROM t GROUP BY tag ORDER BY tag;
 ----
 X [0 days 0 hours 0 mins 0.011 secs, 0 days 0 hours 0 mins 0.123 secs]
-Y [, 0 days 0 hours 0 mins 0.432 secs]
+Y [0 days 0 hours 0 mins 0.432 secs, ]
+
+# aggregate_duration_array_agg_ignore_nulls
+query T?
+SELECT tag, array_agg(millis - arrow_cast(secs, 'Timestamp(Millisecond, None)')) IGNORE NULLS FROM t GROUP BY tag ORDER BY tag;
+----
+X [0 days 0 hours 0 mins 0.011 secs, 0 days 0 hours 0 mins 0.123 secs]
+Y [0 days 0 hours 0 mins 0.432 secs]
 
 statement ok
 drop table t_source;
