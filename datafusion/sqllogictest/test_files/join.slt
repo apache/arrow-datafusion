@@ -793,3 +793,60 @@ DROP TABLE companies
 
 statement ok
 DROP TABLE leads
+
+
+# Null-aware LeftAnti Join
+
+# Null on build side
+statement ok
+CREATE TABLE IF NOT EXISTS test_table(c1 INT, c2 INT) AS VALUES
+(1, 1),
+(2, 2),
+(3, 3),
+(4, null),
+(null, 0);
+
+# correct answer is empty relation
+query II
+SELECT * FROM test_table t1 WHERE (c1 NOT IN (SELECT c2 FROM test_table)) = true
+----
+4 NULL
+NULL 0
+
+statement ok
+DROP TABLE test_table
+
+# No nulls on build side
+statement ok
+CREATE TABLE IF NOT EXISTS test_table(c1 INT, c2 INT) AS VALUES
+(1, 2),
+(2, 3),
+(null, 0);
+
+# correct answer is [1, 2]
+query II
+SELECT * FROM test_table t1 WHERE (c1 NOT IN (SELECT c2 FROM test_table)) = true
+----
+1 2
+NULL 0
+
+statement ok
+DROP TABLE test_table
+
+# Empty build side
+statement ok
+CREATE TABLE IF NOT EXISTS test_table1(c1 INT) AS VALUES
+(1),
+(2),
+(null);
+
+statement ok
+CREATE TABLE IF NOT EXISTS test_table2(c2 INT);
+
+# correct answer is [1, 2, NULL]
+query I
+SELECT * FROM test_table1 t1 WHERE (c1 NOT IN (SELECT c2 FROM test_table2)) = true
+----
+1
+2
+NULL
