@@ -172,13 +172,15 @@ impl OptimizerRule for PropagateEmptyRelation {
                     .cloned()
                     .collect::<Vec<_>>();
 
+                let input = new_inputs[0].clone();
+                let input_schema = input.schema();
                 if new_inputs.len() == union.inputs.len() {
                     Ok(Transformed::no(plan))
                 } else if new_inputs.is_empty() {
                     Ok(Transformed::yes(LogicalPlan::EmptyRelation(
                         EmptyRelation {
                             produce_one_row: false,
-                            schema: plan.schema().clone(),
+                            schema: input_schema.clone(),
                         },
                     )))
                 } else if new_inputs.len() == 1 {
@@ -189,14 +191,14 @@ impl OptimizerRule for PropagateEmptyRelation {
                         Ok(Transformed::yes(LogicalPlan::Projection(
                             Projection::new_from_schema(
                                 Arc::new(child),
-                                plan.schema().clone(),
+                                input_schema.clone(),
                             ),
                         )))
                     }
                 } else {
                     Ok(Transformed::yes(LogicalPlan::Union(Union {
                         inputs: new_inputs,
-                        schema: union.schema.clone(),
+                        schema: input_schema.clone(),
                     })))
                 }
             }
