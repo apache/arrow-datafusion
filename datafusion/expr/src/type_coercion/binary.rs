@@ -1082,6 +1082,8 @@ fn temporal_coercion(lhs_type: &DataType, rhs_type: &DataType) -> Option<DataTyp
 
             Some(Timestamp(unit, tz))
         }
+        (Timestamp(_, _), Int64) => Some(lhs_type.clone()),
+        (Int64, Timestamp(_, _)) => Some(rhs_type.clone()),
         _ => None,
     }
 }
