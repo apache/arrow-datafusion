@@ -57,35 +57,35 @@ impl DateBinFunc {
             vec![
                 Exact(vec![
                     DataType::Interval(MonthDayNano),
-                    Timestamp(array_type.clone(), None),
+                    Timestamp(array_type, None),
                     Timestamp(Nanosecond, None),
                 ]),
                 Exact(vec![
                     DataType::Interval(MonthDayNano),
-                    Timestamp(array_type.clone(), Some(TIMEZONE_WILDCARD.into())),
+                    Timestamp(array_type, Some(TIMEZONE_WILDCARD.into())),
                     Timestamp(Nanosecond, Some(TIMEZONE_WILDCARD.into())),
                 ]),
                 Exact(vec![
                     DataType::Interval(DayTime),
-                    Timestamp(array_type.clone(), None),
+                    Timestamp(array_type, None),
                     Timestamp(Nanosecond, None),
                 ]),
                 Exact(vec![
                     DataType::Interval(DayTime),
-                    Timestamp(array_type.clone(), Some(TIMEZONE_WILDCARD.into())),
+                    Timestamp(array_type, Some(TIMEZONE_WILDCARD.into())),
                     Timestamp(Nanosecond, Some(TIMEZONE_WILDCARD.into())),
                 ]),
                 Exact(vec![
                     DataType::Interval(MonthDayNano),
-                    Timestamp(array_type.clone(), None),
+                    Timestamp(array_type, None),
                 ]),
                 Exact(vec![
                     DataType::Interval(MonthDayNano),
-                    Timestamp(array_type.clone(), Some(TIMEZONE_WILDCARD.into())),
+                    Timestamp(array_type, Some(TIMEZONE_WILDCARD.into())),
                 ]),
                 Exact(vec![
                     DataType::Interval(DayTime),
-                    Timestamp(array_type.clone(), None),
+                    Timestamp(array_type, None),
                 ]),
                 Exact(vec![
                     DataType::Interval(DayTime),

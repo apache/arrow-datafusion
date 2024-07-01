@@ -607,11 +607,11 @@ fn coerced_from<'a>(
         (Timestamp(unit, Some(tz)), _) if tz.as_ref() == TIMEZONE_WILDCARD => {
             match type_from {
                 Timestamp(_, Some(from_tz)) => {
-                    Some(Timestamp(unit.clone(), Some(from_tz.clone())))
+                    Some(Timestamp(*unit, Some(from_tz.clone())))
                 }
                 Null | Date32 | Utf8 | LargeUtf8 | Timestamp(_, None) => {
                     // In the absence of any other information assume the time zone is "+00" (UTC).
-                    Some(Timestamp(unit.clone(), Some("+00".into())))
+                    Some(Timestamp(*unit, Some("+00".into())))
                 }
                 _ => None,
             }
