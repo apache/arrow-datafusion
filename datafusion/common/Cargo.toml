@@ -59,7 +59,7 @@ libc = "0.2.140"
 num_cpus = { workspace = true }
 object_store = { workspace = true, optional = true }
 parquet = { workspace = true, optional = true, default-features = true }
-pyo3 = { version = "0.21.0", optional = true }
+pyo3 = { version = "0.22.0", optional = true }
 sqlparser = { workspace = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
