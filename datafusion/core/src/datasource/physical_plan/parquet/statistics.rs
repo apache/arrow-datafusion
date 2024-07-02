@@ -726,6 +726,20 @@ make_data_page_stats_iterator!(
     ByteArray
 );
 
+make_data_page_stats_iterator!(
+    MaxFixedLenByteArrayDataPageStatsIterator,
+    |x: &PageIndex<FixedLenByteArray>| { x.max.clone() },
+    Index::FIXED_LEN_BYTE_ARRAY,
+    FixedLenByteArray
+);
+
+make_data_page_stats_iterator!(
+    MinFixedLenByteArrayDataPageStatsIterator,
+    |x: &PageIndex<FixedLenByteArray>| { x.min.clone() },
+    Index::FIXED_LEN_BYTE_ARRAY,
+    FixedLenByteArray
+);
+
 macro_rules! get_data_page_statistics {
     ($stat_type_prefix: ident, $data_type: ident, $iterator: ident) => {
         paste! {
@@ -903,6 +917,21 @@ macro_rules! get_data_page_statistics {
                             new_empty_array(&DataType::Time64(unit.clone()))
                         }
                     })
+                },
+                Some(DataType::FixedSizeBinary(size)) => {
+                    Ok(Arc::new(
+                        FixedSizeBinaryArray::from(
+                            [<$stat_type_prefix FixedLenByteArrayDataPageStatsIterator>]::new($iterator).map(|x| {
+                                x.into_iter().filter_map(|x| x).map(|x| {
+                                    if x.len().try_into() == Ok(*size) {
+                                            Some(x.data().to_vec())
+                                        } else {
+                                            None
+                                        }
+                                })
+                            }).flatten().collect::<Vec<_>>()
+                        )
+                    ))
                 }
                 _ => unimplemented!()
             }

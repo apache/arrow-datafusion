@@ -1861,7 +1861,7 @@ async fn test_byte() {
         expected_null_counts: UInt64Array::from(vec![0, 0, 0]),
         expected_row_counts: Some(UInt64Array::from(vec![5, 5, 5])),
         column_name: "service_fixedsize",
-        check: Check::RowGroup,
+        check: Check::Both,
     }
     .run();
 
