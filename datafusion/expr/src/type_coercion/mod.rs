@@ -36,52 +36,54 @@ pub mod binary;
 pub mod functions;
 pub mod other;
 
-use arrow::datatypes::DataType;
+use datafusion_common::logical_type::{signature::LogicalType, TypeRelation, ExtensionType};
+
 /// Determine whether the given data type `dt` represents signed numeric values.
-pub fn is_signed_numeric(dt: &DataType) -> bool {
+pub fn is_signed_numeric(dt: &TypeRelation) -> bool {
+    use LogicalType::*;
     matches!(
-        dt,
-        DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::Float16
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::Decimal128(_, _)
-            | DataType::Decimal256(_, _),
+        dt.logical(),
+        Int8
+            | Int16
+            | Int32
+            | Int64
+            | Float16
+            | Float32
+            | Float64
+            | Decimal128(_, _)
+            | Decimal256(_, _),
     )
 }
 
 /// Determine whether the given data type `dt` is `Null`.
-pub fn is_null(dt: &DataType) -> bool {
-    *dt == DataType::Null
+pub fn is_null(dt: &TypeRelation) -> bool {
+    *dt.logical() == LogicalType::Null
 }
 
 /// Determine whether the given data type `dt` is a `Timestamp`.
-pub fn is_timestamp(dt: &DataType) -> bool {
-    matches!(dt, DataType::Timestamp(_, _))
+pub fn is_timestamp(dt: &TypeRelation) -> bool {
+    matches!(dt.logical(), LogicalType::Timestamp(_, _))
 }
 
 /// Determine whether the given data type 'dt' is a `Interval`.
-pub fn is_interval(dt: &DataType) -> bool {
-    matches!(dt, DataType::Interval(_))
+pub fn is_interval(dt: &TypeRelation) -> bool {
+    matches!(dt.logical(), LogicalType::Interval(_))
 }
 
 /// Determine whether the given data type `dt` is a `Date` or `Timestamp`.
-pub fn is_datetime(dt: &DataType) -> bool {
+pub fn is_datetime(dt: &TypeRelation) -> bool {
     matches!(
-        dt,
-        DataType::Date32 | DataType::Date64 | DataType::Timestamp(_, _)
+        dt.logical(),
+        LogicalType::Date | LogicalType::Timestamp(_, _)
     )
 }
 
 /// Determine whether the given data type `dt` is a `Utf8` or `LargeUtf8`.
-pub fn is_utf8_or_large_utf8(dt: &DataType) -> bool {
-    matches!(dt, DataType::Utf8 | DataType::LargeUtf8)
+pub fn is_utf8_or_large_utf8(dt: &TypeRelation) -> bool {
+    matches!(dt.logical(), LogicalType::Utf8)
 }
 
 /// Determine whether the given data type `dt` is a `Decimal`.
-pub fn is_decimal(dt: &DataType) -> bool {
-    matches!(dt, DataType::Decimal128(_, _) | DataType::Decimal256(_, _))
+pub fn is_decimal(dt: &TypeRelation) -> bool {
+    matches!(dt.logical(), LogicalType::Decimal128(_, _) | LogicalType::Decimal256(_, _))
 }

@@ -107,7 +107,7 @@ impl ScalarUDFImpl for ArrowCastFunc {
         info: &dyn SimplifyInfo,
     ) -> Result<ExprSimplifyResult> {
         // convert this into a real cast
-        let target_type = data_type_from_args(&args)?;
+        let target_type = data_type_from_args(&args)?.into();
         // remove second (type) argument
         args.pop().unwrap();
         let arg = args.pop().unwrap();
@@ -130,6 +130,8 @@ impl ScalarUDFImpl for ArrowCastFunc {
 
 /// Returns the requested type from the arguments
 fn data_type_from_args(args: &[Expr]) -> Result<DataType> {
+    // TODO(@notfilippo): maybe parse LogicalType?
+
     if args.len() != 2 {
         return plan_err!("arrow_cast needs 2 arguments, {} provided", args.len());
     }

@@ -53,7 +53,7 @@ impl ApplyFunctionRewrites {
         if let LogicalPlan::TableScan(ts) = &plan {
             let source_schema = DFSchema::try_from_qualified_schema(
                 ts.table_name.clone(),
-                &ts.source.schema(),
+                &ts.source.schema().as_ref().clone().into(),
             )?;
             schema.merge(&source_schema);
         }

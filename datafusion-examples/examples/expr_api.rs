@@ -28,6 +28,8 @@ use datafusion::functions_aggregate::first_last::first_value_udaf;
 use datafusion::optimizer::simplify_expressions::ExprSimplifier;
 use datafusion::physical_expr::{analyze, AnalysisContext, ExprBoundaries};
 use datafusion::prelude::*;
+use datafusion_common::logical_type::field::LogicalField;
+use datafusion_common::logical_type::schema::LogicalSchema;
 use datafusion_common::{ScalarValue, ToDFSchema};
 use datafusion_expr::execution_props::ExecutionProps;
 use datafusion_expr::expr::BinaryExpr;
@@ -156,7 +158,7 @@ fn simplify_demo() -> Result<()> {
     // However, DataFusion's simplification logic can do this for you
 
     // you need to tell DataFusion the type of column "ts":
-    let schema = Schema::new(vec![make_ts_field("ts")]).to_dfschema_ref()?;
+    let schema = LogicalSchema::from(Schema::new(vec![make_ts_field("ts")])).to_dfschema_ref()?;
 
     // And then build a simplifier
     // the ExecutionProps carries information needed to simplify
@@ -177,10 +179,10 @@ fn simplify_demo() -> Result<()> {
     );
 
     // here are some other examples of what DataFusion is capable of
-    let schema = Schema::new(vec![
+    let schema = LogicalSchema::from(Schema::new(vec![
         make_field("i", DataType::Int64),
         make_field("b", DataType::Boolean),
-    ])
+    ]))
     .to_dfschema_ref()?;
     let context = SimplifyContext::new(&props).with_schema(schema.clone());
     let simplifier = ExprSimplifier::new(context);
@@ -211,7 +213,7 @@ fn simplify_demo() -> Result<()> {
     // String --> Date simplification
     // `cast('2020-09-01' as date)` --> 18500
     assert_eq!(
-        simplifier.simplify(lit("2020-09-01").cast_to(&DataType::Date32, &schema)?)?,
+        simplifier.simplify(lit("2020-09-01").cast_to(&DataType::Date32.into(), &schema)?)?,
         lit(ScalarValue::Date32(Some(18506)))
     );
 
@@ -258,7 +260,7 @@ fn range_analysis_demo() -> Result<()> {
     let analysis_result = analyze(
         &physical_expr,
         AnalysisContext::new(boundaries),
-        df_schema.as_ref(),
+        &df_schema.into(),
     )?;
 
     // The results of the analysis is an range, encoded as an `Interval`,  for
@@ -293,14 +295,14 @@ fn expression_type_demo() -> Result<()> {
     // a schema. In this case we create a schema where the column `c` is of
     // type Utf8 (a String / VARCHAR)
     let schema = DFSchema::from_unqualified_fields(
-        vec![Field::new("c", DataType::Utf8, true)].into(),
+        vec![LogicalField::new("c", DataType::Utf8, true)].into(),
         HashMap::new(),
     )?;
     assert_eq!("Utf8", format!("{}", expr.get_type(&schema).unwrap()));
 
     // Using a schema where the column `foo` is of type Int32
     let schema = DFSchema::from_unqualified_fields(
-        vec![Field::new("c", DataType::Int32, true)].into(),
+        vec![LogicalField::new("c", DataType::Int32, true)].into(),
         HashMap::new(),
     )?;
     assert_eq!("Int32", format!("{}", expr.get_type(&schema).unwrap()));
@@ -310,8 +312,8 @@ fn expression_type_demo() -> Result<()> {
     let expr = col("c1") + col("c2");
     let schema = DFSchema::from_unqualified_fields(
         vec![
-            Field::new("c1", DataType::Int32, true),
-            Field::new("c2", DataType::Float32, true),
+            LogicalField::new("c1", DataType::Int32, true),
+            LogicalField::new("c2", DataType::Float32, true),
         ]
         .into(),
         HashMap::new(),

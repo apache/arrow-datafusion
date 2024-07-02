@@ -160,7 +160,7 @@ pub fn negative(
     arg: Arc<dyn PhysicalExpr>,
     input_schema: &Schema,
 ) -> Result<Arc<dyn PhysicalExpr>> {
-    let data_type = arg.data_type(input_schema)?;
+    let data_type = arg.data_type(input_schema)?.into();
     if is_null(&data_type) {
         Ok(arg)
     } else if !is_signed_numeric(&data_type)

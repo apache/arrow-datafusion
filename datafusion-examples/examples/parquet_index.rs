@@ -54,6 +54,7 @@ use std::sync::{
 };
 use tempfile::TempDir;
 use url::Url;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 
 /// This example demonstrates building a secondary index over multiple Parquet
 /// files and using that index during query to skip ("prune") files that do not
@@ -212,8 +213,8 @@ impl TableProvider for IndexTableProvider {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.index.schema().clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.index.schema().into())
     }
 
     fn table_type(&self) -> TableType {
@@ -243,7 +244,8 @@ impl TableProvider for IndexTableProvider {
         let files = self.index.get_files(predicate.clone())?;
 
         let object_store_url = ObjectStoreUrl::parse("file://")?;
-        let mut file_scan_config = FileScanConfig::new(object_store_url, self.schema())
+        let schema = SchemaRef::new(self.schema().as_ref().clone().into());
+        let mut file_scan_config = FileScanConfig::new(object_store_url, schema)
             .with_projection(projection.cloned())
             .with_limit(limit);
 

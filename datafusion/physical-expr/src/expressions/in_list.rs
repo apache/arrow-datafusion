@@ -429,7 +429,7 @@ pub fn in_list(
     let expr_data_type = expr.data_type(schema)?;
     for list_expr in list.iter() {
         let list_expr_data_type = list_expr.data_type(schema)?;
-        if !DFSchema::datatype_is_logically_equal(&expr_data_type, &list_expr_data_type) {
+        if !DFSchema::datatype_is_logically_equal(&expr_data_type.clone().into(), &list_expr_data_type.clone().into()) {
             return internal_err!(
                 "The data type inlist should be same, the value type is {expr_data_type}, one of list expr type is {list_expr_data_type}"
             );

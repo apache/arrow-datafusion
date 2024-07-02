@@ -44,6 +44,7 @@ use datafusion_physical_plan::{ExecutionMode, PlanProperties};
 
 use async_trait::async_trait;
 use futures::stream::Stream;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 
 mod provider_filter_pushdown;
 mod statistics;
@@ -80,6 +81,7 @@ struct CustomExecutionPlan {
 impl CustomExecutionPlan {
     fn new(projection: Option<Vec<usize>>) -> Self {
         let schema = TEST_CUSTOM_SCHEMA_REF!();
+        let schema = SchemaRef::new(schema.as_ref().clone().into());
         let schema =
             project_schema(&schema, projection.as_ref()).expect("projected schema");
         let cache = Self::compute_properties(schema);
@@ -202,8 +204,8 @@ impl TableProvider for CustomTableProvider {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        TEST_CUSTOM_SCHEMA_REF!()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(TEST_CUSTOM_SCHEMA_REF!().as_ref().clone().into())
     }
 
     fn table_type(&self) -> TableType {

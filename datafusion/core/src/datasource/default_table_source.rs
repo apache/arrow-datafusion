@@ -22,8 +22,8 @@ use std::sync::Arc;
 
 use crate::datasource::TableProvider;
 
-use arrow::datatypes::SchemaRef;
 use datafusion_common::{internal_err, Constraints};
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 use datafusion_expr::{Expr, TableProviderFilterPushDown, TableSource};
 
 /// DataFusion default table source, wrapping TableProvider.
@@ -52,7 +52,7 @@ impl TableSource for DefaultTableSource {
     }
 
     /// Get a reference to the schema for this table
-    fn schema(&self) -> SchemaRef {
+    fn schema(&self) -> LogicalSchemaRef {
         self.table_provider.schema()
     }
 

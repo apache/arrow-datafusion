@@ -65,11 +65,12 @@ mod tests {
     use super::*;
     use crate::test::*;
     use arrow::datatypes::{DataType, Field, Schema};
-    use datafusion_common::ToDFSchema;
     use datafusion_expr::{
         expr_rewriter::coerce_plan_expr_for_schema, logical_plan::table_scan,
     };
     use std::sync::Arc;
+    use datafusion_common::logical_type::schema::LogicalSchema;
+    use datafusion_common::ToDFSchema;
 
     fn schema() -> Schema {
         Schema::new(vec![
@@ -108,7 +109,7 @@ mod tests {
     fn eliminate_one_union() -> Result<()> {
         let table_plan = coerce_plan_expr_for_schema(
             &table_scan(Some("table"), &schema(), None)?.build()?,
-            &schema().to_dfschema()?,
+            &LogicalSchema::from(schema()).to_dfschema()?,
         )?;
         let schema = table_plan.schema().clone();
         let single_union_plan = LogicalPlan::Union(Union {

@@ -17,6 +17,7 @@
 
 use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion_common::config::ConfigOptions;
+use datafusion_common::logical_type::TypeRelation;
 use datafusion_common::tree_node::{Transformed, TransformedResult, TreeNode};
 use datafusion_common::{plan_err, DataFusionError, Result, ScalarValue};
 use datafusion_expr::{
@@ -31,6 +32,7 @@ use datafusion_sql::sqlparser::parser::Parser;
 use datafusion_sql::TableReference;
 use std::any::Any;
 use std::sync::Arc;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 
 pub fn main() -> Result<()> {
     // produce a logical plan using the datafusion-sql crate
@@ -211,7 +213,7 @@ impl ContextProvider for MyContextProvider {
         None
     }
 
-    fn get_variable_type(&self, _variable_names: &[String]) -> Option<DataType> {
+    fn get_variable_type(&self, _variable_names: &[String]) -> Option<TypeRelation> {
         None
     }
 
@@ -245,7 +247,7 @@ impl TableSource for MyTableSource {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.schema.as_ref().clone().into())
     }
 }

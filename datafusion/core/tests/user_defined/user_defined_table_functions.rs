@@ -35,6 +35,7 @@ use std::fs::File;
 use std::io::Seek;
 use std::path::Path;
 use std::sync::Arc;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 
 /// test simple udtf with define read_csv with parameters
 #[tokio::test]
@@ -117,8 +118,8 @@ impl TableProvider for SimpleCsvTable {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.schema.clone().into())
     }
 
     fn table_type(&self) -> TableType {
@@ -154,7 +155,7 @@ impl TableProvider for SimpleCsvTable {
         };
         Ok(Arc::new(MemoryExec::try_new(
             &[batches],
-            TableProvider::schema(self),
+            self.schema.clone(),
             projection.cloned(),
         )?))
     }

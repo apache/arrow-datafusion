@@ -362,8 +362,8 @@ mod tests {
 
         // filter: t1.a + CAST(Int64(1), UInt32) = t2.a + CAST(Int64(2), UInt32) as t1.a + 1 = t2.a + 2
         let filter = Expr::eq(
-            col("t1.a") + lit(1i64).cast_to(&DataType::UInt32, &t1_schema)?,
-            col("t2.a") + lit(2i32).cast_to(&DataType::UInt32, &t2_schema)?,
+            col("t1.a") + lit(1i64).cast_to(&DataType::UInt32.into(), &t1_schema)?,
+            col("t2.a") + lit(2i32).cast_to(&DataType::UInt32.into(), &t2_schema)?,
         )
         .alias("t1.a + 1 = t2.a + 2");
         let plan = LogicalPlanBuilder::from(t1)

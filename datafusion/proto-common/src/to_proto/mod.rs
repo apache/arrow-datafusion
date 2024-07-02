@@ -23,10 +23,7 @@ use crate::protobuf_common::{
 };
 use arrow::array::{ArrayRef, RecordBatch};
 use arrow::csv::WriterBuilder;
-use arrow::datatypes::{
-    DataType, Field, IntervalDayTimeType, IntervalMonthDayNanoType, IntervalUnit, Schema,
-    SchemaRef, TimeUnit, UnionMode,
-};
+use arrow::datatypes::{DataType, Field, IntervalDayTimeType, IntervalMonthDayNanoType, IntervalUnit, Schema, SchemaRef, TimeUnit, UnionMode};
 use arrow::ipc::writer::{DictionaryTracker, IpcDataGenerator};
 use datafusion_common::{
     config::{
@@ -39,6 +36,7 @@ use datafusion_common::{
     Column, ColumnStatistics, Constraint, Constraints, DFSchema, DFSchemaRef,
     DataFusionError, JoinSide, ScalarValue, Statistics,
 };
+use datafusion_common::logical_type::{ExtensionType, TypeRelation};
 
 #[derive(Debug)]
 pub enum Error {
@@ -106,6 +104,17 @@ impl TryFrom<&DataType> for protobuf::ArrowType {
 
     fn try_from(val: &DataType) -> Result<Self, Self::Error> {
         let arrow_type_enum: ArrowTypeEnum = val.try_into()?;
+        Ok(Self {
+            arrow_type_enum: Some(arrow_type_enum),
+        })
+    }
+}
+
+impl TryFrom<&TypeRelation> for protobuf::ArrowType {
+    type Error = Error;
+
+    fn try_from(val: &TypeRelation) -> Result<Self, Self::Error> {
+        let arrow_type_enum: ArrowTypeEnum = val.physical().try_into()?;
         Ok(Self {
             arrow_type_enum: Some(arrow_type_enum),
         })
@@ -262,8 +271,9 @@ impl TryFrom<&DFSchema> for protobuf::DfSchema {
         let columns = s
             .iter()
             .map(|(qualifier, field)| {
+                let field: Field = field.as_ref().clone().into();
                 Ok(protobuf::DfField {
-                    field: Some(field.as_ref().try_into()?),
+                    field: Some((&field).try_into()?),
                     qualifier: qualifier.map(|r| protobuf::ColumnRelation {
                         relation: r.to_string(),
                     }),

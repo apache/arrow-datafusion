@@ -17,8 +17,8 @@
 
 use crate::error::{_plan_datafusion_err, _plan_err};
 use crate::{Result, ScalarValue};
-use arrow_schema::DataType;
 use std::collections::HashMap;
+use crate::logical_type::TypeRelation;
 
 /// The parameter value corresponding to the placeholder
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ pub enum ParamValues {
 
 impl ParamValues {
     /// Verify parameter list length and type
-    pub fn verify(&self, expect: &[DataType]) -> Result<()> {
+    pub fn verify(&self, expect: &[TypeRelation]) -> Result<()> {
         match self {
             ParamValues::List(list) => {
                 // Verify if the number of params matches the number of values
@@ -46,7 +46,7 @@ impl ParamValues {
                 // Verify if the types of the params matches the types of the values
                 let iter = expect.iter().zip(list.iter());
                 for (i, (param_type, value)) in iter.enumerate() {
-                    if *param_type != value.data_type() {
+                    if *param_type != value.data_type().into() {
                         return _plan_err!(
                             "Expected parameter of type {:?}, got {:?} at index {}",
                             param_type,

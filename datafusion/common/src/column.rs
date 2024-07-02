@@ -17,8 +17,6 @@
 
 //! Column
 
-use arrow_schema::{Field, FieldRef};
-
 use crate::error::_schema_err;
 use crate::utils::{parse_identifiers_normalized, quote_identifier};
 use crate::{DFSchema, DataFusionError, Result, SchemaError, TableReference};
@@ -27,6 +25,7 @@ use std::convert::Infallible;
 use std::fmt;
 use std::str::FromStr;
 use std::sync::Arc;
+use crate::logical_type::field::{LogicalField, LogicalFieldRef};
 
 /// A named reference to a qualified field in a schema.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -349,15 +348,15 @@ impl From<String> for Column {
 }
 
 /// Create a column, use qualifier and field name
-impl From<(Option<&TableReference>, &Field)> for Column {
-    fn from((relation, field): (Option<&TableReference>, &Field)) -> Self {
+impl From<(Option<&TableReference>, &LogicalField)> for Column {
+    fn from((relation, field): (Option<&TableReference>, &LogicalField)) -> Self {
         Self::new(relation.cloned(), field.name())
     }
 }
 
 /// Create a column, use qualifier and field name
-impl From<(Option<&TableReference>, &FieldRef)> for Column {
-    fn from((relation, field): (Option<&TableReference>, &FieldRef)) -> Self {
+impl From<(Option<&TableReference>, &LogicalFieldRef)> for Column {
+    fn from((relation, field): (Option<&TableReference>, &LogicalFieldRef)) -> Self {
         Self::new(relation.cloned(), field.name())
     }
 }
@@ -380,7 +379,7 @@ impl fmt::Display for Column {
 mod tests {
     use super::*;
     use arrow::datatypes::DataType;
-    use arrow_schema::SchemaBuilder;
+    use arrow_schema::{Field, SchemaBuilder};
 
     fn create_qualified_schema(qualifier: &str, names: Vec<&str>) -> Result<DFSchema> {
         let mut schema_builder = SchemaBuilder::new();
@@ -389,7 +388,7 @@ mod tests {
                 .iter()
                 .map(|f| Field::new(*f, DataType::Boolean, true)),
         );
-        let schema = Arc::new(schema_builder.finish());
+        let schema = Arc::new(schema_builder.finish().into());
         DFSchema::try_from_qualified_schema(qualifier, &schema)
     }
 

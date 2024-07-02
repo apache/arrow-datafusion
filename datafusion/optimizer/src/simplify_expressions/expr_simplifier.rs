@@ -28,8 +28,7 @@ use arrow::{
 };
 
 use datafusion_common::{
-    cast::{as_large_list_array, as_list_array},
-    tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRewriter},
+    cast::{as_large_list_array, as_list_array}, logical_type::ExtensionType, tree_node::{Transformed, TransformedResult, TreeNode, TreeNodeRewriter}
 };
 use datafusion_common::{internal_err, DFSchema, DataFusionError, Result, ScalarValue};
 use datafusion_expr::expr::{
@@ -943,7 +942,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 op: Multiply,
                 right,
             }) if !info.nullable(&left)?
-                && !info.get_data_type(&left)?.is_floating()
+                && !info.get_data_type(&left)?.logical().is_floating()
                 && is_zero(&right) =>
             {
                 Transformed::yes(*right)
@@ -954,7 +953,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 op: Multiply,
                 right,
             }) if !info.nullable(&right)?
-                && !info.get_data_type(&right)?.is_floating()
+                && !info.get_data_type(&right)?.logical().is_floating()
                 && is_zero(&left) =>
             {
                 Transformed::yes(*left)
@@ -1005,7 +1004,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 op: Modulo,
                 right,
             }) if !info.nullable(&left)?
-                && !info.get_data_type(&left)?.is_floating()
+                && !info.get_data_type(&left)?.logical().is_floating()
                 && is_one(&right) =>
             {
                 Transformed::yes(lit(0))
@@ -1050,7 +1049,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 right,
             }) if is_negative_of(&left, &right) && !info.nullable(&right)? => {
                 Transformed::yes(Expr::Literal(ScalarValue::new_zero(
-                    &info.get_data_type(&left)?,
+                    &info.get_data_type(&left)?.physical(),
                 )?))
             }
 
@@ -1061,7 +1060,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 right,
             }) if is_negative_of(&right, &left) && !info.nullable(&left)? => {
                 Transformed::yes(Expr::Literal(ScalarValue::new_zero(
-                    &info.get_data_type(&left)?,
+                    &info.get_data_type(&left)?.physical(),
                 )?))
             }
 
@@ -1136,7 +1135,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 right,
             }) if is_negative_of(&left, &right) && !info.nullable(&right)? => {
                 Transformed::yes(Expr::Literal(ScalarValue::new_negative_one(
-                    &info.get_data_type(&left)?,
+                    &info.get_data_type(&left)?.physical(),
                 )?))
             }
 
@@ -1147,7 +1146,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 right,
             }) if is_negative_of(&right, &left) && !info.nullable(&left)? => {
                 Transformed::yes(Expr::Literal(ScalarValue::new_negative_one(
-                    &info.get_data_type(&left)?,
+                    &info.get_data_type(&left)?.physical(),
                 )?))
             }
 
@@ -1222,7 +1221,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 right,
             }) if is_negative_of(&left, &right) && !info.nullable(&right)? => {
                 Transformed::yes(Expr::Literal(ScalarValue::new_negative_one(
-                    &info.get_data_type(&left)?,
+                    &info.get_data_type(&left)?.physical(),
                 )?))
             }
 
@@ -1233,7 +1232,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
                 right,
             }) if is_negative_of(&right, &left) && !info.nullable(&left)? => {
                 Transformed::yes(Expr::Literal(ScalarValue::new_negative_one(
-                    &info.get_data_type(&left)?,
+                    &info.get_data_type(&left)?.physical(),
                 )?))
             }
 
@@ -1245,7 +1244,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
             }) if expr_contains(&left, &right, BitwiseXor) => {
                 let expr = delete_xor_in_complex_expr(&left, &right, false);
                 Transformed::yes(if expr == *right {
-                    Expr::Literal(ScalarValue::new_zero(&info.get_data_type(&right)?)?)
+                    Expr::Literal(ScalarValue::new_zero(&info.get_data_type(&right)?.physical())?)
                 } else {
                     expr
                 })
@@ -1259,7 +1258,7 @@ impl<'a, S: SimplifyInfo> TreeNodeRewriter for Simplifier<'a, S> {
             }) if expr_contains(&right, &left, BitwiseXor) => {
                 let expr = delete_xor_in_complex_expr(&right, &left, true);
                 Transformed::yes(if expr == *left {
-                    Expr::Literal(ScalarValue::new_zero(&info.get_data_type(&left)?)?)
+                    Expr::Literal(ScalarValue::new_zero(&info.get_data_type(&left)?.physical())?)
                 } else {
                     expr
                 })
@@ -1769,7 +1768,7 @@ fn inlist_except(mut l1: InList, l2: InList) -> Result<Expr> {
 
 #[cfg(test)]
 mod tests {
-    use datafusion_common::{assert_contains, DFSchemaRef, ToDFSchema};
+    use datafusion_common::{assert_contains, logical_type::signature::LogicalType, DFSchemaRef, ToDFSchema};
     use datafusion_expr::{
         function::{
             AccumulatorArgs, AggregateFunctionSimplification,
@@ -1783,7 +1782,8 @@ mod tests {
         ops::{BitAnd, BitOr, BitXor},
         sync::Arc,
     };
-
+    use datafusion_common::logical_type::field::LogicalField;
+    use datafusion_common::logical_type::schema::LogicalSchema;
     use crate::simplify_expressions::SimplifyContext;
     use crate::test::test_table_scan_with_name;
 
@@ -1822,9 +1822,9 @@ mod tests {
     }
 
     fn test_schema() -> DFSchemaRef {
-        Schema::new(vec![
-            Field::new("i", DataType::Int64, false),
-            Field::new("b", DataType::Boolean, true),
+        LogicalSchema::new(vec![
+            LogicalField::new("i", DataType::Int64, false),
+            LogicalField::new("b", DataType::Boolean, true),
         ])
         .to_dfschema_ref()
         .unwrap()
@@ -3007,14 +3007,14 @@ mod tests {
         Arc::new(
             DFSchema::from_unqualified_fields(
                 vec![
-                    Field::new("c1", DataType::Utf8, true),
-                    Field::new("c2", DataType::Boolean, true),
-                    Field::new("c3", DataType::Int64, true),
-                    Field::new("c4", DataType::UInt32, true),
-                    Field::new("c1_non_null", DataType::Utf8, false),
-                    Field::new("c2_non_null", DataType::Boolean, false),
-                    Field::new("c3_non_null", DataType::Int64, false),
-                    Field::new("c4_non_null", DataType::UInt32, false),
+                    LogicalField::new("c1", DataType::Utf8, true),
+                    LogicalField::new("c2", DataType::Boolean, true),
+                    LogicalField::new("c3", DataType::Int64, true),
+                    LogicalField::new("c4", DataType::UInt32, true),
+                    LogicalField::new("c1_non_null", DataType::Utf8, false),
+                    LogicalField::new("c2_non_null", DataType::Boolean, false),
+                    LogicalField::new("c3_non_null", DataType::Int64, false),
+                    LogicalField::new("c4_non_null", DataType::UInt32, false),
                 ]
                 .into(),
                 HashMap::new(),
@@ -3102,7 +3102,7 @@ mod tests {
     #[test]
     fn simplify_expr_eq() {
         let schema = expr_test_schema();
-        assert_eq!(col("c2").get_type(&schema).unwrap(), DataType::Boolean);
+        assert_eq!(col("c2").get_type(&schema).unwrap().logical(), &LogicalType::Boolean);
 
         // true = true -> true
         assert_eq!(simplify(lit(true).eq(lit(true))), lit(true));
@@ -3126,7 +3126,7 @@ mod tests {
         // expression to non-boolean.
         //
         // Make sure c1 column to be used in tests is not boolean type
-        assert_eq!(col("c1").get_type(&schema).unwrap(), DataType::Utf8);
+        assert_eq!(col("c1").get_type(&schema).unwrap().logical(), &LogicalType::Utf8);
 
         // don't fold c1 = foo
         assert_eq!(simplify(col("c1").eq(lit("foo"))), col("c1").eq(lit("foo")),);
@@ -3136,7 +3136,7 @@ mod tests {
     fn simplify_expr_not_eq() {
         let schema = expr_test_schema();
 
-        assert_eq!(col("c2").get_type(&schema).unwrap(), DataType::Boolean);
+        assert_eq!(col("c2").get_type(&schema).unwrap().logical(), &LogicalType::Boolean);
 
         // c2 != true -> !c2
         assert_eq!(simplify(col("c2").not_eq(lit(true))), col("c2").not(),);
@@ -3157,7 +3157,7 @@ mod tests {
         // when one of the operand is not of boolean type, folding the
         // other boolean constant will change return type of
         // expression to non-boolean.
-        assert_eq!(col("c1").get_type(&schema).unwrap(), DataType::Utf8);
+        assert_eq!(col("c1").get_type(&schema).unwrap().logical(), &LogicalType::Utf8);
 
         assert_eq!(
             simplify(col("c1").not_eq(lit("foo"))),

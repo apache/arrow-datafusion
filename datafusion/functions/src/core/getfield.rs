@@ -20,12 +20,14 @@ use arrow::array::{
 };
 use arrow::datatypes::DataType;
 use datafusion_common::cast::{as_map_array, as_struct_array};
+use datafusion_common::logical_type::signature::LogicalType;
 use datafusion_common::{
     exec_err, plan_datafusion_err, plan_err, ExprSchema, Result, ScalarValue,
 };
 use datafusion_expr::{ColumnarValue, Expr, ExprSchemable};
 use datafusion_expr::{ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
+use datafusion_common::logical_type::ExtensionType;
 
 #[derive(Debug)]
 pub struct GetFieldFunc {
@@ -105,35 +107,36 @@ impl ScalarUDFImpl for GetFieldFunc {
                 );
             }
         };
+        // TODO(@notfilippo): avoid converting to physical type
         let data_type = args[0].get_type(schema)?;
-        match (data_type, name) {
-            (DataType::Map(fields, _), _) => {
-                match fields.data_type() {
-                    DataType::Struct(fields) if fields.len() == 2 => {
+        match (data_type.logical(), name) {
+            (LogicalType::Map(fields, _), _) => {
+                match fields.data_type().logical() {
+                    LogicalType::Struct(fields) if fields.len() == 2 => {
                         // Arrow's MapArray is essentially a ListArray of structs with two columns. They are
                         // often named "key", and "value", but we don't require any specific naming here;
                         // instead, we assume that the second columnis the "value" column both here and in
                         // execution.
                         let value_field = fields.get(1).expect("fields should have exactly two members");
-                        Ok(value_field.data_type().clone())
+                        Ok(value_field.data_type().physical().clone())
                     },
                     _ => plan_err!("Map fields must contain a Struct with exactly 2 fields"),
                 }
             }
-            (DataType::Struct(fields), ScalarValue::Utf8(Some(s))) => {
+            (LogicalType::Struct(fields), ScalarValue::Utf8(Some(s))) => {
                 if s.is_empty() {
                     plan_err!(
                         "Struct based indexed access requires a non empty string"
                     )
                 } else {
                     let field = fields.iter().find(|f| f.name() == s);
-                    field.ok_or(plan_datafusion_err!("Field {s} not found in struct")).map(|f| f.data_type().clone())
+                    field.ok_or(plan_datafusion_err!("Field {s} not found in struct")).map(|f| f.data_type().clone().physical().clone())
                 }
             }
-            (DataType::Struct(_), _) => plan_err!(
+            (LogicalType::Struct(_), _) => plan_err!(
                 "Only UTF8 strings are valid as an indexed field in a struct"
             ),
-            (DataType::Null, _) => Ok(DataType::Null),
+            (LogicalType::Null, _) => Ok(DataType::Null),
             (other, _) => plan_err!("The expression to get an indexed field is only valid for `List`, `Struct`, `Map` or `Null` types, got {other}"),
         }
     }

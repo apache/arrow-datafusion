@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+// TODO(@notfilippo): make most of these accept LogicalType
+
 //! Coercion rules for matching argument types for binary operators
 
 use std::collections::HashSet;

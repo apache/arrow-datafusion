@@ -15,10 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow::datatypes::Fields;
 use arrow::util::display::ArrayFormatter;
 use arrow::{array, array::ArrayRef, datatypes::DataType, record_batch::RecordBatch};
 use datafusion_common::format::DEFAULT_FORMAT_OPTIONS;
+use datafusion_common::logical_type::fields::LogicalFields;
+use datafusion_common::logical_type::signature::LogicalType;
+use datafusion_common::logical_type::ExtensionType;
 use datafusion_common::DataFusionError;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -243,31 +245,30 @@ pub fn cell_to_string(col: &ArrayRef, row: usize) -> Result<String> {
 }
 
 /// Converts columns to a result as expected by sqllogicteset.
-pub(crate) fn convert_schema_to_types(columns: &Fields) -> Vec<DFColumnType> {
+pub(crate) fn convert_schema_to_types(columns: &LogicalFields) -> Vec<DFColumnType> {
     columns
         .iter()
         .map(|f| f.data_type())
-        .map(|data_type| match data_type {
-            DataType::Boolean => DFColumnType::Boolean,
-            DataType::Int8
-            | DataType::Int16
-            | DataType::Int32
-            | DataType::Int64
-            | DataType::UInt8
-            | DataType::UInt16
-            | DataType::UInt32
-            | DataType::UInt64 => DFColumnType::Integer,
-            DataType::Float16
-            | DataType::Float32
-            | DataType::Float64
-            | DataType::Decimal128(_, _)
-            | DataType::Decimal256(_, _) => DFColumnType::Float,
-            DataType::Utf8 | DataType::LargeUtf8 => DFColumnType::Text,
-            DataType::Date32
-            | DataType::Date64
-            | DataType::Time32(_)
-            | DataType::Time64(_) => DFColumnType::DateTime,
-            DataType::Timestamp(_, _) => DFColumnType::Timestamp,
+        .map(|data_type| match data_type.logical() {
+            LogicalType::Boolean => DFColumnType::Boolean,
+            LogicalType::Int8
+            | LogicalType::Int16
+            | LogicalType::Int32
+            | LogicalType::Int64
+            | LogicalType::UInt8
+            | LogicalType::UInt16
+            | LogicalType::UInt32
+            | LogicalType::UInt64 => DFColumnType::Integer,
+            LogicalType::Float16
+            | LogicalType::Float32
+            | LogicalType::Float64
+            | LogicalType::Decimal128(_, _)
+            | LogicalType::Decimal256(_, _) => DFColumnType::Float,
+            LogicalType::Utf8 => DFColumnType::Text,
+            LogicalType::Date
+            | LogicalType::Time32(_)
+            | LogicalType::Time64(_) => DFColumnType::DateTime,
+            LogicalType::Timestamp(_, _) => DFColumnType::Timestamp,
             _ => DFColumnType::Another,
         })
         .collect()

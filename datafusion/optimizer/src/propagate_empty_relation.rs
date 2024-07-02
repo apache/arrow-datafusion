@@ -246,9 +246,10 @@ fn empty_child(plan: &LogicalPlan) -> Result<Option<LogicalPlan>> {
 mod tests {
     use std::sync::Arc;
 
-    use arrow::datatypes::{DataType, Field, Schema};
+    use arrow::datatypes::{DataType, Field, Fields, Schema};
 
     use datafusion_common::{Column, DFSchema, JoinType, ScalarValue};
+    use datafusion_common::logical_type::fields::LogicalFields;
     use datafusion_expr::logical_plan::table_scan;
     use datafusion_expr::{
         binary_expr, col, lit, logical_plan::builder::LogicalPlanBuilder, Expr, Operator,
@@ -574,7 +575,7 @@ mod tests {
     fn test_empty_with_non_empty() -> Result<()> {
         let table_scan = test_table_scan()?;
 
-        let fields = test_table_scan_fields();
+        let fields = LogicalFields::from(Fields::from(test_table_scan_fields()));
 
         let empty = LogicalPlan::EmptyRelation(EmptyRelation {
             produce_one_row: false,

@@ -19,12 +19,12 @@
 
 use std::sync::Arc;
 
-use arrow::datatypes::{DataType, SchemaRef};
+use arrow::datatypes::SchemaRef;
 use datafusion_common::{
     config::ConfigOptions, file_options::file_type::FileType, not_impl_err, DFSchema,
     Result, TableReference,
 };
-
+use datafusion_common::logical_type::TypeRelation;
 use crate::{AggregateUDF, Expr, GetFieldAccess, ScalarUDF, TableSource, WindowUDF};
 
 /// Provides the `SQL` query planner  meta-data about tables and
@@ -67,7 +67,7 @@ pub trait ContextProvider {
     /// Getter for a UDWF
     fn get_window_meta(&self, name: &str) -> Option<Arc<WindowUDF>>;
     /// Getter for system/user-defined variable type
-    fn get_variable_type(&self, variable_names: &[String]) -> Option<DataType>;
+    fn get_variable_type(&self, variable_names: &[String]) -> Option<TypeRelation>;
 
     /// Get configuration options
     fn options(&self) -> &ConfigOptions;

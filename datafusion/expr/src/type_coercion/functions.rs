@@ -585,7 +585,7 @@ fn coerced_from<'a>(
         // List or LargeList with different dimensions should be handled in TypeSignature or other places before this
         (List(_) | LargeList(_), _)
             if datafusion_common::utils::base_type(type_from).eq(&Null)
-                || list_ndims(type_from) == list_ndims(type_into) =>
+                || list_ndims(&type_from) == list_ndims(&type_into) =>
         {
             Some(type_into.clone())
         }

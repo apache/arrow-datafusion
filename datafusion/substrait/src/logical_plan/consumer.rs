@@ -17,8 +17,11 @@
 
 use async_recursion::async_recursion;
 use datafusion::arrow::datatypes::{
-    DataType, Field, FieldRef, Fields, IntervalUnit, Schema, TimeUnit,
+    DataType, Field, FieldRef, Fields, IntervalUnit, Schema, TimeUnit
 };
+use datafusion::common::logical_type::field::LogicalField;
+use datafusion::common::logical_type::schema::LogicalSchema;
+use datafusion::common::logical_type::{TypeRelation, ExtensionType};
 use datafusion::common::{
     not_impl_datafusion_err, not_impl_err, plan_datafusion_err, plan_err,
     substrait_datafusion_err, substrait_err, DFSchema, DFSchemaRef,
@@ -357,7 +360,7 @@ fn make_renamed_schema(
 
     let mut name_idx = 0;
 
-    let (qualifiers, fields): (_, Vec<Field>) = schema
+    let (qualifiers, fields): (_, Vec<LogicalField>) = schema
         .iter()
         .map(|(q, f)| {
             let name = next_struct_field_name(0, dfs_names, &mut name_idx)?;
@@ -367,10 +370,10 @@ fn make_renamed_schema(
                     .to_owned()
                     .with_name(name)
                     .with_data_type(rename_inner_fields(
-                        f.data_type(),
+                        f.data_type().physical(),
                         dfs_names,
                         &mut name_idx,
-                    )?),
+                    )?.into()),
             ))
         })
         .collect::<Result<Vec<_>>>()?
@@ -386,7 +389,7 @@ fn make_renamed_schema(
 
     DFSchema::from_field_specific_qualified_schema(
         qualifiers,
-        &Arc::new(Schema::new(fields)),
+        &Arc::new(LogicalSchema::new(fields)),
     )
 }
 
@@ -834,7 +837,7 @@ pub async fn from_substrait_rel(
 }
 
 /// (Re)qualify the sides of a join if needed, i.e. if the columns from one side would otherwise
-/// conflict with the columns from the other.  
+/// conflict with the columns from the other.
 /// Substrait doesn't currently allow specifying aliases, neither for columns nor for tables. For
 /// Substrait the names don't matter since it only refers to columns by indices, however DataFusion
 /// requires columns to be uniquely identifiable, in some places (see e.g. DFSchema::check_names).
@@ -1279,7 +1282,7 @@ pub async fn from_substrait_rex(
     }
 }
 
-pub(crate) fn from_substrait_type_without_names(dt: &Type) -> Result<DataType> {
+pub(crate) fn from_substrait_type_without_names(dt: &Type) -> Result<TypeRelation> {
     from_substrait_type(dt, &[], &mut 0)
 }
 
@@ -1287,77 +1290,77 @@ fn from_substrait_type(
     dt: &Type,
     dfs_names: &[String],
     name_idx: &mut usize,
-) -> Result<DataType> {
+) -> Result<TypeRelation> {
     match &dt.kind {
         Some(s_kind) => match s_kind {
-            r#type::Kind::Bool(_) => Ok(DataType::Boolean),
+            r#type::Kind::Bool(_) => Ok(DataType::Boolean.into()),
             r#type::Kind::I8(integer) => match integer.type_variation_reference {
-                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int8),
-                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt8),
+                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int8.into()),
+                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt8.into()),
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
             },
             r#type::Kind::I16(integer) => match integer.type_variation_reference {
-                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int16),
-                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt16),
+                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int16.into()),
+                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt16.into()),
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
             },
             r#type::Kind::I32(integer) => match integer.type_variation_reference {
-                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int32),
-                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt32),
+                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int32.into()),
+                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt32.into()),
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
             },
             r#type::Kind::I64(integer) => match integer.type_variation_reference {
-                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int64),
-                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt64),
+                DEFAULT_TYPE_VARIATION_REF => Ok(DataType::Int64.into()),
+                UNSIGNED_INTEGER_TYPE_VARIATION_REF => Ok(DataType::UInt64.into()),
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
             },
-            r#type::Kind::Fp32(_) => Ok(DataType::Float32),
-            r#type::Kind::Fp64(_) => Ok(DataType::Float64),
+            r#type::Kind::Fp32(_) => Ok(DataType::Float32.into()),
+            r#type::Kind::Fp64(_) => Ok(DataType::Float64.into()),
             r#type::Kind::Timestamp(ts) => match ts.type_variation_reference {
                 TIMESTAMP_SECOND_TYPE_VARIATION_REF => {
-                    Ok(DataType::Timestamp(TimeUnit::Second, None))
+                    Ok(DataType::Timestamp(TimeUnit::Second, None).into())
                 }
                 TIMESTAMP_MILLI_TYPE_VARIATION_REF => {
-                    Ok(DataType::Timestamp(TimeUnit::Millisecond, None))
+                    Ok(DataType::Timestamp(TimeUnit::Millisecond, None).into())
                 }
                 TIMESTAMP_MICRO_TYPE_VARIATION_REF => {
-                    Ok(DataType::Timestamp(TimeUnit::Microsecond, None))
+                    Ok(DataType::Timestamp(TimeUnit::Microsecond, None).into())
                 }
                 TIMESTAMP_NANO_TYPE_VARIATION_REF => {
-                    Ok(DataType::Timestamp(TimeUnit::Nanosecond, None))
+                    Ok(DataType::Timestamp(TimeUnit::Nanosecond, None).into())
                 }
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
             },
             r#type::Kind::Date(date) => match date.type_variation_reference {
-                DATE_32_TYPE_VARIATION_REF => Ok(DataType::Date32),
-                DATE_64_TYPE_VARIATION_REF => Ok(DataType::Date64),
+                DATE_32_TYPE_VARIATION_REF => Ok(DataType::Date32.into()),
+                DATE_64_TYPE_VARIATION_REF => Ok(DataType::Date64.into()),
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
             },
             r#type::Kind::Binary(binary) => match binary.type_variation_reference {
-                DEFAULT_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::Binary),
-                LARGE_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::LargeBinary),
+                DEFAULT_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::Binary.into()),
+                LARGE_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::LargeBinary.into()),
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
             },
             r#type::Kind::FixedBinary(fixed) => {
-                Ok(DataType::FixedSizeBinary(fixed.length))
+                Ok(DataType::FixedSizeBinary(fixed.length).into())
             }
             r#type::Kind::String(string) => match string.type_variation_reference {
-                DEFAULT_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::Utf8),
-                LARGE_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::LargeUtf8),
+                DEFAULT_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::Utf8.into()),
+                LARGE_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::LargeUtf8.into()),
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
                 ),
@@ -1367,14 +1370,14 @@ fn from_substrait_type(
                     substrait_datafusion_err!("List type must have inner type")
                 })?;
                 let field = Arc::new(Field::new_list_field(
-                    from_substrait_type(inner_type, dfs_names, name_idx)?,
-                    // We ignore Substrait's nullability here to match to_substrait_literal 
+                    from_substrait_type(inner_type, dfs_names, name_idx)?.physical().clone(),
+                    // We ignore Substrait's nullability here to match to_substrait_literal
                     // which always creates nullable lists
                     true,
                 ));
                 match list.type_variation_reference {
-                    DEFAULT_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::List(field)),
-                    LARGE_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::LargeList(field)),
+                    DEFAULT_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::List(field).into()),
+                    LARGE_CONTAINER_TYPE_VARIATION_REF => Ok(DataType::LargeList(field).into()),
                     v => not_impl_err!(
                         "Unsupported Substrait type variation {v} of type {s_kind:?}"
                     )?,
@@ -1389,12 +1392,12 @@ fn from_substrait_type(
                 })?;
                 let key_field = Arc::new(Field::new(
                     "key",
-                    from_substrait_type(key_type, dfs_names, name_idx)?,
+                    from_substrait_type(key_type, dfs_names, name_idx)?.physical().clone(),
                     false,
                 ));
                 let value_field = Arc::new(Field::new(
                     "value",
-                    from_substrait_type(value_type, dfs_names, name_idx)?,
+                    from_substrait_type(value_type, dfs_names, name_idx)?.physical().clone(),
                     true,
                 ));
                 match map.type_variation_reference {
@@ -1403,7 +1406,7 @@ fn from_substrait_type(
                             "entries",
                             [key_field, value_field],
                             false, // The inner map field is always non-nullable (Arrow #1697),
-                        )), false))
+                        )), false).into())
                     },
                     v => not_impl_err!(
                         "Unsupported Substrait type variation {v} of type {s_kind:?}"
@@ -1412,10 +1415,10 @@ fn from_substrait_type(
             }
             r#type::Kind::Decimal(d) => match d.type_variation_reference {
                 DECIMAL_128_TYPE_VARIATION_REF => {
-                    Ok(DataType::Decimal128(d.precision as u8, d.scale as i8))
+                    Ok(DataType::Decimal128(d.precision as u8, d.scale as i8).into())
                 }
                 DECIMAL_256_TYPE_VARIATION_REF => {
-                    Ok(DataType::Decimal256(d.precision as u8, d.scale as i8))
+                    Ok(DataType::Decimal256(d.precision as u8, d.scale as i8).into())
                 }
                 v => not_impl_err!(
                     "Unsupported Substrait type variation {v} of type {s_kind:?}"
@@ -1424,13 +1427,13 @@ fn from_substrait_type(
             r#type::Kind::UserDefined(u) => {
                 match u.type_reference {
                     INTERVAL_YEAR_MONTH_TYPE_REF => {
-                        Ok(DataType::Interval(IntervalUnit::YearMonth))
+                        Ok(DataType::Interval(IntervalUnit::YearMonth).into())
                     }
                     INTERVAL_DAY_TIME_TYPE_REF => {
-                        Ok(DataType::Interval(IntervalUnit::DayTime))
+                        Ok(DataType::Interval(IntervalUnit::DayTime).into())
                     }
                     INTERVAL_MONTH_DAY_NANO_TYPE_REF => {
-                        Ok(DataType::Interval(IntervalUnit::MonthDayNano))
+                        Ok(DataType::Interval(IntervalUnit::MonthDayNano).into())
                     }
                     _ => not_impl_err!(
                         "Unsupported Substrait user defined type with ref {} and variation {}",
@@ -1441,9 +1444,9 @@ fn from_substrait_type(
             },
             r#type::Kind::Struct(s) => Ok(DataType::Struct(from_substrait_struct_type(
                 s, dfs_names, name_idx,
-            )?)),
-            r#type::Kind::Varchar(_) => Ok(DataType::Utf8),
-            r#type::Kind::FixedChar(_) => Ok(DataType::Utf8),
+            )?).into()),
+            r#type::Kind::Varchar(_) => Ok(DataType::Utf8.into()),
+            r#type::Kind::FixedChar(_) => Ok(DataType::Utf8.into()),
             _ => not_impl_err!("Unsupported Substrait type: {s_kind:?}"),
         },
         _ => not_impl_err!("`None` Substrait kind is not supported"),
@@ -1459,7 +1462,7 @@ fn from_substrait_struct_type(
     for (i, f) in s.types.iter().enumerate() {
         let field = Field::new(
             next_struct_field_name(i, dfs_names, name_idx)?,
-            from_substrait_type(f, dfs_names, name_idx)?,
+            from_substrait_type(f, dfs_names, name_idx)?.physical().clone(),
             true, // We assume everything to be nullable since that's easier than ensuring it matches
         );
         fields.push(field);
@@ -1668,10 +1671,10 @@ fn from_substrait_literal(
             )?;
             match lit.type_variation_reference {
                 DEFAULT_CONTAINER_TYPE_VARIATION_REF => {
-                    ScalarValue::List(ScalarValue::new_list_nullable(&[], &element_type))
+                    ScalarValue::List(ScalarValue::new_list_nullable(&[], &element_type.physical()))
                 }
                 LARGE_CONTAINER_TYPE_VARIATION_REF => ScalarValue::LargeList(
-                    ScalarValue::new_large_list(&[], &element_type),
+                    ScalarValue::new_large_list(&[], &element_type.physical()),
                 ),
                 others => {
                     return substrait_err!("Unknown type variation reference {others}");
@@ -1849,7 +1852,7 @@ fn from_substrait_null(
                 d.scale as i8,
             )),
             r#type::Kind::List(l) => {
-                let field = Field::new_list_field(
+                let field = LogicalField::new_list_field(
                     from_substrait_type(
                         l.r#type.clone().unwrap().as_ref(),
                         dfs_names,
@@ -1859,10 +1862,10 @@ fn from_substrait_null(
                 );
                 match l.type_variation_reference {
                     DEFAULT_CONTAINER_TYPE_VARIATION_REF => Ok(ScalarValue::List(
-                        Arc::new(GenericListArray::new_null(field.into(), 1)),
+                        Arc::new(GenericListArray::new_null(FieldRef::new(field.into()), 1)),
                     )),
                     LARGE_CONTAINER_TYPE_VARIATION_REF => Ok(ScalarValue::LargeList(
-                        Arc::new(GenericListArray::new_null(field.into(), 1)),
+                        Arc::new(GenericListArray::new_null(FieldRef::new(field.into()), 1)),
                     )),
                     v => not_impl_err!(
                         "Unsupported Substrait type variation {v} of type {kind:?}"
@@ -1870,7 +1873,7 @@ fn from_substrait_null(
                 }
             }
             r#type::Kind::Struct(s) => {
-                let fields = from_substrait_struct_type(s, dfs_names, name_idx)?;
+                let fields: Fields = from_substrait_struct_type(s, dfs_names, name_idx)?.into();
                 Ok(ScalarStructBuilder::new_null(fields))
             }
             _ => not_impl_err!("Unsupported Substrait type for null: {kind:?}"),

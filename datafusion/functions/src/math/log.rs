@@ -24,6 +24,7 @@ use super::power::PowerFunc;
 
 use arrow::array::{ArrayRef, Float32Array, Float64Array};
 use arrow::datatypes::DataType;
+use datafusion_common::logical_type::ExtensionType;
 use datafusion_common::{
     exec_err, internal_err, plan_datafusion_err, plan_err, DataFusionError, Result,
     ScalarValue,
@@ -158,6 +159,7 @@ impl ScalarUDFImpl for LogFunc {
         Ok(ColumnarValue::Array(arr))
     }
 
+    // TODO(@notfilippo): avoid converting to physical type
     /// Simplify the `log` function by the relevant rules:
     /// 1. Log(a, 1) ===> 0
     /// 2. Log(a, Power(a, b)) ===> b
@@ -182,13 +184,13 @@ impl ScalarUDFImpl for LogFunc {
         let base = if let Some(base) = args.pop() {
             base
         } else {
-            lit(ScalarValue::new_ten(&number_datatype)?)
+            lit(ScalarValue::new_ten(&number_datatype.physical())?)
         };
 
         match number {
-            Expr::Literal(value) if value == ScalarValue::new_one(&number_datatype)? => {
+            Expr::Literal(value) if value == ScalarValue::new_one(&number_datatype.physical())? => {
                 Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::new_zero(
-                    &info.get_data_type(&base)?,
+                    &info.get_data_type(&base)?.physical(),
                 )?)))
             }
             Expr::ScalarFunction(ScalarFunction { func, mut args })
@@ -200,7 +202,7 @@ impl ScalarUDFImpl for LogFunc {
             number => {
                 if number == base {
                     Ok(ExprSimplifyResult::Simplified(lit(ScalarValue::new_one(
-                        &number_datatype,
+                        &number_datatype.physical(),
                     )?)))
                 } else {
                     let args = match num_args {

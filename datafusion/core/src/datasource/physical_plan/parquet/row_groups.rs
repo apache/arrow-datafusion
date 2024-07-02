@@ -411,7 +411,6 @@ mod tests {
     use crate::datasource::physical_plan::parquet::reader::ParquetFileReader;
     use crate::physical_plan::metrics::ExecutionPlanMetricsSet;
 
-    use arrow::datatypes::DataType::Decimal128;
     use arrow::datatypes::{DataType, Field};
     use datafusion_common::Result;
     use datafusion_expr::{cast, col, lit, Expr};
@@ -821,7 +820,7 @@ mod tests {
         let schema_descr = get_test_schema_descr(vec![field]);
         let expr = cast(col("c1"), DataType::Decimal128(11, 2)).gt(cast(
             lit(ScalarValue::Decimal128(Some(500), 5, 2)),
-            Decimal128(11, 2),
+            DataType::Decimal128(11, 2),
         ));
         let expr = logical2physical(&expr, &schema);
         let pruning_predicate = PruningPredicate::try_new(expr, schema.clone()).unwrap();

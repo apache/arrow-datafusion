@@ -60,6 +60,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tempfile::TempDir;
 use url::Url;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 
 /// This example demonstrates using low level DataFusion APIs to read only
 /// certain row groups and ranges from parquet files, based on external
@@ -299,8 +300,9 @@ impl IndexTableProvider {
         // In this example, we use the PruningPredicate's literal guarantees to
         // analyze the predicate. In a real system, using
         // `PruningPredicate::prune` would likely be easier to do.
+        let schema = SchemaRef::new(self.schema().as_ref().clone().into());
         let pruning_predicate =
-            PruningPredicate::try_new(Arc::clone(predicate), self.schema().clone())?;
+            PruningPredicate::try_new(Arc::clone(predicate), schema)?;
 
         // The PruningPredicate's guarantees must all be satisfied in order for
         // the predicate to possibly evaluate to true.
@@ -453,8 +455,8 @@ impl TableProvider for IndexTableProvider {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        Arc::clone(&self.indexed_file.schema)
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.indexed_file.schema.as_ref().clone().into())
     }
 
     fn table_type(&self) -> TableType {
@@ -482,7 +484,7 @@ impl TableProvider for IndexTableProvider {
             .with_extensions(Arc::new(access_plan) as _);
 
         // Prepare for scanning
-        let schema = self.schema();
+        let schema = SchemaRef::new(self.schema().as_ref().clone().into());
         let object_store_url = ObjectStoreUrl::parse("file://")?;
         let file_scan_config = FileScanConfig::new(object_store_url, schema)
             .with_limit(limit)

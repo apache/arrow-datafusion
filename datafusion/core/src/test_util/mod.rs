@@ -51,7 +51,7 @@ use datafusion_physical_expr::EquivalenceProperties;
 use async_trait::async_trait;
 use futures::Stream;
 use tempfile::TempDir;
-
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 // backwards compatibility
 #[cfg(feature = "parquet")]
 pub use datafusion_common::test_util::parquet_test_data;
@@ -203,8 +203,8 @@ impl TableProvider for TestTableProvider {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.schema.clone().into())
     }
 
     fn table_type(&self) -> TableType {

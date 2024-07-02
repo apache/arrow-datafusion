@@ -47,6 +47,7 @@ use datafusion::prelude::{CsvReadOptions, ParquetReadOptions};
 use datafusion::test_util::{parquet_test_data, populate_csv_partitions};
 use datafusion::{assert_batches_eq, assert_batches_sorted_eq};
 use datafusion_common::{assert_contains, DataFusionError, ScalarValue, UnnestOptions};
+use datafusion_common::logical_type::TypeRelation;
 use datafusion_execution::config::SessionConfig;
 use datafusion_execution::runtime_env::RuntimeEnv;
 use datafusion_expr::expr::{GroupingSet, Sort};
@@ -746,8 +747,8 @@ async fn join_with_alias_filter() -> Result<()> {
 
     // filter: t1.a + CAST(Int64(1), UInt32) = t2.a + CAST(Int64(2), UInt32) as t1.a + 1 = t2.a + 2
     let filter = Expr::eq(
-        col("t1.a") + lit(3i64).cast_to(&DataType::UInt32, &t1_schema)?,
-        col("t2.a") + lit(1i32).cast_to(&DataType::UInt32, &t2_schema)?,
+        col("t1.a") + lit(3i64).cast_to(&DataType::UInt32.into(), &t1_schema)?,
+        col("t2.a") + lit(1i32).cast_to(&DataType::UInt32.into(), &t2_schema)?,
     )
     .alias("t1.b + 1 = t2.a + 2");
 
@@ -1925,8 +1926,8 @@ impl VarProvider for HardcodedIntProvider {
         Ok(ScalarValue::Int64(Some(1234)))
     }
 
-    fn get_type(&self, _: &[String]) -> Option<DataType> {
-        Some(DataType::Int64)
+    fn get_type(&self, _: &[String]) -> Option<TypeRelation> {
+        Some(DataType::Int64.into())
     }
 }
 

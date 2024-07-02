@@ -30,7 +30,6 @@ use datafusion_sql::unparser::{expr_to_sql, plan_to_sql, Unparser};
 
 use sqlparser::dialect::{Dialect, GenericDialect, MySqlDialect};
 use sqlparser::parser::Parser;
-
 use crate::common::MockContextProvider;
 
 #[test]

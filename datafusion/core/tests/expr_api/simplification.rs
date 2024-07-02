@@ -23,6 +23,7 @@ use arrow_buffer::IntervalDayTime;
 use chrono::{DateTime, TimeZone, Utc};
 use datafusion::{error::Result, execution::context::ExecutionProps, prelude::*};
 use datafusion_common::cast::as_int32_array;
+use datafusion_common::logical_type::signature::LogicalType;
 use datafusion_common::ScalarValue;
 use datafusion_common::{DFSchemaRef, ToDFSchema};
 use datafusion_expr::expr::ScalarFunction;
@@ -37,6 +38,9 @@ use datafusion_optimizer::optimizer::Optimizer;
 use datafusion_optimizer::simplify_expressions::{ExprSimplifier, SimplifyExpressions};
 use datafusion_optimizer::{OptimizerContext, OptimizerRule};
 use std::sync::Arc;
+use datafusion_common::logical_type::field::LogicalField;
+use datafusion_common::logical_type::{TypeRelation, ExtensionType};
+use datafusion_common::logical_type::schema::LogicalSchema;
 
 /// In order to simplify expressions, DataFusion must have information
 /// about the expressions.
@@ -55,8 +59,8 @@ struct MyInfo {
 impl SimplifyInfo for MyInfo {
     fn is_boolean_type(&self, expr: &Expr) -> Result<bool> {
         Ok(matches!(
-            expr.get_type(self.schema.as_ref())?,
-            DataType::Boolean
+            expr.get_type(self.schema.as_ref())?.logical(),
+            LogicalType::Boolean
         ))
     }
 
@@ -68,7 +72,7 @@ impl SimplifyInfo for MyInfo {
         &self.execution_props
     }
 
-    fn get_data_type(&self, expr: &Expr) -> Result<DataType> {
+    fn get_data_type(&self, expr: &Expr) -> Result<TypeRelation> {
         expr.get_type(self.schema.as_ref())
     }
 }
@@ -88,10 +92,10 @@ impl From<DFSchemaRef> for MyInfo {
 /// b: Int32
 /// s: Utf8
 fn schema() -> DFSchemaRef {
-    Schema::new(vec![
-        Field::new("a", DataType::Int32, true),
-        Field::new("b", DataType::Int32, false),
-        Field::new("s", DataType::Utf8, false),
+    LogicalSchema::new(vec![
+        LogicalField::new("a", DataType::Int32, true),
+        LogicalField::new("b", DataType::Int32, false),
+        LogicalField::new("s", DataType::Utf8, false),
     ])
     .to_dfschema_ref()
     .unwrap()
@@ -281,7 +285,7 @@ fn select_date_plus_interval() -> Result<()> {
     let schema = table_scan.schema();
 
     let date_plus_interval_expr = to_timestamp_expr(ts_string)
-        .cast_to(&DataType::Date32, schema)?
+        .cast_to(&DataType::Date32.into(), schema)?
         + Expr::Literal(ScalarValue::IntervalDayTime(Some(IntervalDayTime {
             days: 123,
             milliseconds: 0,
@@ -483,15 +487,15 @@ fn multiple_now() -> Result<()> {
 // ------------------------------
 
 fn expr_test_schema() -> DFSchemaRef {
-    Schema::new(vec![
-        Field::new("c1", DataType::Utf8, true),
-        Field::new("c2", DataType::Boolean, true),
-        Field::new("c3", DataType::Int64, true),
-        Field::new("c4", DataType::UInt32, true),
-        Field::new("c1_non_null", DataType::Utf8, false),
-        Field::new("c2_non_null", DataType::Boolean, false),
-        Field::new("c3_non_null", DataType::Int64, false),
-        Field::new("c4_non_null", DataType::UInt32, false),
+    LogicalSchema::new(vec![
+        LogicalField::new("c1", DataType::Utf8, true),
+        LogicalField::new("c2", DataType::Boolean, true),
+        LogicalField::new("c3", DataType::Int64, true),
+        LogicalField::new("c4", DataType::UInt32, true),
+        LogicalField::new("c1_non_null", DataType::Utf8, false),
+        LogicalField::new("c2_non_null", DataType::Boolean, false),
+        LogicalField::new("c3_non_null", DataType::Int64, false),
+        LogicalField::new("c4_non_null", DataType::UInt32, false),
     ])
     .to_dfschema_ref()
     .unwrap()

@@ -44,6 +44,7 @@ use datafusion_expr::{Expr, Volatility};
 use datafusion_physical_expr::create_physical_expr;
 use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStore};
+use datafusion_common::logical_type::field::LogicalField;
 
 /// Check whether the given expression can be resolved using only the columns `col_names`.
 /// This means that if this function returns true:
@@ -264,7 +265,7 @@ async fn prune_partitions(
     let df_schema = DFSchema::from_unqualified_fields(
         partition_cols
             .iter()
-            .map(|(n, d)| Field::new(n, d.clone(), true))
+            .map(|(n, d)| LogicalField::new(n, d.clone(), true))
             .collect(),
         Default::default(),
     )?;

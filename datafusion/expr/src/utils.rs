@@ -28,7 +28,8 @@ use crate::{
     and, BinaryExpr, Expr, ExprSchemable, Filter, GroupingSet, LogicalPlan, Operator,
 };
 
-use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
+use arrow::datatypes::DataType;
+use datafusion_common::logical_type::signature::LogicalType;
 use datafusion_common::tree_node::{
     Transformed, TransformedResult, TreeNode, TreeNodeRecursion,
 };
@@ -38,6 +39,9 @@ use datafusion_common::{
     ScalarValue, TableReference,
 };
 
+use datafusion_common::logical_type::field::LogicalField;
+use datafusion_common::logical_type::schema::LogicalSchema;
+use datafusion_common::logical_type::{TypeRelation, ExtensionType};
 use sqlparser::ast::{ExceptSelectItem, ExcludeSelectItem, WildcardAdditionalOptions};
 
 ///  The value to which `COUNT(*)` is expanded to in
@@ -429,7 +433,7 @@ pub fn expand_qualified_wildcard(
         return plan_err!("Invalid qualifier {qualifier}");
     }
 
-    let qualified_schema = Arc::new(Schema::new(fields_with_qualified));
+    let qualified_schema = Arc::new(LogicalSchema::new(fields_with_qualified));
     let qualified_dfschema =
         DFSchema::try_from_qualified_schema(qualifier.clone(), &qualified_schema)?
             .with_functional_dependencies(projected_func_dependencies)?;
@@ -727,7 +731,7 @@ pub fn from_plan(
 pub fn exprlist_to_fields<'a>(
     exprs: impl IntoIterator<Item = &'a Expr>,
     plan: &LogicalPlan,
-) -> Result<Vec<(Option<TableReference>, Arc<Field>)>> {
+) -> Result<Vec<(Option<TableReference>, Arc<LogicalField>)>> {
     // look for exact match in plan's output schema
     let input_schema = &plan.schema();
     exprs
@@ -830,42 +834,29 @@ pub(crate) fn find_column_indexes_referenced_by_expr(
 /// can this data type be used in hash join equal conditions??
 /// data types here come from function 'equal_rows', if more data types are supported
 /// in equal_rows(hash join), add those data types here to generate join logical plan.
-pub fn can_hash(data_type: &DataType) -> bool {
-    match data_type {
-        DataType::Null => true,
-        DataType::Boolean => true,
-        DataType::Int8 => true,
-        DataType::Int16 => true,
-        DataType::Int32 => true,
-        DataType::Int64 => true,
-        DataType::UInt8 => true,
-        DataType::UInt16 => true,
-        DataType::UInt32 => true,
-        DataType::UInt64 => true,
-        DataType::Float32 => true,
-        DataType::Float64 => true,
-        DataType::Timestamp(time_unit, _) => match time_unit {
-            TimeUnit::Second => true,
-            TimeUnit::Millisecond => true,
-            TimeUnit::Microsecond => true,
-            TimeUnit::Nanosecond => true,
-        },
-        DataType::Utf8 => true,
-        DataType::LargeUtf8 => true,
-        DataType::Decimal128(_, _) => true,
-        DataType::Date32 => true,
-        DataType::Date64 => true,
-        DataType::FixedSizeBinary(_) => true,
-        DataType::Dictionary(key_type, value_type)
-            if *value_type.as_ref() == DataType::Utf8 =>
-        {
-            DataType::is_dictionary_key_type(key_type)
-        }
-        DataType::List(_) => true,
-        DataType::LargeList(_) => true,
-        DataType::FixedSizeList(_, _) => true,
-        _ => false,
-    }
+pub fn can_hash(data_type: &TypeRelation) -> bool {
+    use LogicalType::*;
+    matches!(
+        data_type.logical(),
+        Null
+            | Boolean
+            | Int8
+            | Int16
+            | Int32
+            | Int64
+            | UInt8
+            | UInt16
+            | UInt32
+            | UInt64
+            | Float16
+            | Float32
+            | Float64
+            | Timestamp(_, _)
+            | Utf8
+            | Decimal128(_, _)
+            | Date
+            | List(_)
+    )
 }
 
 /// Check whether all columns are from the schema.

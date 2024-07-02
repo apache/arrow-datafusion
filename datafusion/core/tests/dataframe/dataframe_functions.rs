@@ -1052,7 +1052,7 @@ async fn test_fn_decode() -> Result<()> {
     let expr = decode(encode(col("a"), lit("hex")), lit("hex"))
         // need to cast to utf8 otherwise the default display of binary array is hex
         // so it looks like nothing is done
-        .cast_to(&DataType::Utf8, &df_schema)?;
+        .cast_to(&DataType::Utf8.into(), &df_schema)?;
 
     let expected = [
         "+------------------------------------------------+",

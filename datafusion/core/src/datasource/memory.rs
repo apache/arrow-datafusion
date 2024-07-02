@@ -21,7 +21,6 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
-
 use crate::datasource::{TableProvider, TableType};
 use crate::error::Result;
 use crate::execution::context::SessionState;
@@ -47,6 +46,7 @@ use log::debug;
 use parking_lot::Mutex;
 use tokio::sync::RwLock;
 use tokio::task::JoinSet;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 
 /// Type alias for partition data
 pub type PartitionData = Arc<RwLock<Vec<RecordBatch>>>;
@@ -159,6 +159,7 @@ impl MemTable {
             }
         }
 
+        let schema = SchemaRef::new(schema.as_ref().clone().into());
         let exec = MemoryExec::try_new(&data, schema.clone(), None)?;
 
         if let Some(num_partitions) = output_partitions {
@@ -192,8 +193,8 @@ impl TableProvider for MemTable {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.schema.clone().into())
     }
 
     fn constraints(&self) -> Option<&Constraints> {
@@ -218,7 +219,7 @@ impl TableProvider for MemTable {
         }
 
         let mut exec =
-            MemoryExec::try_new(&partitions, self.schema(), projection.cloned())?;
+            MemoryExec::try_new(&partitions, SchemaRef::new(self.schema().as_ref().clone().into()), projection.cloned())?;
 
         let show_sizes = state.config_options().explain.show_sizes;
         exec = exec.with_show_sizes(show_sizes);
@@ -267,8 +268,8 @@ impl TableProvider for MemTable {
 
         // Create a physical plan from the logical plan.
         // Check that the schema of the plan matches the schema of this table.
-        if !self
-            .schema()
+        let schema = SchemaRef::new(self.schema.as_ref().clone());
+        if !schema
             .logically_equivalent_names_and_types(&input.schema())
         {
             return plan_err!(
@@ -624,7 +625,7 @@ mod tests {
         let scan_plan = LogicalPlanBuilder::scan("source", source, None)?.build()?;
         // Create an insert plan to insert the source data into the initial table
         let insert_into_table =
-            LogicalPlanBuilder::insert_into(scan_plan, "t", &schema, false)?.build()?;
+            LogicalPlanBuilder::insert_into(scan_plan, "t", &schema.as_ref().clone().into(), false)?.build()?;
         // Create a physical plan from the insert plan
         let plan = session_ctx
             .state()

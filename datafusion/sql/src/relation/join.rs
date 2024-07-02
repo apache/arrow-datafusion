@@ -122,7 +122,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     .build()
             }
             JoinConstraint::Natural => {
-                let left_cols: HashSet<&String> =
+                let left_cols: HashSet<&str> =
                     left.schema().fields().iter().map(|f| f.name()).collect();
                 let keys: Vec<Column> = right
                     .schema()

@@ -20,7 +20,8 @@
 use crate::error::Result;
 use crate::scalar::ScalarValue;
 use crate::variable::VarProvider;
-use arrow::datatypes::DataType;
+use arrow_schema::DataType;
+use datafusion_common::logical_type::TypeRelation;
 
 /// System variable
 #[derive(Default, Debug)]
@@ -40,8 +41,8 @@ impl VarProvider for SystemVar {
         Ok(ScalarValue::from(s))
     }
 
-    fn get_type(&self, _: &[String]) -> Option<DataType> {
-        Some(DataType::Utf8)
+    fn get_type(&self, _: &[String]) -> Option<TypeRelation> {
+        Some(DataType::Utf8.into())
     }
 }
 
@@ -67,11 +68,11 @@ impl VarProvider for UserDefinedVar {
         }
     }
 
-    fn get_type(&self, var_names: &[String]) -> Option<DataType> {
+    fn get_type(&self, var_names: &[String]) -> Option<TypeRelation> {
         if var_names[0] != "@integer" {
-            Some(DataType::Utf8)
+            Some(DataType::Utf8.into())
         } else {
-            Some(DataType::Int32)
+            Some(DataType::Int32.into())
         }
     }
 }

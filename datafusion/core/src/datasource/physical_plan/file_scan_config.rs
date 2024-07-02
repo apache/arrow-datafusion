@@ -626,7 +626,6 @@ fn create_output_array(
 #[cfg(test)]
 mod tests {
     use arrow_array::Int32Array;
-
     use super::*;
     use crate::{test::columns, test_util::aggr_test_schema};
 

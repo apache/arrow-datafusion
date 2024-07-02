@@ -17,8 +17,8 @@
 
 //! Variable provider
 
-use arrow::datatypes::DataType;
 use datafusion_common::{Result, ScalarValue};
+use datafusion_common::logical_type::TypeRelation;
 
 /// Variable type, system/user defined
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -35,7 +35,7 @@ pub trait VarProvider: std::fmt::Debug {
     fn get_value(&self, var_names: Vec<String>) -> Result<ScalarValue>;
 
     /// Return the type of the given variable
-    fn get_type(&self, var_names: &[String]) -> Option<DataType>;
+    fn get_type(&self, var_names: &[String]) -> Option<TypeRelation>;
 }
 
 pub fn is_system_variables(variable_names: &[String]) -> bool {

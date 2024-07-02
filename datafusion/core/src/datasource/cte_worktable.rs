@@ -22,6 +22,7 @@ use std::sync::Arc;
 
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 use datafusion_physical_plan::work_table::WorkTableExec;
 
 use crate::{
@@ -67,8 +68,8 @@ impl TableProvider for CteWorkTable {
         None
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.table_schema.clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.table_schema.clone().into())
     }
 
     fn table_type(&self) -> TableType {

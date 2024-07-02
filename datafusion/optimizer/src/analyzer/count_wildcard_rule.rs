@@ -108,7 +108,6 @@ mod tests {
     };
     use datafusion_functions_aggregate::count::count_udaf;
     use std::sync::Arc;
-
     use datafusion_functions_aggregate::expr_fn::{count, sum};
 
     fn assert_plan_eq(plan: LogicalPlan, expected: &str) -> Result<()> {

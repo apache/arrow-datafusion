@@ -206,7 +206,7 @@ pub fn assert_fields_eq(plan: &LogicalPlan, expected: Vec<&str>) {
         .schema()
         .fields()
         .iter()
-        .map(|f| f.name().clone())
+        .map(|f| f.name().to_string())
         .collect();
     assert_eq!(actual, expected);
 }

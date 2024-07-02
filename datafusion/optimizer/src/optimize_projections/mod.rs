@@ -810,6 +810,7 @@ mod tests {
     use datafusion_common::{
         Column, DFSchema, DFSchemaRef, JoinType, Result, TableReference,
     };
+    use datafusion_common::logical_type::field::LogicalField;
     use datafusion_expr::AggregateExt;
     use datafusion_expr::{
         binary_expr, build_join_schema,
@@ -1544,15 +1545,15 @@ mod tests {
                 vec![
                     (
                         Some("test".into()),
-                        Arc::new(Field::new("a", DataType::UInt32, false))
+                        Arc::new(LogicalField::new("a", DataType::UInt32, false))
                     ),
                     (
                         Some("test".into()),
-                        Arc::new(Field::new("b", DataType::UInt32, false))
+                        Arc::new(LogicalField::new("b", DataType::UInt32, false))
                     ),
                     (
                         Some("test2".into()),
-                        Arc::new(Field::new("c1", DataType::UInt32, true))
+                        Arc::new(LogicalField::new("c1", DataType::UInt32, true))
                     ),
                 ],
                 HashMap::new()
@@ -1596,15 +1597,15 @@ mod tests {
                 vec![
                     (
                         Some("test".into()),
-                        Arc::new(Field::new("a", DataType::UInt32, false))
+                        Arc::new(LogicalField::new("a", DataType::UInt32, false))
                     ),
                     (
                         Some("test".into()),
-                        Arc::new(Field::new("b", DataType::UInt32, false))
+                        Arc::new(LogicalField::new("b", DataType::UInt32, false))
                     ),
                     (
                         Some("test2".into()),
-                        Arc::new(Field::new("c1", DataType::UInt32, true))
+                        Arc::new(LogicalField::new("c1", DataType::UInt32, true))
                     ),
                 ],
                 HashMap::new()
@@ -1646,15 +1647,15 @@ mod tests {
                 vec![
                     (
                         Some("test".into()),
-                        Arc::new(Field::new("a", DataType::UInt32, false))
+                        Arc::new(LogicalField::new("a", DataType::UInt32, false))
                     ),
                     (
                         Some("test".into()),
-                        Arc::new(Field::new("b", DataType::UInt32, false))
+                        Arc::new(LogicalField::new("b", DataType::UInt32, false))
                     ),
                     (
                         Some("test2".into()),
-                        Arc::new(Field::new("a", DataType::UInt32, true))
+                        Arc::new(LogicalField::new("a", DataType::UInt32, true))
                     ),
                 ],
                 HashMap::new()

@@ -22,6 +22,7 @@ use std::sync::Arc;
 
 use arrow::datatypes::*;
 use async_trait::async_trait;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 use datafusion_common::project_schema;
 
 use crate::datasource::{TableProvider, TableType};
@@ -59,8 +60,8 @@ impl TableProvider for EmptyTable {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.schema.clone().into())
     }
 
     fn table_type(&self) -> TableType {

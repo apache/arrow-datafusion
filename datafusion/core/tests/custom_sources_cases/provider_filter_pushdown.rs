@@ -39,6 +39,7 @@ use datafusion_functions_aggregate::expr_fn::count;
 use datafusion_physical_expr::EquivalenceProperties;
 
 use async_trait::async_trait;
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 
 fn create_batch(value: i32, num_rows: usize) -> Result<RecordBatch> {
     let mut builder = Int32Builder::with_capacity(num_rows);
@@ -152,8 +153,8 @@ impl TableProvider for CustomProvider {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.zero_batch.schema()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.zero_batch.schema().clone().into())
     }
 
     fn table_type(&self) -> TableType {

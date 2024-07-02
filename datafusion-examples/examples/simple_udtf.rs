@@ -35,7 +35,7 @@ use std::fs::File;
 use std::io::Seek;
 use std::path::Path;
 use std::sync::Arc;
-
+use datafusion_common::logical_type::schema::LogicalSchemaRef;
 // To define your own table function, you only need to do the following 3 things:
 // 1. Implement your own [`TableProvider`]
 // 2. Implement your own [`TableFunctionImpl`] and return your [`TableProvider`]
@@ -85,8 +85,8 @@ impl TableProvider for LocalCsvTable {
         self
     }
 
-    fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+    fn schema(&self) -> LogicalSchemaRef {
+        LogicalSchemaRef::new(self.schema.clone().into())
     }
 
     fn table_type(&self) -> TableType {
@@ -121,7 +121,7 @@ impl TableProvider for LocalCsvTable {
         };
         Ok(Arc::new(MemoryExec::try_new(
             &[batches],
-            TableProvider::schema(self),
+            self.schema.clone(),
             projection.cloned(),
         )?))
     }

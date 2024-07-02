@@ -30,8 +30,11 @@ use crate::{
 };
 
 use arrow::compute::can_cast_types;
-use arrow::datatypes::{DataType, Field, FieldRef, Fields, Schema, SchemaRef};
-use arrow_schema::SchemaBuilder;
+use arrow::datatypes::{DataType, Field, Fields, Schema, SchemaRef};
+use crate::logical_type::field::{LogicalField, LogicalFieldRef};
+use crate::logical_type::fields::LogicalFields;
+use crate::logical_type::{TypeRelation, ExtensionType};
+use crate::logical_type::schema::{LogicalSchema, LogicalSchemaBuilder, LogicalSchemaRef};
 
 /// A reference-counted reference to a [DFSchema].
 pub type DFSchemaRef = Arc<DFSchema>;
@@ -62,7 +65,7 @@ pub type DFSchemaRef = Arc<DFSchema>;
 ///    Field::new("c1", DataType::Int32, false),
 /// ]);
 ///
-/// let df_schema = DFSchema::try_from_qualified_schema("t1", &arrow_schema).unwrap();
+/// let df_schema = DFSchema::try_from_qualified_schema("t1", &arrow_schema.into()).unwrap();
 /// let column = Column::from_qualified_name("t1.c1");
 /// assert!(df_schema.has_column(&column));
 ///
@@ -107,9 +110,9 @@ pub type DFSchemaRef = Arc<DFSchema>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DFSchema {
     /// Inner Arrow schema reference.
-    inner: SchemaRef,
+    inner: LogicalSchemaRef,
     /// Optional qualifiers for each column in this schema. In the same order as
-    /// the `self.inner.fields()`
+    /// the `self.inner.fields`
     field_qualifiers: Vec<Option<TableReference>>,
     /// Stores functional dependencies in the schema.
     functional_dependencies: FunctionalDependencies,
@@ -119,7 +122,7 @@ impl DFSchema {
     /// Creates an empty `DFSchema`
     pub fn empty() -> Self {
         Self {
-            inner: Arc::new(Schema::new([])),
+            inner: Arc::new(LogicalSchema::new([])),
             field_qualifiers: vec![],
             functional_dependencies: FunctionalDependencies::empty(),
         }
@@ -128,26 +131,26 @@ impl DFSchema {
     /// Return a reference to the inner Arrow [`Schema`]
     ///
     /// Note this does not have the qualifier information
-    pub fn as_arrow(&self) -> &Schema {
+    pub fn as_arrow(&self) -> &LogicalSchema {
         self.inner.as_ref()
     }
 
     /// Return a reference to the inner Arrow [`SchemaRef`]
     ///
     /// Note this does not have the qualifier information
-    pub fn inner(&self) -> &SchemaRef {
+    pub fn inner(&self) -> &LogicalSchemaRef {
         &self.inner
     }
 
     /// Create a `DFSchema` from an Arrow schema where all the fields have a given qualifier
     pub fn new_with_metadata(
-        qualified_fields: Vec<(Option<TableReference>, Arc<Field>)>,
+        qualified_fields: Vec<(Option<TableReference>, Arc<LogicalField>)>,
         metadata: HashMap<String, String>,
     ) -> Result<Self> {
-        let (qualifiers, fields): (Vec<Option<TableReference>>, Vec<Arc<Field>>) =
+        let (qualifiers, fields): (Vec<Option<TableReference>>, Vec<Arc<LogicalField>>) =
             qualified_fields.into_iter().unzip();
 
-        let schema = Arc::new(Schema::new_with_metadata(fields, metadata));
+        let schema = Arc::new(LogicalSchema::new_with_metadata(fields, metadata));
 
         let dfschema = Self {
             inner: schema,
@@ -161,7 +164,7 @@ impl DFSchema {
     /// Create a new `DFSchema` from a list of Arrow [Field]s
     #[allow(deprecated)]
     pub fn from_unqualified_fields(
-        fields: Fields,
+        fields: LogicalFields,
         metadata: HashMap<String, String>,
     ) -> Result<Self> {
         Self::from_unqualifed_fields(fields, metadata)
@@ -173,11 +176,11 @@ impl DFSchema {
         note = "Please use `from_unqualified_fields` instead (this one's name is a typo). This method is subject to be removed soon"
     )]
     pub fn from_unqualifed_fields(
-        fields: Fields,
+        fields: LogicalFields,
         metadata: HashMap<String, String>,
     ) -> Result<Self> {
         let field_count = fields.len();
-        let schema = Arc::new(Schema::new_with_metadata(fields, metadata));
+        let schema = Arc::new(LogicalSchema::new_with_metadata(fields, metadata));
         let dfschema = Self {
             inner: schema,
             field_qualifiers: vec![None; field_count],
@@ -193,7 +196,7 @@ impl DFSchema {
     /// `DFSchema::try_from`.
     pub fn try_from_qualified_schema(
         qualifier: impl Into<TableReference>,
-        schema: &Schema,
+        schema: &LogicalSchema,
     ) -> Result<Self> {
         let qualifier = qualifier.into();
         let schema = DFSchema {
@@ -208,7 +211,7 @@ impl DFSchema {
     /// Create a `DFSchema` from an Arrow schema where all the fields have a given qualifier
     pub fn from_field_specific_qualified_schema(
         qualifiers: Vec<Option<TableReference>>,
-        schema: &SchemaRef,
+        schema: &LogicalSchemaRef,
     ) -> Result<Self> {
         let dfschema = Self {
             inner: schema.clone(),
@@ -224,7 +227,7 @@ impl DFSchema {
         let mut qualified_names = BTreeSet::new();
         let mut unqualified_names = BTreeSet::new();
 
-        for (field, qualifier) in self.inner.fields().iter().zip(&self.field_qualifiers) {
+        for (field, qualifier) in self.inner.fields.iter().zip(&self.field_qualifiers) {
             if let Some(qualifier) = qualifier {
                 qualified_names.insert((qualifier, field.name()));
             } else if !unqualified_names.insert(field.name()) {
@@ -263,8 +266,8 @@ impl DFSchema {
     /// Create a new schema that contains the fields from this schema followed by the fields
     /// from the supplied schema. An error will be returned if there are duplicate field names.
     pub fn join(&self, schema: &DFSchema) -> Result<Self> {
-        let mut schema_builder = SchemaBuilder::new();
-        schema_builder.extend(self.inner.fields().iter().cloned());
+        let mut schema_builder = LogicalSchemaBuilder::new();
+        schema_builder.extend(self.inner.fields.iter().cloned());
         schema_builder.extend(schema.fields().iter().cloned());
         let new_schema = schema_builder.finish();
 
@@ -291,23 +294,23 @@ impl DFSchema {
             return;
         }
 
-        let self_fields: HashSet<(Option<&TableReference>, &FieldRef)> =
+        let self_fields: HashSet<(Option<&TableReference>, &LogicalFieldRef)> =
             self.iter().collect();
         let self_unqualified_names: HashSet<&str> = self
             .inner
             .fields
             .iter()
-            .map(|field| field.name().as_str())
+            .map(|field| field.name())
             .collect();
 
-        let mut schema_builder = SchemaBuilder::from(self.inner.fields.clone());
+        let mut schema_builder = LogicalSchemaBuilder::from(self.inner.fields.clone());
         let mut qualifiers = Vec::new();
         for (qualifier, field) in other_schema.iter() {
             // skip duplicate columns
             let duplicated_field = match qualifier {
                 Some(q) => self_fields.contains(&(Some(q), field)),
                 // for unqualified columns, check as unqualified name
-                None => self_unqualified_names.contains(field.name().as_str()),
+                None => self_unqualified_names.contains(field.name()),
             };
             if !duplicated_field {
                 // self.inner.fields.push(field.clone());
@@ -325,19 +328,19 @@ impl DFSchema {
     }
 
     /// Get a list of fields
-    pub fn fields(&self) -> &Fields {
+    pub fn fields(&self) -> &LogicalFields {
         &self.inner.fields
     }
 
     /// Returns an immutable reference of a specific `Field` instance selected using an
     /// offset within the internal `fields` vector
-    pub fn field(&self, i: usize) -> &Field {
+    pub fn field(&self, i: usize) -> &LogicalField {
         &self.inner.fields[i]
     }
 
     /// Returns an immutable reference of a specific `Field` instance selected using an
     /// offset within the internal `fields` vector and its qualifier
-    pub fn qualified_field(&self, i: usize) -> (Option<&TableReference>, &Field) {
+    pub fn qualified_field(&self, i: usize) -> (Option<&TableReference>, &LogicalField) {
         (self.field_qualifiers[i].as_ref(), self.field(i))
     }
 
@@ -404,7 +407,7 @@ impl DFSchema {
         &self,
         qualifier: Option<&TableReference>,
         name: &str,
-    ) -> Result<&Field> {
+    ) -> Result<&LogicalField> {
         if let Some(qualifier) = qualifier {
             self.field_with_qualified_name(qualifier, name)
         } else {
@@ -417,7 +420,7 @@ impl DFSchema {
         &self,
         qualifier: Option<&TableReference>,
         name: &str,
-    ) -> Result<(Option<&TableReference>, &Field)> {
+    ) -> Result<(Option<&TableReference>, &LogicalField)> {
         if let Some(qualifier) = qualifier {
             let idx = self
                 .index_of_column_by_name(Some(qualifier), name)
@@ -429,7 +432,7 @@ impl DFSchema {
     }
 
     /// Find all fields having the given qualifier
-    pub fn fields_with_qualified(&self, qualifier: &TableReference) -> Vec<&Field> {
+    pub fn fields_with_qualified(&self, qualifier: &TableReference) -> Vec<&LogicalField> {
         self.iter()
             .filter(|(q, _)| q.map(|q| q.eq(qualifier)).unwrap_or(false))
             .map(|(_, f)| f.as_ref())
@@ -448,7 +451,7 @@ impl DFSchema {
     }
 
     /// Find all fields that match the given name
-    pub fn fields_with_unqualified_name(&self, name: &str) -> Vec<&Field> {
+    pub fn fields_with_unqualified_name(&self, name: &str) -> Vec<&LogicalField> {
         self.fields()
             .iter()
             .filter(|field| field.name() == name)
@@ -460,7 +463,7 @@ impl DFSchema {
     pub fn qualified_fields_with_unqualified_name(
         &self,
         name: &str,
-    ) -> Vec<(Option<&TableReference>, &Field)> {
+    ) -> Vec<(Option<&TableReference>, &LogicalField)> {
         self.iter()
             .filter(|(_, field)| field.name() == name)
             .map(|(qualifier, field)| (qualifier, field.as_ref()))
@@ -479,7 +482,7 @@ impl DFSchema {
     pub fn columns(&self) -> Vec<Column> {
         self.iter()
             .map(|(qualifier, field)| {
-                Column::new(qualifier.cloned(), field.name().clone())
+                Column::new(qualifier.cloned(), field.name())
             })
             .collect()
     }
@@ -488,7 +491,7 @@ impl DFSchema {
     pub fn qualified_field_with_unqualified_name(
         &self,
         name: &str,
-    ) -> Result<(Option<&TableReference>, &Field)> {
+    ) -> Result<(Option<&TableReference>, &LogicalField)> {
         let matches = self.qualified_fields_with_unqualified_name(name);
         match matches.len() {
             0 => Err(unqualified_field_not_found(name, self)),
@@ -520,7 +523,7 @@ impl DFSchema {
     }
 
     /// Find the field with the given name
-    pub fn field_with_unqualified_name(&self, name: &str) -> Result<&Field> {
+    pub fn field_with_unqualified_name(&self, name: &str) -> Result<&LogicalField> {
         let matches = self.qualified_fields_with_unqualified_name(name);
         match matches.len() {
             0 => Err(unqualified_field_not_found(name, self)),
@@ -556,7 +559,7 @@ impl DFSchema {
         &self,
         qualifier: &TableReference,
         name: &str,
-    ) -> Result<&Field> {
+    ) -> Result<&LogicalField> {
         let idx = self
             .index_of_column_by_name(Some(qualifier), name)
             .ok_or_else(|| field_not_found(Some(qualifier.clone()), name, self))?;
@@ -565,7 +568,7 @@ impl DFSchema {
     }
 
     /// Find the field with the given qualified column
-    pub fn field_from_column(&self, column: &Column) -> Result<&Field> {
+    pub fn field_from_column(&self, column: &Column) -> Result<&LogicalField> {
         match &column.relation {
             Some(r) => self.field_with_qualified_name(r, &column.name),
             None => self.field_with_unqualified_name(&column.name),
@@ -576,7 +579,7 @@ impl DFSchema {
     pub fn qualified_field_from_column(
         &self,
         column: &Column,
-    ) -> Result<(Option<&TableReference>, &Field)> {
+    ) -> Result<(Option<&TableReference>, &LogicalField)> {
         self.qualified_field_with_name(column.relation.as_ref(), &column.name)
     }
 
@@ -671,7 +674,7 @@ impl DFSchema {
         self_fields.zip(other_fields).all(|((q1, f1), (q2, f2))| {
             q1 == q2
                 && f1.name() == f2.name()
-                && Self::datatype_is_semantically_equal(f1.data_type(), f2.data_type())
+                && Self::datatype_is_semantically_equal(&f1.data_type().physical(), &f2.data_type().physical())
         })
     }
 
@@ -679,40 +682,8 @@ impl DFSchema {
     /// than datatype_is_semantically_equal in that a Dictionary<K,V> type is logically
     /// equal to a plain V type, but not semantically equal. Dictionary<K1, V1> is also
     /// logically equal to Dictionary<K2, V1>.
-    pub fn datatype_is_logically_equal(dt1: &DataType, dt2: &DataType) -> bool {
-        // check nested fields
-        match (dt1, dt2) {
-            (DataType::Dictionary(_, v1), DataType::Dictionary(_, v2)) => {
-                v1.as_ref() == v2.as_ref()
-            }
-            (DataType::Dictionary(_, v1), othertype) => v1.as_ref() == othertype,
-            (othertype, DataType::Dictionary(_, v1)) => v1.as_ref() == othertype,
-            (DataType::List(f1), DataType::List(f2))
-            | (DataType::LargeList(f1), DataType::LargeList(f2))
-            | (DataType::FixedSizeList(f1, _), DataType::FixedSizeList(f2, _))
-            | (DataType::Map(f1, _), DataType::Map(f2, _)) => {
-                Self::field_is_logically_equal(f1, f2)
-            }
-            (DataType::Struct(fields1), DataType::Struct(fields2)) => {
-                let iter1 = fields1.iter();
-                let iter2 = fields2.iter();
-                fields1.len() == fields2.len() &&
-                        // all fields have to be the same
-                    iter1
-                    .zip(iter2)
-                        .all(|(f1, f2)| Self::field_is_logically_equal(f1, f2))
-            }
-            (DataType::Union(fields1, _), DataType::Union(fields2, _)) => {
-                let iter1 = fields1.iter();
-                let iter2 = fields2.iter();
-                fields1.len() == fields2.len() &&
-                    // all fields have to be the same
-                    iter1
-                        .zip(iter2)
-                        .all(|((t1, f1), (t2, f2))| t1 == t2 && Self::field_is_logically_equal(f1, f2))
-            }
-            _ => dt1 == dt2,
-        }
+    pub fn datatype_is_logically_equal(dt1: &TypeRelation, dt2: &TypeRelation) -> bool {
+        dt1 == dt2
     }
 
     /// Returns true of two [`DataType`]s are semantically equal (same
@@ -762,11 +733,6 @@ impl DFSchema {
         }
     }
 
-    fn field_is_logically_equal(f1: &Field, f2: &Field) -> bool {
-        f1.name() == f2.name()
-            && Self::datatype_is_logically_equal(f1.data_type(), f2.data_type())
-    }
-
     fn field_is_semantically_equal(f1: &Field, f2: &Field) -> bool {
         f1.name() == f2.name()
             && Self::datatype_is_semantically_equal(f1.data_type(), f2.data_type())
@@ -809,10 +775,10 @@ impl DFSchema {
     }
 
     /// Iterate over the qualifiers and fields in the DFSchema
-    pub fn iter(&self) -> impl Iterator<Item = (Option<&TableReference>, &FieldRef)> {
+    pub fn iter(&self) -> impl Iterator<Item = (Option<&TableReference>, &LogicalFieldRef)> {
         self.field_qualifiers
             .iter()
-            .zip(self.inner.fields().iter())
+            .zip(self.inner.fields.iter())
             .map(|(qualifier, field)| (qualifier.as_ref(), field))
     }
 }
@@ -820,7 +786,7 @@ impl DFSchema {
 impl From<DFSchema> for Schema {
     /// Convert DFSchema into a Schema
     fn from(df_schema: DFSchema) -> Self {
-        let fields: Fields = df_schema.inner.fields.clone();
+        let fields: Fields = df_schema.inner.fields.clone().into();
         Schema::new_with_metadata(fields, df_schema.inner.metadata.clone())
     }
 }
@@ -828,37 +794,22 @@ impl From<DFSchema> for Schema {
 impl From<&DFSchema> for Schema {
     /// Convert DFSchema reference into a Schema
     fn from(df_schema: &DFSchema) -> Self {
-        let fields: Fields = df_schema.inner.fields.clone();
+        let fields: Fields = df_schema.inner.fields.clone().into();
         Schema::new_with_metadata(fields, df_schema.inner.metadata.clone())
     }
 }
 
-/// Allow DFSchema to be converted into an Arrow `&Schema`
-impl AsRef<Schema> for DFSchema {
-    fn as_ref(&self) -> &Schema {
-        self.as_arrow()
-    }
-}
-
-/// Allow DFSchema to be converted into an Arrow `&SchemaRef` (to clone, for
-/// example)
-impl AsRef<SchemaRef> for DFSchema {
-    fn as_ref(&self) -> &SchemaRef {
-        self.inner()
-    }
-}
-
 /// Create a `DFSchema` from an Arrow schema
-impl TryFrom<Schema> for DFSchema {
+impl TryFrom<LogicalSchema> for DFSchema {
     type Error = DataFusionError;
-    fn try_from(schema: Schema) -> Result<Self, Self::Error> {
+    fn try_from(schema: LogicalSchema) -> Result<Self, Self::Error> {
         Self::try_from(Arc::new(schema))
     }
 }
 
-impl TryFrom<SchemaRef> for DFSchema {
+impl TryFrom<LogicalSchemaRef> for DFSchema {
     type Error = DataFusionError;
-    fn try_from(schema: SchemaRef) -> Result<Self, Self::Error> {
+    fn try_from(schema: LogicalSchemaRef) -> Result<Self, Self::Error> {
         let field_count = schema.fields.len();
         let dfschema = Self {
             inner: schema,
@@ -866,6 +817,21 @@ impl TryFrom<SchemaRef> for DFSchema {
             functional_dependencies: FunctionalDependencies::empty(),
         };
         Ok(dfschema)
+    }
+}
+
+/// Create a `DFSchema` from an Arrow schema
+impl TryFrom<Schema> for DFSchema {
+    type Error = DataFusionError;
+    fn try_from(schema: Schema) -> Result<Self, Self::Error> {
+        Self::try_from(LogicalSchema::from(schema))
+    }
+}
+
+impl TryFrom<SchemaRef> for DFSchema {
+    type Error = DataFusionError;
+    fn try_from(schema: SchemaRef) -> Result<Self, Self::Error> {
+        Self::try_from(schema.as_ref().clone())
     }
 }
 
@@ -897,22 +863,22 @@ where
     }
 }
 
-impl ToDFSchema for Schema {
+impl ToDFSchema for LogicalSchema {
     fn to_dfschema(self) -> Result<DFSchema> {
         DFSchema::try_from(self)
     }
 }
 
-impl ToDFSchema for SchemaRef {
+impl ToDFSchema for LogicalSchemaRef {
     fn to_dfschema(self) -> Result<DFSchema> {
         DFSchema::try_from(self)
     }
 }
 
-impl ToDFSchema for Vec<Field> {
+impl ToDFSchema for Vec<LogicalField> {
     fn to_dfschema(self) -> Result<DFSchema> {
         let field_count = self.len();
-        let schema = Schema {
+        let schema = LogicalSchema {
             fields: self.into(),
             metadata: HashMap::new(),
         };
@@ -949,13 +915,13 @@ pub trait ExprSchema: std::fmt::Debug {
     fn nullable(&self, col: &Column) -> Result<bool>;
 
     /// What is the datatype of this column?
-    fn data_type(&self, col: &Column) -> Result<&DataType>;
+    fn data_type(&self, col: &Column) -> Result<&TypeRelation>;
 
     /// Returns the column's optional metadata.
     fn metadata(&self, col: &Column) -> Result<&HashMap<String, String>>;
 
     /// Return the coulmn's datatype and nullability
-    fn data_type_and_nullable(&self, col: &Column) -> Result<(&DataType, bool)>;
+    fn data_type_and_nullable(&self, col: &Column) -> Result<(&TypeRelation, bool)>;
 }
 
 // Implement `ExprSchema` for `Arc<DFSchema>`
@@ -964,7 +930,7 @@ impl<P: AsRef<DFSchema> + std::fmt::Debug> ExprSchema for P {
         self.as_ref().nullable(col)
     }
 
-    fn data_type(&self, col: &Column) -> Result<&DataType> {
+    fn data_type(&self, col: &Column) -> Result<&TypeRelation> {
         self.as_ref().data_type(col)
     }
 
@@ -972,7 +938,7 @@ impl<P: AsRef<DFSchema> + std::fmt::Debug> ExprSchema for P {
         ExprSchema::metadata(self.as_ref(), col)
     }
 
-    fn data_type_and_nullable(&self, col: &Column) -> Result<(&DataType, bool)> {
+    fn data_type_and_nullable(&self, col: &Column) -> Result<(&TypeRelation, bool)> {
         self.as_ref().data_type_and_nullable(col)
     }
 }
@@ -982,7 +948,7 @@ impl ExprSchema for DFSchema {
         Ok(self.field_from_column(col)?.is_nullable())
     }
 
-    fn data_type(&self, col: &Column) -> Result<&DataType> {
+    fn data_type(&self, col: &Column) -> Result<&TypeRelation> {
         Ok(self.field_from_column(col)?.data_type())
     }
 
@@ -990,7 +956,7 @@ impl ExprSchema for DFSchema {
         Ok(self.field_from_column(col)?.metadata())
     }
 
-    fn data_type_and_nullable(&self, col: &Column) -> Result<(&DataType, bool)> {
+    fn data_type_and_nullable(&self, col: &Column) -> Result<(&TypeRelation, bool)> {
         let field = self.field_from_column(col)?;
         Ok((field.data_type(), field.is_nullable()))
     }
@@ -1041,8 +1007,8 @@ impl SchemaExt for Schema {
             .all(|(f1, f2)| {
                 f1.name() == f2.name()
                     && DFSchema::datatype_is_logically_equal(
-                        f1.data_type(),
-                        f2.data_type(),
+                        &f1.data_type().into(),
+                        &f2.data_type().into(),
                     )
             })
     }
@@ -1082,7 +1048,7 @@ mod tests {
             &Schema::new(vec![
                 Field::new("CapitalColumn", DataType::Boolean, true),
                 Field::new("field.with.period", DataType::Boolean, true),
-            ]),
+            ]).into(),
         )?;
 
         // lookup with unqualified name "t1.c0"
@@ -1112,9 +1078,9 @@ mod tests {
     fn test_from_field_specific_qualified_schema() -> Result<()> {
         let schema = DFSchema::from_field_specific_qualified_schema(
             vec![Some("t1".into()), None],
-            &Arc::new(Schema::new(vec![
-                Field::new("c0", DataType::Boolean, true),
-                Field::new("c1", DataType::Boolean, true),
+            &Arc::new(LogicalSchema::new(vec![
+                LogicalField::new("c0", DataType::Boolean, true),
+                LogicalField::new("c1", DataType::Boolean, true),
             ])),
         )?;
         assert_eq!("fields:[t1.c0, c1], metadata:{}", schema.to_string());
@@ -1127,9 +1093,9 @@ mod tests {
             vec![
                 (
                     Some("t0".into()),
-                    Arc::new(Field::new("c0", DataType::Boolean, true)),
+                    Arc::new(Field::new("c0", DataType::Boolean, true).into()),
                 ),
-                (None, Arc::new(Field::new("c1", DataType::Boolean, true))),
+                (None, Arc::new(Field::new("c1", DataType::Boolean, true).into())),
             ],
             HashMap::new(),
         )?;
@@ -1273,41 +1239,42 @@ mod tests {
             vec![Field::new("c0", DataType::Int64, true)],
             metadata.clone(),
         );
-        let arrow_schema_ref = Arc::new(arrow_schema.clone());
+        let logical_schema = LogicalSchema::from(arrow_schema);
+        let logical_schema_ref = Arc::new(logical_schema.clone());
 
         let df_schema = DFSchema {
-            inner: arrow_schema_ref.clone(),
-            field_qualifiers: vec![None; arrow_schema_ref.fields.len()],
+            inner: logical_schema_ref.clone(),
+            field_qualifiers: vec![None; logical_schema_ref.fields.len()],
             functional_dependencies: FunctionalDependencies::empty(),
         };
         let df_schema_ref = Arc::new(df_schema.clone());
 
         {
-            let arrow_schema = arrow_schema.clone();
-            let arrow_schema_ref = arrow_schema_ref.clone();
+            let logical_schema = logical_schema.clone();
+            let logical_schema_ref = logical_schema_ref.clone();
 
-            assert_eq!(df_schema, arrow_schema.to_dfschema().unwrap());
-            assert_eq!(df_schema, arrow_schema_ref.to_dfschema().unwrap());
+            assert_eq!(df_schema, logical_schema.to_dfschema().unwrap());
+            assert_eq!(df_schema, logical_schema_ref.to_dfschema().unwrap());
         }
 
         {
-            let arrow_schema = arrow_schema.clone();
-            let arrow_schema_ref = arrow_schema_ref.clone();
+            let logical_schema = logical_schema.clone();
+            let logical_schema_ref = logical_schema_ref.clone();
 
-            assert_eq!(df_schema_ref, arrow_schema.to_dfschema_ref().unwrap());
-            assert_eq!(df_schema_ref, arrow_schema_ref.to_dfschema_ref().unwrap());
+            assert_eq!(df_schema_ref, logical_schema.to_dfschema_ref().unwrap());
+            assert_eq!(df_schema_ref, logical_schema_ref.to_dfschema_ref().unwrap());
         }
 
         // Now, consume the refs
-        assert_eq!(df_schema_ref, arrow_schema.to_dfschema_ref().unwrap());
-        assert_eq!(df_schema_ref, arrow_schema_ref.to_dfschema_ref().unwrap());
+        assert_eq!(df_schema_ref, logical_schema.to_dfschema_ref().unwrap());
+        assert_eq!(df_schema_ref, logical_schema_ref.to_dfschema_ref().unwrap());
     }
 
-    fn test_schema_1() -> Schema {
+    fn test_schema_1() -> LogicalSchema {
         Schema::new(vec![
             Field::new("c0", DataType::Boolean, true),
             Field::new("c1", DataType::Boolean, true),
-        ])
+        ]).into()
     }
     #[test]
     fn test_dfschema_to_schema_convertion() {
@@ -1319,7 +1286,7 @@ mod tests {
         b_metadata.insert("key".to_string(), "value".to_string());
         let b_field = Field::new("b", DataType::Int64, false).with_metadata(b_metadata);
 
-        let schema = Arc::new(Schema::new(vec![a_field, b_field]));
+        let schema = LogicalSchemaRef::new(Schema::new(vec![a_field, b_field]).into());
 
         let df_schema = DFSchema {
             inner: schema.clone(),
@@ -1363,10 +1330,10 @@ mod tests {
         Ok(())
     }
 
-    fn test_schema_2() -> Schema {
-        Schema::new(vec![
-            Field::new("c100", DataType::Boolean, true),
-            Field::new("c101", DataType::Boolean, true),
+    fn test_schema_2() -> LogicalSchema {
+        LogicalSchema::new(vec![
+            LogicalField::new("c100", DataType::Boolean, true),
+            LogicalField::new("c101", DataType::Boolean, true),
         ])
     }
 

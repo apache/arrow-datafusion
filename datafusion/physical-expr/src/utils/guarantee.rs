@@ -420,11 +420,10 @@ impl<'a> ColOpLit<'a> {
 #[cfg(test)]
 mod test {
     use std::sync::OnceLock;
-
+    use arrow_schema::{DataType, Field, Schema, SchemaRef};
     use super::*;
     use crate::planner::logical2physical;
 
-    use arrow_schema::{DataType, Field, Schema, SchemaRef};
     use datafusion_expr::expr_fn::*;
     use datafusion_expr::{lit, Expr};
 
@@ -835,7 +834,7 @@ mod test {
     fn test_analyze(expr: Expr, expected: Vec<LiteralGuarantee>) {
         println!("Begin analyze of {expr}");
         let schema = schema();
-        let physical_expr = logical2physical(&expr, &schema);
+        let physical_expr = logical2physical(&expr, &schema.as_ref().clone().into());
 
         let actual = LiteralGuarantee::analyze(&physical_expr);
         assert_eq!(

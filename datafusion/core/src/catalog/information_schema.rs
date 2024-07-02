@@ -186,7 +186,7 @@ impl InformationSchemaConfig {
                                         &schema_name,
                                         &table_name,
                                         field_position,
-                                        field,
+                                        &field.as_ref().clone().into(),
                                     )
                                 }
                             }

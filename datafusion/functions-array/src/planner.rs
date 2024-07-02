@@ -18,6 +18,7 @@
 //! SQL planning extensions like [`ArrayFunctionPlanner`] and [`FieldAccessPlanner`]
 
 use datafusion_common::{utils::list_ndims, DFSchema, Result};
+use datafusion_common::logical_type::ExtensionType;
 use datafusion_expr::{
     planner::{PlannerResult, RawBinaryExpr, RawFieldAccessExpr, UserDefinedSQLPlanner},
     sqlparser, AggregateFunction, Expr, ExprSchemable, GetFieldAccess,
@@ -44,8 +45,8 @@ impl UserDefinedSQLPlanner for ArrayFunctionPlanner {
         if op == sqlparser::ast::BinaryOperator::StringConcat {
             let left_type = left.get_type(schema)?;
             let right_type = right.get_type(schema)?;
-            let left_list_ndims = list_ndims(&left_type);
-            let right_list_ndims = list_ndims(&right_type);
+            let left_list_ndims = list_ndims(left_type.physical());
+            let right_list_ndims = list_ndims(right_type.physical());
 
             // Rewrite string concat operator to function based on types
             // if we get list || list then we rewrite it to array_concat()
@@ -72,8 +73,8 @@ impl UserDefinedSQLPlanner for ArrayFunctionPlanner {
         ) {
             let left_type = left.get_type(schema)?;
             let right_type = right.get_type(schema)?;
-            let left_list_ndims = list_ndims(&left_type);
-            let right_list_ndims = list_ndims(&right_type);
+            let left_list_ndims = list_ndims(left_type.physical());
+            let right_list_ndims = list_ndims(right_type.physical());
             // if both are list
             if left_list_ndims > 0 && right_list_ndims > 0 {
                 if op == sqlparser::ast::BinaryOperator::AtArrow {

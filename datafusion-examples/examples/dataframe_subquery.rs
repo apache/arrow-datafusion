@@ -15,9 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use arrow_schema::DataType;
 use std::sync::Arc;
 
+use arrow_schema::DataType;
 use datafusion::error::Result;
 use datafusion::functions_aggregate::average::avg;
 use datafusion::prelude::*;

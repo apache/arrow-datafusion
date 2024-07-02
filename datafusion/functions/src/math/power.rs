@@ -19,6 +19,7 @@
 
 use arrow::datatypes::{ArrowNativeTypeOp, DataType};
 
+use datafusion_common::logical_type::ExtensionType;
 use datafusion_common::{
     arrow_datafusion_err, exec_datafusion_err, exec_err, plan_datafusion_err,
     DataFusionError, Result, ScalarValue,
@@ -32,7 +33,6 @@ use datafusion_expr::TypeSignature::*;
 use datafusion_expr::{ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
 use std::sync::Arc;
-
 use super::log::LogFunc;
 
 #[derive(Debug)]
@@ -127,6 +127,7 @@ impl ScalarUDFImpl for PowerFunc {
         Ok(ColumnarValue::Array(arr))
     }
 
+    // TODO(@notfilippo): avoid converting to physical type
     /// Simplify the `power` function by the relevant rules:
     /// 1. Power(a, 0) ===> 0
     /// 2. Power(a, 1) ===> a
@@ -143,11 +144,11 @@ impl ScalarUDFImpl for PowerFunc {
             plan_datafusion_err!("Expected power to have 2 arguments, got 1")
         })?;
 
-        let exponent_type = info.get_data_type(&exponent)?;
+        let exponent_type = info.get_data_type(&exponent)?.physical().clone();
         match exponent {
             Expr::Literal(value) if value == ScalarValue::new_zero(&exponent_type)? => {
                 Ok(ExprSimplifyResult::Simplified(Expr::Literal(
-                    ScalarValue::new_one(&info.get_data_type(&base)?)?,
+                    ScalarValue::new_one(&info.get_data_type(&base)?.physical().clone())?,
                 )))
             }
             Expr::Literal(value) if value == ScalarValue::new_one(&exponent_type)? => {
