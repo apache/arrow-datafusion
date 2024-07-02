@@ -701,6 +701,11 @@ impl RepartitionExec {
         if !Self::maintains_input_order_helper(input, preserve_order)[0] {
             eq_properties.clear_orderings();
         }
+        // When there are more than one input partitions, they will be fused at the output.
+        // Therefore, remove per partition constants.
+        if input.output_partitioning().partition_count() > 1 {
+            eq_properties.clear_per_partition_constants();
+        }
         eq_properties
     }
 

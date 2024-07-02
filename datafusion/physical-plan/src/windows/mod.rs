@@ -41,7 +41,8 @@ use datafusion_physical_expr::equivalence::collapse_lex_req;
 use datafusion_physical_expr::{
     reverse_order_bys,
     window::{BuiltInWindowFunctionExpr, SlidingAggregateWindowExpr},
-    AggregateExpr, EquivalenceProperties, LexOrdering, PhysicalSortRequirement,
+    AggregateExpr, ConstExpr, EquivalenceProperties, LexOrdering,
+    PhysicalSortRequirement,
 };
 use itertools::Itertools;
 
@@ -576,7 +577,10 @@ pub fn get_window_mode(
         options: None,
     }));
     // Treat partition by exprs as constant. During analysis of requirements are satisfied.
-    let partition_by_eqs = input_eqs.add_constants(partitionby_exprs.iter().cloned());
+    let const_exprs = partitionby_exprs
+        .iter()
+        .map(|expr| ConstExpr::new(expr.clone()));
+    let partition_by_eqs = input_eqs.add_constants(const_exprs);
     let order_by_reqs = PhysicalSortRequirement::from_sort_exprs(orderby_keys);
     let reverse_order_by_reqs =
         PhysicalSortRequirement::from_sort_exprs(&reverse_order_bys(orderby_keys));

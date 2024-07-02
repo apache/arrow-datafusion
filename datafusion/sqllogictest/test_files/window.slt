@@ -276,7 +276,7 @@ physical_plan
 04)------AggregateExec: mode=FinalPartitioned, gby=[b@0 as b], aggr=[MAX(d.a)]
 05)--------CoalesceBatchesExec: target_batch_size=8192
 06)----------RepartitionExec: partitioning=Hash([b@0], 4), input_partitions=4
-07)------------AggregateExec: mode=Partial, gby=[b@1 as b], aggr=[MAX(d.a)]
+07)------------AggregateExec: mode=Partial, gby=[b@1 as b], aggr=[MAX(d.a)], ordering_mode=Sorted
 08)--------------UnionExec
 09)----------------ProjectionExec: expr=[1 as a, aa as b]
 10)------------------PlaceholderRowExec
@@ -3190,8 +3190,8 @@ SELECT a, d, rn1, rank1 FROM (SELECT a, d,
 # this is a negative test for asserting that ROW_NUMBER is not
 # added to the ordering equivalence when it contains partition by.
 # physical plan should contain SortExec. Since source is unbounded
-# pipeline checker should raise error, when plan contains SortExec.
-statement error DataFusion error: PipelineChecker
+# sanity checker should raise error, when plan contains SortExec.
+statement error DataFusion error: SanityCheckPlan
 SELECT a, d, rn1 FROM (SELECT a, d,
                        ROW_NUMBER() OVER(PARTITION BY d ORDER BY a ASC) as rn1
                        FROM annotated_data_infinite2

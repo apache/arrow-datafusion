@@ -80,7 +80,7 @@ pub struct SortPreservingMergeExec {
 impl SortPreservingMergeExec {
     /// Create a new sort execution plan
     pub fn new(expr: Vec<PhysicalSortExpr>, input: Arc<dyn ExecutionPlan>) -> Self {
-        let cache = Self::compute_properties(&input);
+        let cache = Self::compute_properties(&input, expr.clone());
         Self {
             input,
             expr,
@@ -111,11 +111,17 @@ impl SortPreservingMergeExec {
     }
 
     /// This function creates the cache object that stores the plan properties such as schema, equivalence properties, ordering, partitioning, etc.
-    fn compute_properties(input: &Arc<dyn ExecutionPlan>) -> PlanProperties {
+    fn compute_properties(
+        input: &Arc<dyn ExecutionPlan>,
+        ordering: Vec<PhysicalSortExpr>,
+    ) -> PlanProperties {
+        let mut eq_properties = input.equivalence_properties().clone();
+        eq_properties.clear_per_partition_constants();
+        eq_properties.add_new_orderings(vec![ordering]);
         PlanProperties::new(
-            input.equivalence_properties().clone(), // Equivalence Properties
-            Partitioning::UnknownPartitioning(1),   // Output Partitioning
-            input.execution_mode(),                 // Execution Mode
+            eq_properties,                        // Equivalence Properties
+            Partitioning::UnknownPartitioning(1), // Output Partitioning
+            input.execution_mode(),               // Execution Mode
         )
     }
 }

@@ -46,7 +46,7 @@ pub use analysis::{analyze, AnalysisContext, ExprBoundaries};
 pub use datafusion_physical_expr_common::aggregate::{
     AggregateExpr, AggregatePhysicalExpressions,
 };
-pub use equivalence::EquivalenceProperties;
+pub use equivalence::{ConstExpr, EquivalenceProperties};
 pub use partitioning::{Distribution, Partitioning};
 pub use physical_expr::{
     physical_exprs_bag_equal, physical_exprs_contains, physical_exprs_equal,

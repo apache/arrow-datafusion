@@ -44,7 +44,7 @@ use datafusion_physical_expr::expressions::BinaryExpr;
 use datafusion_physical_expr::intervals::utils::check_support;
 use datafusion_physical_expr::utils::collect_columns;
 use datafusion_physical_expr::{
-    analyze, split_conjunction, AnalysisContext, ExprBoundaries, PhysicalExpr,
+    analyze, split_conjunction, AnalysisContext, ConstExpr, ExprBoundaries, PhysicalExpr,
 };
 
 use futures::stream::{Stream, StreamExt};
@@ -162,7 +162,7 @@ impl FilterExec {
     fn extend_constants(
         input: &Arc<dyn ExecutionPlan>,
         predicate: &Arc<dyn PhysicalExpr>,
-    ) -> Vec<Arc<dyn PhysicalExpr>> {
+    ) -> Vec<ConstExpr> {
         let mut res_constants = Vec::new();
         let input_eqs = input.equivalence_properties();
 
@@ -170,10 +170,17 @@ impl FilterExec {
         for conjunction in conjunctions {
             if let Some(binary) = conjunction.as_any().downcast_ref::<BinaryExpr>() {
                 if binary.op() == &Operator::Eq {
+                    // Filter evaluates to single value for all partitions
                     if input_eqs.is_expr_constant(binary.left()) {
-                        res_constants.push(binary.right().clone())
+                        res_constants.push(
+                            ConstExpr::new(binary.right().clone())
+                                .with_across_partitions(true),
+                        )
                     } else if input_eqs.is_expr_constant(binary.right()) {
-                        res_constants.push(binary.left().clone())
+                        res_constants.push(
+                            ConstExpr::new(binary.left().clone())
+                                .with_across_partitions(true),
+                        )
                     }
                 }
             }
@@ -199,7 +206,10 @@ impl FilterExec {
         let constants = collect_columns(predicate)
             .into_iter()
             .filter(|column| stats.column_statistics[column.index()].is_singleton())
-            .map(|column| Arc::new(column) as _);
+            .map(|column| {
+                let expr = Arc::new(column) as _;
+                ConstExpr::new(expr).with_across_partitions(true)
+            });
         // this is for statistics
         eq_properties = eq_properties.add_constants(constants);
         // this is for logical constant (for example: a = '1', then a could be marked as a constant)

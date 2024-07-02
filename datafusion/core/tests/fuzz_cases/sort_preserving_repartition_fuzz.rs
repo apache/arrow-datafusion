@@ -41,7 +41,7 @@ mod sp_repartition_fuzz_tests {
     use datafusion_physical_expr::{
         equivalence::{EquivalenceClass, EquivalenceProperties},
         expressions::{col, Column},
-        PhysicalExpr, PhysicalSortExpr,
+        ConstExpr, PhysicalExpr, PhysicalSortExpr,
     };
     use test_utils::add_empty_batches;
 
@@ -80,7 +80,7 @@ mod sp_repartition_fuzz_tests {
         // Define a and f are aliases
         eq_properties.add_equal_conditions(col_a, col_f)?;
         // Column e has constant value.
-        eq_properties = eq_properties.add_constants([col_e.clone()]);
+        eq_properties = eq_properties.add_constants([ConstExpr::new(col_e.clone())]);
 
         // Randomly order columns for sorting
         let mut rng = StdRng::seed_from_u64(seed);
@@ -149,7 +149,7 @@ mod sp_repartition_fuzz_tests {
 
         // Fill constant columns
         for constant in eq_properties.constants() {
-            let col = constant.as_any().downcast_ref::<Column>().unwrap();
+            let col = constant.expr().as_any().downcast_ref::<Column>().unwrap();
             let (idx, _field) = schema.column_with_name(col.name()).unwrap();
             let arr =
                 Arc::new(UInt64Array::from_iter_values(vec![0; n_elem])) as ArrayRef;
