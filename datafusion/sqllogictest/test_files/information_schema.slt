@@ -228,6 +228,7 @@ datafusion.optimizer.max_passes 3
 datafusion.optimizer.prefer_existing_sort false
 datafusion.optimizer.prefer_existing_union false
 datafusion.optimizer.prefer_hash_join true
+datafusion.optimizer.progressive_eval_num_prefetch_input_streams 2
 datafusion.optimizer.repartition_aggregations true
 datafusion.optimizer.repartition_file_min_size 10485760
 datafusion.optimizer.repartition_file_scans true
@@ -312,6 +313,7 @@ datafusion.optimizer.max_passes 3 Number of times that the optimizer will attemp
 datafusion.optimizer.prefer_existing_sort false When true, DataFusion will opportunistically remove sorts when the data is already sorted, (i.e. setting `preserve_order` to true on `RepartitionExec`  and using `SortPreservingMergeExec`) When false, DataFusion will maximize plan parallelism using `RepartitionExec` even if this requires subsequently resorting data using a `SortExec`.
 datafusion.optimizer.prefer_existing_union false When set to true, the optimizer will not attempt to convert Union to Interleave
 datafusion.optimizer.prefer_hash_join true When set to true, the physical plan optimizer will prefer HashJoin over SortMergeJoin. HashJoin can work more efficiently than SortMergeJoin but consumes more memory
+datafusion.optimizer.progressive_eval_num_prefetch_input_streams 2 Number of input streams to prefetch for ProgressiveEvalExec Since ProgressiveEvalExec only polls one stream at a time in their stream order, we do not need to prefetch all streams at once to save resources. However, if the streams' IO time is way more than their CPU/procesing time, prefetching them will help improve the performance. Default is 2 which means we will prefetch one extra stream before polling the current one. Increasing this value if IO time to read a stream is often much more than CPU time to process its previous one.
 datafusion.optimizer.repartition_aggregations true Should DataFusion repartition data using the aggregate keys to execute aggregates in parallel using the provided `target_partitions` level
 datafusion.optimizer.repartition_file_min_size 10485760 Minimum total files size in bytes to perform file scan repartitioning.
 datafusion.optimizer.repartition_file_scans true When set to `true`, file groups will be repartitioned to achieve maximum parallelism. Currently Parquet and CSV formats are supported. If set to `true`, all files will be repartitioned evenly (i.e., a single large file might be partitioned into smaller chunks) for parallel scanning. If set to `false`, different files will be read in parallel, but repartitioning won't happen within a single file.

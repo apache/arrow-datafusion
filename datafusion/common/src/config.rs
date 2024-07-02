@@ -591,6 +591,16 @@ config_namespace! {
 
         /// When set to true, the optimizer will not attempt to convert Union to Interleave
         pub prefer_existing_union: bool, default = false
+
+
+        /// Number of input streams to prefetch for ProgressiveEvalExec
+        /// Since ProgressiveEvalExec only polls one stream at a time in their stream order,
+        /// we do not need to prefetch all streams at once to save resources. However, if the
+        /// streams' IO time is way more than their CPU/procesing time, prefetching them will help
+        /// improve the performance.
+        /// Default is 2 which means we will prefetch one extra stream before polling the current one.
+        /// Increasing this value if IO time to read a stream is often much more than CPU time to process its previous one.
+        pub progressive_eval_num_prefetch_input_streams: usize, default = 2
     }
 }
 
