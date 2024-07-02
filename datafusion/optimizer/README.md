@@ -67,8 +67,10 @@ let optimizer = Optimizer::with_rules(vec![
 
 ## Writing Optimization Rules
 
-Please refer to the [rewrite_expr example](../../datafusion-examples/examples/rewrite_expr.rs) to learn more about
-the general approach to writing optimizer rules and then move onto studying the existing rules.
+Please refer to the
+[optimizer_rule.rs](../../datafusion-examples/examples/optimizer_rule.rs)
+example to learn more about the general approach to writing optimizer rules and
+then move onto studying the existing rules.
 
 All rules must implement the `OptimizerRule` trait.
 
