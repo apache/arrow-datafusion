@@ -56,7 +56,7 @@ datafusion = { git = "https://github.com/apache/datafusion", branch = "main", de
 
 More on [Cargo dependencies](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies)
 
-## Run a SQL query against data stored in a CSV:
+## Run a SQL query against data stored in a CSV
 
 ```rust
 use datafusion::prelude::*;
@@ -76,7 +76,10 @@ async fn main() -> datafusion::error::Result<()> {
 }
 ```
 
-## Use the DataFrame API to process data stored in a CSV:
+See [the SQL API](../library-user-guide/using-the-sql-api.md) section of the
+library guide for more information on the SQL API.
+
+## Use the DataFrame API to process data stored in a CSV
 
 ```rust
 use datafusion::prelude::*;

@@ -592,3 +592,9 @@ doc_comment::doctest!(
     "../../../docs/source/user-guide/example-usage.md",
     user_guid_example_tests
 );
+
+#[cfg(doctest)]
+doc_comment::doctest!(
+    "../../../docs/source/library-user-guide/using-the-sql-api.md",
+    library_user_guide_example_usage
+);
