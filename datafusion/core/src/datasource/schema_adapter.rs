@@ -93,7 +93,7 @@ pub trait SchemaMapper: Debug + Send + Sync {
 }
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct DefaultSchemaAdapterFactory {}
+pub struct DefaultSchemaAdapterFactory {}
 
 impl SchemaAdapterFactory for DefaultSchemaAdapterFactory {
     fn create(&self, table_schema: SchemaRef) -> Box<dyn SchemaAdapter> {

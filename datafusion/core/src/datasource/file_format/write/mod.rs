@@ -32,18 +32,18 @@ use object_store::path::Path;
 use object_store::ObjectStore;
 use tokio::io::AsyncWrite;
 
-pub(crate) mod demux;
+pub mod demux;
 pub(crate) mod orchestration;
 
 /// A buffer with interior mutability shared by the SerializedFileWriter and
 /// ObjectStore writer
 #[derive(Clone)]
-pub(crate) struct SharedBuffer {
+pub struct SharedBuffer {
     /// The inner buffer for reading and writing
     ///
     /// The lock is used to obtain internal mutability, so no worry about the
     /// lock contention.
-    pub(crate) buffer: Arc<futures::lock::Mutex<Vec<u8>>>,
+    pub buffer: Arc<futures::lock::Mutex<Vec<u8>>>,
 }
 
 impl SharedBuffer {
@@ -78,7 +78,7 @@ pub trait BatchSerializer: Sync + Send {
 /// with the specified compression.
 /// We drop the `AbortableWrite` struct and the writer will not try to cleanup on failure.
 /// Users can configure automatic cleanup with their cloud provider.
-pub(crate) async fn create_writer(
+pub async fn create_writer(
     file_compression_type: FileCompressionType,
     location: &Path,
     object_store: Arc<dyn ObjectStore>,

@@ -21,8 +21,7 @@ use std::sync::Arc;
 
 use crate::datasource::file_format::arrow::ArrowFormat;
 use crate::datasource::file_format::file_compression_type::FileCompressionType;
-#[cfg(feature = "parquet")]
-use crate::datasource::file_format::parquet::ParquetFormat;
+
 use crate::datasource::file_format::DEFAULT_SCHEMA_INFER_MAX_RECORD;
 use crate::datasource::listing::ListingTableUrl;
 use crate::datasource::{
@@ -492,41 +491,6 @@ impl ReadOptions<'_> for CsvReadOptions<'_> {
             .with_escape(self.escape)
             .with_schema_infer_max_rec(self.schema_infer_max_records)
             .with_file_compression_type(self.file_compression_type.to_owned());
-
-        ListingOptions::new(Arc::new(file_format))
-            .with_file_extension(self.file_extension)
-            .with_target_partitions(config.target_partitions())
-            .with_table_partition_cols(self.table_partition_cols.clone())
-            .with_file_sort_order(self.file_sort_order.clone())
-    }
-
-    async fn get_resolved_schema(
-        &self,
-        config: &SessionConfig,
-        state: SessionState,
-        table_path: ListingTableUrl,
-    ) -> Result<SchemaRef> {
-        self._get_resolved_schema(config, state, table_path, self.schema)
-            .await
-    }
-}
-
-#[cfg(feature = "parquet")]
-#[async_trait]
-impl ReadOptions<'_> for ParquetReadOptions<'_> {
-    fn to_listing_options(
-        &self,
-        config: &SessionConfig,
-        table_options: TableOptions,
-    ) -> ListingOptions {
-        let mut file_format = ParquetFormat::new().with_options(table_options.parquet);
-
-        if let Some(parquet_pruning) = self.parquet_pruning {
-            file_format = file_format.with_enable_pruning(parquet_pruning)
-        }
-        if let Some(skip_metadata) = self.skip_metadata {
-            file_format = file_format.with_skip_metadata(skip_metadata)
-        }
 
         ListingOptions::new(Arc::new(file_format))
             .with_file_extension(self.file_extension)

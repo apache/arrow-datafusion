@@ -151,7 +151,7 @@ pub async fn get_statistics_with_limit(
     Ok((result_files, statistics))
 }
 
-pub(crate) fn create_max_min_accs(
+pub fn create_max_min_accs(
     schema: &Schema,
 ) -> (Vec<Option<MaxAccumulator>>, Vec<Option<MinAccumulator>>) {
     let max_values: Vec<Option<MaxAccumulator>> = schema
@@ -182,7 +182,7 @@ fn add_row_stats(
     }
 }
 
-pub(crate) fn get_col_stats_vec(
+pub fn get_col_stats_vec(
     null_counts: Vec<Precision<usize>>,
     max_values: Vec<Precision<ScalarValue>>,
     min_values: Vec<Precision<ScalarValue>>,
@@ -197,7 +197,7 @@ pub(crate) fn get_col_stats_vec(
         .collect()
 }
 
-pub(crate) fn get_col_stats(
+pub fn get_col_stats(
     schema: &Schema,
     null_counts: Vec<Precision<usize>>,
     max_values: &mut [Option<MaxAccumulator>],

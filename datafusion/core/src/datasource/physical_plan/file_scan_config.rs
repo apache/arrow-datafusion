@@ -261,7 +261,7 @@ impl FileScanConfig {
     }
 
     #[allow(unused)] // Only used by avro
-    pub(crate) fn projected_file_column_names(&self) -> Option<Vec<String>> {
+    pub fn projected_file_column_names(&self) -> Option<Vec<String>> {
         self.projection.as_ref().map(|p| {
             p.iter()
                 .filter(|col_idx| **col_idx < self.file_schema.fields().len())
@@ -272,7 +272,7 @@ impl FileScanConfig {
     }
 
     /// Projects only file schema, ignoring partition columns
-    pub(crate) fn projected_file_schema(&self) -> SchemaRef {
+    pub fn projected_file_schema(&self) -> SchemaRef {
         let fields = self.file_column_projection_indices().map(|indices| {
             indices
                 .iter()
@@ -287,7 +287,7 @@ impl FileScanConfig {
         )
     }
 
-    pub(crate) fn file_column_projection_indices(&self) -> Option<Vec<usize>> {
+    pub fn file_column_projection_indices(&self) -> Option<Vec<usize>> {
         self.projection.as_ref().map(|p| {
             p.iter()
                 .filter(|col_idx| **col_idx < self.file_schema.fields().len())

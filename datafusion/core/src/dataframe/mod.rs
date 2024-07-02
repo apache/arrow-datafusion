@@ -17,9 +17,6 @@
 
 //! [`DataFrame`] API for building and executing query plans.
 
-#[cfg(feature = "parquet")]
-mod parquet;
-
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -17,27 +17,13 @@
 
 use std::sync::Arc;
 
-use super::super::options::{ParquetReadOptions, ReadOptions};
+use super::super::options::{ParquetReadOptions};
 use super::{DataFilePaths, DataFrame, ExecutionPlan, Result, SessionContext};
 use crate::datasource::physical_plan::parquet::plan_to_parquet;
 
 use parquet::file::properties::WriterProperties;
 
 impl SessionContext {
-    /// Creates a [`DataFrame`] for reading a Parquet data source.
-    ///
-    /// For more control such as reading multiple files, you can use
-    /// [`read_table`](Self::read_table) with a [`super::ListingTable`].
-    ///
-    /// For an example, see [`read_csv`](Self::read_csv)
-    pub async fn read_parquet<P: DataFilePaths>(
-        &self,
-        table_paths: P,
-        options: ParquetReadOptions<'_>,
-    ) -> Result<DataFrame> {
-        self._read_type(table_paths, options).await
-    }
-
     /// Registers a Parquet file as a table that can be referenced from SQL
     /// statements executed against this context.
     pub async fn register_parquet(

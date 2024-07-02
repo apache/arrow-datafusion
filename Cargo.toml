@@ -41,7 +41,7 @@ members = [
     "datafusion-examples",
     "docs",
     "test-utils",
-    "benchmarks",
+    "benchmarks", "datafusion/parquet",
 ]
 resolver = "2"
 

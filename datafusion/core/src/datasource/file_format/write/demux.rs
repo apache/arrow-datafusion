@@ -69,7 +69,7 @@ type DemuxedStreamReceiver = UnboundedReceiver<(Path, RecordBatchReceiver)>;
 ///                                                 └──────────┘        │        ┌───────────┐               ┌────────────┐    ┌─────────────┐
 ///                                                                     └──────▶ │  batch d  ├────▶...──────▶│   Batch n  │    │ Output FileN│
 ///                                                                              └───────────┘               └────────────┘    └─────────────┘
-pub(crate) fn start_demuxer_task(
+pub fn start_demuxer_task(
     input: SendableRecordBatchStream,
     context: &Arc<TaskContext>,
     partition_by: Option<Vec<(String, DataType)>>,

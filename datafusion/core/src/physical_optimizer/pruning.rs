@@ -613,7 +613,7 @@ impl PruningPredicate {
         is_always_true(&self.predicate_expr) && self.literal_guarantees.is_empty()
     }
 
-    pub(crate) fn required_columns(&self) -> &RequiredColumns {
+    pub fn required_columns(&self) -> &RequiredColumns {
         &self.required_columns
     }
 
@@ -722,7 +722,7 @@ fn is_always_true(expr: &Arc<dyn PhysicalExpr>) -> bool {
 /// Handles creating references to the min/max statistics
 /// for columns as well as recording which statistics are needed
 #[derive(Debug, Default, Clone)]
-pub(crate) struct RequiredColumns {
+pub struct RequiredColumns {
     /// The statistics required to evaluate this predicate:
     /// * The unqualified column in the input schema
     /// * Statistics type (e.g. Min or Max or Null_Count)
@@ -737,7 +737,7 @@ impl RequiredColumns {
     }
 
     /// Returns number of unique columns
-    pub(crate) fn n_columns(&self) -> usize {
+    pub fn n_columns(&self) -> usize {
         self.iter()
             .map(|(c, _s, _f)| c)
             .collect::<HashSet<_>>()
@@ -746,7 +746,7 @@ impl RequiredColumns {
 
     /// Returns an iterator over items in columns (see doc on
     /// `self.columns` for details)
-    pub(crate) fn iter(
+    pub fn iter(
         &self,
     ) -> impl Iterator<Item = &(phys_expr::Column, StatisticsType, Field)> {
         self.columns.iter()
@@ -1546,7 +1546,7 @@ fn wrap_case_expr(
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum StatisticsType {
+pub enum StatisticsType {
     Min,
     Max,
     NullCount,

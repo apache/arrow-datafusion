@@ -1038,7 +1038,6 @@ mod tests {
     use crate::datasource::file_format::avro::AvroFormat;
     use crate::datasource::file_format::csv::CsvFormat;
     use crate::datasource::file_format::json::JsonFormat;
-    use crate::datasource::file_format::parquet::ParquetFormat;
     #[cfg(feature = "parquet")]
     use crate::datasource::{provider_as_source, MemTable};
     use crate::execution::options::ArrowReadOptions;
@@ -1050,11 +1049,9 @@ mod tests {
     };
 
     use arrow::record_batch::RecordBatch;
-    use arrow_schema::SortOptions;
     use datafusion_common::stats::Precision;
-    use datafusion_common::{assert_contains, ScalarValue};
+    use datafusion_common::ScalarValue;
     use datafusion_expr::{BinaryExpr, LogicalPlanBuilder, Operator};
-    use datafusion_physical_expr::PhysicalSortExpr;
     use datafusion_physical_plan::ExecutionPlanProperties;
 
     use tempfile::TempDir;
@@ -1078,158 +1075,6 @@ mod tests {
         assert_eq!(exec.statistics()?.total_byte_size, Precision::Exact(671));
 
         Ok(())
-    }
-
-    #[cfg(feature = "parquet")]
-    #[tokio::test]
-    async fn load_table_stats_by_default() -> Result<()> {
-        use crate::datasource::file_format::parquet::ParquetFormat;
-
-        let testdata = crate::test_util::parquet_test_data();
-        let filename = format!("{}/{}", testdata, "alltypes_plain.parquet");
-        let table_path = ListingTableUrl::parse(filename).unwrap();
-
-        let ctx = SessionContext::new();
-        let state = ctx.state();
-
-        let opt = ListingOptions::new(Arc::new(ParquetFormat::default()));
-        let schema = opt.infer_schema(&state, &table_path).await?;
-        let config = ListingTableConfig::new(table_path)
-            .with_listing_options(opt)
-            .with_schema(schema);
-        let table = ListingTable::try_new(config)?;
-
-        let exec = table.scan(&state, None, &[], None).await?;
-        assert_eq!(exec.statistics()?.num_rows, Precision::Exact(8));
-        assert_eq!(exec.statistics()?.total_byte_size, Precision::Exact(671));
-
-        Ok(())
-    }
-
-    #[cfg(feature = "parquet")]
-    #[tokio::test]
-    async fn load_table_stats_when_no_stats() -> Result<()> {
-        use crate::datasource::file_format::parquet::ParquetFormat;
-
-        let testdata = crate::test_util::parquet_test_data();
-        let filename = format!("{}/{}", testdata, "alltypes_plain.parquet");
-        let table_path = ListingTableUrl::parse(filename).unwrap();
-
-        let ctx = SessionContext::new();
-        let state = ctx.state();
-
-        let opt = ListingOptions::new(Arc::new(ParquetFormat::default()))
-            .with_collect_stat(false);
-        let schema = opt.infer_schema(&state, &table_path).await?;
-        let config = ListingTableConfig::new(table_path)
-            .with_listing_options(opt)
-            .with_schema(schema);
-        let table = ListingTable::try_new(config)?;
-
-        let exec = table.scan(&state, None, &[], None).await?;
-        assert_eq!(exec.statistics()?.num_rows, Precision::Absent);
-        assert_eq!(exec.statistics()?.total_byte_size, Precision::Absent);
-
-        Ok(())
-    }
-
-    #[cfg(feature = "parquet")]
-    #[tokio::test]
-    async fn test_try_create_output_ordering() {
-        let testdata = crate::test_util::parquet_test_data();
-        let filename = format!("{}/{}", testdata, "alltypes_plain.parquet");
-        let table_path = ListingTableUrl::parse(filename).unwrap();
-
-        let ctx = SessionContext::new();
-        let state = ctx.state();
-        let options = ListingOptions::new(Arc::new(ParquetFormat::default()));
-        let schema = options.infer_schema(&state, &table_path).await.unwrap();
-
-        use crate::{
-            datasource::file_format::parquet::ParquetFormat,
-            physical_plan::expressions::col as physical_col,
-        };
-        use std::ops::Add;
-
-        // (file_sort_order, expected_result)
-        let cases = vec![
-            (vec![], Ok(vec![])),
-            // not a sort expr
-            (
-                vec![vec![col("string_col")]],
-                Err("Expected Expr::Sort in output_ordering, but got string_col"),
-            ),
-            // sort expr, but non column
-            (
-                vec![vec![
-                    col("int_col").add(lit(1)).sort(true, true),
-                ]],
-                Err("Expected single column references in output_ordering, got int_col + Int32(1)"),
-            ),
-            // ok with one column
-            (
-                vec![vec![col("string_col").sort(true, false)]],
-                Ok(vec![vec![PhysicalSortExpr {
-                    expr: physical_col("string_col", &schema).unwrap(),
-                    options: SortOptions {
-                        descending: false,
-                        nulls_first: false,
-                    },
-                }]])
-            ),
-            // ok with two columns, different options
-            (
-                vec![vec![
-                    col("string_col").sort(true, false),
-                    col("int_col").sort(false, true),
-                ]],
-                Ok(vec![vec![
-                    PhysicalSortExpr {
-                        expr: physical_col("string_col", &schema).unwrap(),
-                        options: SortOptions {
-                            descending: false,
-                            nulls_first: false,
-                        },
-                    },
-                    PhysicalSortExpr {
-                        expr: physical_col("int_col", &schema).unwrap(),
-                        options: SortOptions {
-                            descending: true,
-                            nulls_first: true,
-                        },
-                    },
-                ]])
-            ),
-        ];
-
-        for (file_sort_order, expected_result) in cases {
-            let options = options.clone().with_file_sort_order(file_sort_order);
-
-            let config = ListingTableConfig::new(table_path.clone())
-                .with_listing_options(options)
-                .with_schema(schema.clone());
-
-            let table =
-                ListingTable::try_new(config.clone()).expect("Creating the table");
-            let ordering_result = table.try_create_output_ordering();
-
-            match (expected_result, ordering_result) {
-                (Ok(expected), Ok(result)) => {
-                    assert_eq!(expected, result);
-                }
-                (Err(expected), Err(result)) => {
-                    // can't compare the DataFusionError directly
-                    let result = result.to_string();
-                    let expected = expected.to_string();
-                    assert_contains!(result.to_string(), expected);
-                }
-                (expected_result, ordering_result) => {
-                    panic!(
-                        "expected: {expected_result:#?}\n\nactual:{ordering_result:#?}"
-                    );
-                }
-            }
-        }
     }
 
     #[tokio::test]

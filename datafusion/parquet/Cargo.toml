@@ -1,0 +1,54 @@
+[package]
+name = "datafusion-parquet"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+async-compression = { version = "0.4.0", features = [
+    "bzip2",
+    "gzip",
+    "xz",
+    "zstd",
+    "futures-io",
+    "tokio",
+], optional = true }
+async-trait = { workspace = true }
+bytes = { workspace = true }
+bzip2 = { version = "0.4.3", optional = true }
+datafusion = { workspace = true }
+datafusion-common = { workspace = true, features = ["object_store"] }
+datafusion-common-runtime = { workspace = true }
+datafusion-execution = { workspace = true }
+datafusion-expr = { workspace = true }
+datafusion-functions = { workspace = true }
+datafusion-functions-aggregate = { workspace = true }
+datafusion-functions-array = { workspace = true, optional = true }
+datafusion-optimizer = { workspace = true }
+datafusion-physical-expr = { workspace = true }
+datafusion-physical-expr-common = { workspace = true }
+datafusion-physical-plan = { workspace = true }
+datafusion-sql = { workspace = true }
+futures = { workspace = true }
+hashbrown = { workspace = true }
+half = { workspace = true }
+itertools = { workspace = true }
+log = { workspace = true }
+object_store = { workspace = true }
+paste = "1.0.15"
+parking_lot = { workspace = true }
+parquet = { workspace = true }
+tokio = { workspace = true }
+xz2 = { version = "0.1", optional = true, features = ["static"] }
+zstd = { version = "0.13", optional = true, default-features = false }
+
+[lints]
+workspace = true
