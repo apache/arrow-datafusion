@@ -1,0 +1,29 @@
+statement ok
+create table t(a int, b varchar, c int) as values (1, 'a', 3), (2, 'abcabcabcabcabc', 1), (1, 'c', 2), (1, 'a', 4);
+
+query ITI
+select a, concat(b, 'abcdabcdabcd') as b_v, count(*) from t group by a, b_v order by count(*) desc;
+----
+1 a 2
+2 c 1
+1 c 1
+
+query TT
+explain select a, b, count(*) from t group by a, b order by count(*) desc;
+----
+logical_plan
+01)Sort: COUNT(*) DESC NULLS FIRST
+02)--Aggregate: groupBy=[[t.a, t.b]], aggr=[[COUNT(Int64(1)) AS COUNT(*)]]
+03)----TableScan: t projection=[a, b]
+physical_plan
+01)SortPreservingMergeExec: [COUNT(*)@2 DESC]
+02)--SortExec: expr=[COUNT(*)@2 DESC], preserve_partitioning=[true]
+03)----AggregateExec: mode=FinalPartitioned, gby=[a@0 as a, b@1 as b], aggr=[COUNT(*)]
+04)------CoalesceBatchesExec: target_batch_size=8192
+05)--------RepartitionExec: partitioning=Hash([a@0, b@1], 4), input_partitions=4
+06)----------RepartitionExec: partitioning=RoundRobinBatch(4), input_partitions=1
+07)------------AggregateExec: mode=Partial, gby=[a@0 as a, b@1 as b], aggr=[COUNT(*)]
+08)--------------MemoryExec: partitions=1, partition_sizes=[1]
+
+statement ok
+drop table t;

@@ -15,17 +15,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use std::sync::Arc;
+
 use crate::aggregates::group_values::GroupValues;
 use ahash::RandomState;
+use arrow::array::{AsArray, StringBuilder};
 use arrow::compute::cast;
+use arrow::datatypes::UInt64Type;
 use arrow::record_batch::RecordBatch;
 use arrow::row::{RowConverter, Rows, SortField};
-use arrow_array::{Array, ArrayRef};
+use arrow_array::{Array, ArrayRef, UInt64Array};
 use arrow_schema::{DataType, SchemaRef};
 use datafusion_common::hash_utils::create_hashes;
 use datafusion_common::{DataFusionError, Result};
 use datafusion_execution::memory_pool::proxy::{RawTableAllocExt, VecAllocExt};
 use datafusion_expr::EmitTo;
+use datafusion_physical_expr::binary_map::OutputType;
+use datafusion_physical_expr_common::binary_map::ArrowBytesMap;
 use hashbrown::raw::RawTable;
 
 /// A [`GroupValues`] making use of [`Rows`]
@@ -67,6 +73,10 @@ pub struct GroupValuesRows {
 
     /// Random state for creating hashes
     random_state: RandomState,
+
+    // variable length column map
+    var_map: ArrowBytesMap<i32, usize>,
+    num_groups: usize,
 }
 
 impl GroupValuesRows {
@@ -75,7 +85,13 @@ impl GroupValuesRows {
             schema
                 .fields()
                 .iter()
-                .map(|f| SortField::new(f.data_type().clone()))
+                .map(|f| {
+                    if f.data_type() == &DataType::Utf8 {
+                        SortField::new(DataType::UInt64)
+                    } else {
+                        SortField::new(f.data_type().clone())
+                    }
+                })
                 .collect(),
         )?;
 
@@ -94,16 +110,41 @@ impl GroupValuesRows {
             hashes_buffer: Default::default(),
             rows_buffer,
             random_state: Default::default(),
+            var_map: ArrowBytesMap::new(OutputType::Utf8),
+            num_groups: 0,
         })
     }
 }
 
 impl GroupValues for GroupValuesRows {
     fn intern(&mut self, cols: &[ArrayRef], groups: &mut Vec<usize>) -> Result<()> {
+        let cols_var = &cols[1];
+        groups.clear();
+        self.var_map.insert_if_new(
+            cols_var,
+            // called for each new group
+            |_value| {
+                // assign new group index on each insert
+                let group_idx = self.num_groups;
+                self.num_groups += 1;
+                group_idx
+            },
+            // called for each group
+            |group_idx| {
+                groups.push(group_idx);
+            },
+        );
+
+        let u64_vec: Vec<u64> = groups.iter().map(|&x| x as u64).collect();
+        let arr = Arc::new(UInt64Array::from(u64_vec)) as ArrayRef;
+
+        let mut cols = cols[0..1].to_vec();
+        cols.push(arr);
+
         // Convert the group keys into the row format
         let group_rows = &mut self.rows_buffer;
         group_rows.clear();
-        self.row_converter.append(group_rows, cols)?;
+        self.row_converter.append(group_rows, &cols)?;
         let n_rows = group_rows.num_rows();
 
         let mut group_values = match self.group_values.take() {
@@ -118,7 +159,7 @@ impl GroupValues for GroupValuesRows {
         let batch_hashes = &mut self.hashes_buffer;
         batch_hashes.clear();
         batch_hashes.resize(n_rows, 0);
-        create_hashes(cols, &self.random_state, batch_hashes)?;
+        create_hashes(&cols, &self.random_state, batch_hashes)?;
 
         for (row, &hash) in batch_hashes.iter().enumerate() {
             let entry = self.map.get_mut(hash, |(_hash, group_idx)| {
@@ -180,15 +221,39 @@ impl GroupValues for GroupValuesRows {
             .take()
             .expect("Can not emit from empty rows");
 
+        let map_contents = self.var_map.take().into_state();
+        let map_contents = map_contents.as_string::<i32>();
+
         let mut output = match emit_to {
             EmitTo::All => {
-                let output = self.row_converter.convert_rows(&group_values)?;
+                let mut output = self.row_converter.convert_rows(&group_values)?;
+
+                // Index Array: [0, 1, 1, 0]
+                // Data Array: ['a', 'c']
+                // Result Array: ['a', 'c', 'c', 'a']
+
+                let mut string_build = StringBuilder::new();
+
+                let arr = output[1].as_primitive::<UInt64Type>();
+                for v in arr.iter() {
+                    if let Some(index) = v {
+                        let value = map_contents.value(index as usize);
+                        string_build.append_value(value)
+                    } else {
+                        string_build.append_null();
+                    }
+                }
+
+                let output_str = string_build.finish();
+
+                output[1] = Arc::new(output_str);
+
                 group_values.clear();
                 output
             }
             EmitTo::First(n) => {
                 let groups_rows = group_values.iter().take(n);
-                let output = self.row_converter.convert_rows(groups_rows)?;
+                let mut output = self.row_converter.convert_rows(groups_rows)?;
                 // Clear out first n group keys by copying them to a new Rows.
                 // TODO file some ticket in arrow-rs to make this more efficent?
                 let mut new_group_values = self.row_converter.empty_rows(0, 0);
@@ -209,6 +274,25 @@ impl GroupValues for GroupValuesRows {
                         }
                     }
                 }
+
+                let mut string_build = StringBuilder::new();
+
+                let arr = output[1].as_primitive::<UInt64Type>();
+                for v in arr.iter() {
+                    if let Some(index) = v {
+                        let value = map_contents.value(index as usize);
+                        string_build.append_value(value)
+                    } else {
+                        string_build.append_null();
+                    }
+                }
+
+                let output_str = string_build.finish();
+
+                output[1] = Arc::new(output_str);
+
+                // self.num_groups -= map_contents.len();
+                // output.push(map_contents);
                 output
             }
         };
