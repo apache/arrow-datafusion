@@ -127,7 +127,7 @@ impl AggregateExpr for OrderSensitiveArrayAgg {
     }
 
     fn expressions(&self) -> Vec<Arc<dyn PhysicalExpr>> {
-        vec![self.expr.clone()]
+        vec![Arc::clone(&self.expr)]
     }
 
     fn order_bys(&self) -> Option<&[PhysicalSortExpr]> {
@@ -146,7 +146,7 @@ impl AggregateExpr for OrderSensitiveArrayAgg {
         Some(Arc::new(Self {
             name: self.name.to_string(),
             input_data_type: self.input_data_type.clone(),
-            expr: self.expr.clone(),
+            expr: Arc::clone(&self.expr),
             nullable: self.nullable,
             order_by_data_types: self.order_by_data_types.clone(),
             // Reverse requirement:

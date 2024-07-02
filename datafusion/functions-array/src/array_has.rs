@@ -279,7 +279,7 @@ fn general_array_has_dispatch<O: OffsetSizeTrait>(
 
     let converter = RowConverter::new(vec![SortField::new(array.value_type())])?;
 
-    let element = sub_array.clone();
+    let element = Arc::clone(sub_array);
     let sub_array = if comparison_type != ComparisonType::Single {
         as_generic_list_array::<O>(sub_array)?
     } else {
@@ -292,7 +292,7 @@ fn general_array_has_dispatch<O: OffsetSizeTrait>(
                 let sub_arr_values = if comparison_type != ComparisonType::Single {
                     converter.convert_columns(&[sub_arr])?
                 } else {
-                    converter.convert_columns(&[element.clone()])?
+                    converter.convert_columns(&[Arc::clone(&element)])?
                 };
 
                 let mut res = match comparison_type {

@@ -76,7 +76,7 @@ impl TopKAggregation {
             aggr.group_expr().clone(),
             aggr.aggr_expr().to_vec(),
             aggr.filter_expr().to_vec(),
-            aggr.input().clone(),
+            Arc::clone(aggr.input()),
             aggr.input_schema(),
         )
         .expect("Unable to copy Aggregate!")
@@ -114,13 +114,13 @@ impl TopKAggregation {
                 }
             } else {
                 // or we continue down whitelisted nodes of other types
-                if !is_cardinality_preserving(plan.clone()) {
+                if !is_cardinality_preserving(Arc::clone(&plan)) {
                     cardinality_preserved = false;
                 }
             }
             Ok(Transformed::no(plan))
         };
-        let child = child.clone().transform_down(closure).data().ok()?;
+        let child = Arc::clone(child).transform_down(closure).data().ok()?;
         let sort = SortExec::new(sort.expr().to_vec(), child)
             .with_fetch(sort.fetch())
             .with_preserve_partitioning(sort.preserve_partitioning());
@@ -143,7 +143,8 @@ impl PhysicalOptimizerRule for TopKAggregation {
         if config.optimizer.enable_topk_aggregation {
             plan.transform_down(|plan| {
                 Ok(
-                    if let Some(plan) = TopKAggregation::transform_sort(plan.clone()) {
+                    if let Some(plan) = TopKAggregation::transform_sort(Arc::clone(&plan))
+                    {
                         Transformed::yes(plan)
                     } else {
                         Transformed::no(plan)

@@ -656,7 +656,7 @@ fn coerce_arguments_for_fun(
             .map(|expr| {
                 let data_type = expr.get_type(schema).unwrap();
                 if let DataType::FixedSizeList(field, _) = data_type {
-                    let to_type = DataType::List(field.clone());
+                    let to_type = DataType::List(Arc::clone(&field));
                     expr.cast_to(&to_type, schema)
                 } else {
                     Ok(expr)

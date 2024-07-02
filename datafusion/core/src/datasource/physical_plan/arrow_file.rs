@@ -62,7 +62,7 @@ impl ArrowExec {
         let (projected_schema, projected_statistics, projected_output_ordering) =
             base_config.project();
         let cache = Self::compute_properties(
-            projected_schema.clone(),
+            Arc::clone(&projected_schema),
             &projected_output_ordering,
             &base_config,
         );
@@ -204,7 +204,7 @@ pub struct ArrowOpener {
 
 impl FileOpener for ArrowOpener {
     fn open(&self, file_meta: FileMeta) -> Result<FileOpenFuture> {
-        let object_store = self.object_store.clone();
+        let object_store = Arc::clone(&self.object_store);
         let projection = self.projection.clone();
         Ok(Box::pin(async move {
             let range = file_meta.range.clone();

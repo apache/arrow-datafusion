@@ -343,7 +343,7 @@ where
         let batch_hashes = &mut self.hashes_buffer;
         batch_hashes.clear();
         batch_hashes.resize(values.len(), 0);
-        create_hashes(&[values.clone()], &self.random_state, batch_hashes)
+        create_hashes(&[Arc::clone(values)], &self.random_state, batch_hashes)
             // hash is supported for all types and create_hashes only
             // returns errors for unsupported types
             .unwrap();

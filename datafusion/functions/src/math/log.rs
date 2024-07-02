@@ -109,7 +109,7 @@ impl ScalarUDFImpl for LogFunc {
         let mut x = &args[0];
         if args.len() == 2 {
             x = &args[1];
-            base = ColumnarValue::Array(args[0].clone());
+            base = ColumnarValue::Array(Arc::clone(&args[0]));
         }
         // note in f64::log params order is different than in sql. e.g in sql log(base, x) == f64::log(x, base)
         let arr: ArrayRef = match args[0].data_type() {

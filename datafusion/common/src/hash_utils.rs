@@ -244,7 +244,7 @@ fn hash_list_array<OffsetSize>(
 where
     OffsetSize: OffsetSizeTrait,
 {
-    let values = array.values().clone();
+    let values = Arc::clone(array.values());
     let offsets = array.value_offsets();
     let nulls = array.nulls();
     let mut values_hashes = vec![0u64; values.len()];
@@ -274,7 +274,7 @@ fn hash_fixed_list_array(
     random_state: &RandomState,
     hashes_buffer: &mut [u64],
 ) -> Result<()> {
-    let values = array.values().clone();
+    let values = Arc::clone(array.values());
     let value_len = array.value_length();
     let offset_size = value_len as usize / array.len();
     let nulls = array.nulls();
@@ -622,19 +622,19 @@ mod tests {
             vec![
                 (
                     Arc::new(Field::new("bool", DataType::Boolean, false)),
-                    boolarr.clone() as ArrayRef,
+                    Arc::clone(&boolarr) as ArrayRef,
                 ),
                 (
                     Arc::new(Field::new("i32", DataType::Int32, false)),
-                    i32arr.clone() as ArrayRef,
+                    Arc::clone(&i32arr) as ArrayRef,
                 ),
                 (
                     Arc::new(Field::new("i32", DataType::Int32, false)),
-                    i32arr.clone() as ArrayRef,
+                    Arc::clone(&i32arr) as ArrayRef,
                 ),
                 (
                     Arc::new(Field::new("bool", DataType::Boolean, false)),
-                    boolarr.clone() as ArrayRef,
+                    Arc::clone(&boolarr) as ArrayRef,
                 ),
             ],
             Buffer::from(&[0b001011]),
@@ -710,7 +710,12 @@ mod tests {
         let random_state = RandomState::with_seeds(0, 0, 0, 0);
 
         let mut one_col_hashes = vec![0; strings1.len()];
-        create_hashes(&[dict_array.clone()], &random_state, &mut one_col_hashes).unwrap();
+        create_hashes(
+            &[Arc::clone(&dict_array) as ArrayRef],
+            &random_state,
+            &mut one_col_hashes,
+        )
+        .unwrap();
 
         let mut two_col_hashes = vec![0; strings1.len()];
         create_hashes(

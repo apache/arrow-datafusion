@@ -53,7 +53,7 @@ impl ExplainExec {
         stringified_plans: Vec<StringifiedPlan>,
         verbose: bool,
     ) -> Self {
-        let cache = Self::compute_properties(schema.clone());
+        let cache = Self::compute_properties(Arc::clone(&schema));
         ExplainExec {
             schema,
             stringified_plans,
@@ -160,7 +160,7 @@ impl ExecutionPlan for ExplainExec {
         }
 
         let record_batch = RecordBatch::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             vec![
                 Arc::new(type_builder.finish()),
                 Arc::new(plan_builder.finish()),
@@ -171,7 +171,7 @@ impl ExecutionPlan for ExplainExec {
             "Before returning RecordBatchStream in ExplainExec::execute for partition {} of context session_id {} and task_id {:?}", partition, context.session_id(), context.task_id());
 
         Ok(Box::pin(RecordBatchStreamAdapter::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             futures::stream::iter(vec![Ok(record_batch)]),
         )))
     }

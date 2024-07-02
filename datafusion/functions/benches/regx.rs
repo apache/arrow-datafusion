@@ -83,8 +83,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         b.iter(|| {
             black_box(
-                regexp_like::<i32>(&[data.clone(), regex.clone(), flags.clone()])
-                    .expect("regexp_like should work on valid values"),
+                regexp_like::<i32>(&[
+                    Arc::clone(&data),
+                    Arc::clone(&regex),
+                    Arc::clone(&flags),
+                ])
+                .expect("regexp_like should work on valid values"),
             )
         })
     });
@@ -97,8 +101,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         b.iter(|| {
             black_box(
-                regexp_match::<i32>(&[data.clone(), regex.clone(), flags.clone()])
-                    .expect("regexp_match should work on valid values"),
+                regexp_match::<i32>(&[
+                    Arc::clone(&data),
+                    Arc::clone(&regex),
+                    Arc::clone(&flags),
+                ])
+                .expect("regexp_match should work on valid values"),
             )
         })
     });
@@ -115,10 +123,10 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             black_box(
                 regexp_replace::<i32>(&[
-                    data.clone(),
-                    regex.clone(),
-                    replacement.clone(),
-                    flags.clone(),
+                    Arc::clone(&data),
+                    Arc::clone(&regex),
+                    Arc::clone(&replacement),
+                    Arc::clone(&flags),
                 ])
                 .expect("regexp_replace should work on valid values"),
             )

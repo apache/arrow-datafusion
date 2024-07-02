@@ -94,7 +94,7 @@ impl ProjectionExec {
         // construct a map from the input expressions to the output expression of the Projection
         let projection_mapping = ProjectionMapping::try_new(&expr, &input_schema)?;
         let cache =
-            Self::compute_properties(&input, &projection_mapping, schema.clone())?;
+            Self::compute_properties(&input, &projection_mapping, Arc::clone(&schema))?;
         Ok(Self {
             expr,
             schema,
@@ -227,8 +227,8 @@ impl ExecutionPlan for ProjectionExec {
     ) -> Result<SendableRecordBatchStream> {
         trace!("Start ProjectionExec::execute for partition {} of context session_id {} and task_id {:?}", partition, context.session_id(), context.task_id());
         Ok(Box::pin(ProjectionStream {
-            schema: self.schema.clone(),
-            expr: self.expr.iter().map(|x| x.0.clone()).collect(),
+            schema: Arc::clone(&self.schema),
+            expr: self.expr.iter().map(|x| Arc::clone(&x.0)).collect(),
             input: self.input.execute(partition, context)?,
             baseline_metrics: BaselineMetrics::new(&self.metrics, partition),
         }))
@@ -242,7 +242,7 @@ impl ExecutionPlan for ProjectionExec {
         Ok(stats_projection(
             self.input.statistics()?,
             self.expr.iter().map(|(e, _)| Arc::clone(e)),
-            self.schema.clone(),
+            Arc::clone(&self.schema),
         ))
     }
 }
@@ -311,10 +311,10 @@ impl ProjectionStream {
         if arrays.is_empty() {
             let options =
                 RecordBatchOptions::new().with_row_count(Some(batch.num_rows()));
-            RecordBatch::try_new_with_options(self.schema.clone(), arrays, &options)
+            RecordBatch::try_new_with_options(Arc::clone(&self.schema), arrays, &options)
                 .map_err(Into::into)
         } else {
-            RecordBatch::try_new(self.schema.clone(), arrays).map_err(Into::into)
+            RecordBatch::try_new(Arc::clone(&self.schema), arrays).map_err(Into::into)
         }
     }
 }
@@ -351,7 +351,7 @@ impl Stream for ProjectionStream {
 impl RecordBatchStream for ProjectionStream {
     /// Get the schema
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -370,10 +370,12 @@ mod tests {
         let task_ctx = Arc::new(TaskContext::default());
 
         let exec = test::scan_partitioned(1);
-        let expected = collect(exec.execute(0, task_ctx.clone())?).await.unwrap();
+        let expected = collect(exec.execute(0, Arc::clone(&task_ctx))?)
+            .await
+            .unwrap();
 
         let projection = ProjectionExec::try_new(vec![], exec)?;
-        let stream = projection.execute(0, task_ctx.clone())?;
+        let stream = projection.execute(0, Arc::clone(&task_ctx))?;
         let output = collect(stream).await.unwrap();
         assert_eq!(output.len(), expected.len());
 

@@ -242,7 +242,7 @@ pub fn create_physical_expr(
                 when_expr
                     .iter()
                     .zip(then_expr.iter())
-                    .map(|(w, t)| (w.clone(), t.clone()))
+                    .map(|(w, t)| (Arc::clone(w), Arc::clone(t)))
                     .collect();
             let else_expr: Option<Arc<dyn PhysicalExpr>> =
                 if let Some(e) = &case.else_expr {
@@ -288,7 +288,7 @@ pub fn create_physical_expr(
                 create_physical_exprs(args, input_dfschema, execution_props)?;
 
             scalar_function::create_physical_expr(
-                func.clone().as_ref(),
+                Arc::clone(func).as_ref(),
                 &physical_args,
                 input_schema,
                 args,
@@ -307,9 +307,19 @@ pub fn create_physical_expr(
 
             // rewrite the between into the two binary operators
             let binary_expr = binary(
-                binary(value_expr.clone(), Operator::GtEq, low_expr, input_schema)?,
+                binary(
+                    Arc::clone(&value_expr),
+                    Operator::GtEq,
+                    low_expr,
+                    input_schema,
+                )?,
                 Operator::And,
-                binary(value_expr.clone(), Operator::LtEq, high_expr, input_schema)?,
+                binary(
+                    Arc::clone(&value_expr),
+                    Operator::LtEq,
+                    high_expr,
+                    input_schema,
+                )?,
                 input_schema,
             );
 

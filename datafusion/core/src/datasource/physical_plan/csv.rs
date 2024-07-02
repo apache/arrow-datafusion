@@ -310,7 +310,7 @@ impl CsvConfig {
     }
 
     fn builder(&self) -> csv::ReaderBuilder {
-        let mut builder = csv::ReaderBuilder::new(self.file_schema.clone())
+        let mut builder = csv::ReaderBuilder::new(Arc::clone(&self.file_schema))
             .with_delimiter(self.delimiter)
             .with_batch_size(self.batch_size)
             .with_header(self.has_header)
@@ -398,7 +398,7 @@ impl FileOpener for CsvOpener {
             );
         }
 
-        let store = self.config.object_store.clone();
+        let store = Arc::clone(&self.config.object_store);
 
         Ok(Box::pin(async move {
             // Current partition contains bytes [start_byte, end_byte) (might contain incomplete lines at boundaries)
@@ -485,12 +485,12 @@ pub async fn plan_to_csv(
     let store = task_ctx.runtime_env().object_store(&object_store_url)?;
     let mut join_set = JoinSet::new();
     for i in 0..plan.output_partitioning().partition_count() {
-        let storeref = store.clone();
-        let plan: Arc<dyn ExecutionPlan> = plan.clone();
+        let storeref = Arc::clone(&store);
+        let plan: Arc<dyn ExecutionPlan> = Arc::clone(&plan);
         let filename = format!("{}/part-{i}.csv", parsed.prefix());
         let file = object_store::path::Path::parse(filename)?;
 
-        let mut stream = plan.execute(i, task_ctx.clone())?;
+        let mut stream = plan.execute(i, Arc::clone(&task_ctx))?;
         join_set.spawn(async move {
             let mut buf_writer = BufWriter::new(storeref, file.clone());
             let mut buffer = Vec::with_capacity(1024);

@@ -14,6 +14,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+#![deny(clippy::clone_on_ref_ptr)]
 
 //! Traits for physical query plan, supporting parallel execution for partitioned relations.
 
@@ -155,7 +156,7 @@ pub trait ExecutionPlan: Debug + DisplayAs + Send + Sync {
 
     /// Get the schema for this execution plan
     fn schema(&self) -> SchemaRef {
-        self.properties().schema().clone()
+        Arc::clone(self.properties().schema())
     }
 
     /// Return properties of the output of the `ExecutionPlan`, such as output
@@ -736,7 +737,7 @@ pub fn execute_stream(
         1 => plan.execute(0, context),
         _ => {
             // merge into a single partition
-            let plan = CoalescePartitionsExec::new(plan.clone());
+            let plan = CoalescePartitionsExec::new(Arc::clone(&plan));
             // CoalescePartitionsExec must produce a single partition
             assert_eq!(1, plan.properties().output_partitioning().partition_count());
             plan.execute(0, context)
@@ -798,7 +799,7 @@ pub fn execute_stream_partitioned(
     let num_partitions = plan.output_partitioning().partition_count();
     let mut streams = Vec::with_capacity(num_partitions);
     for i in 0..num_partitions {
-        streams.push(plan.execute(i, context.clone())?);
+        streams.push(plan.execute(i, Arc::clone(&context))?);
     }
     Ok(streams)
 }

@@ -58,7 +58,7 @@ impl LimitedDistinctAggregation {
             aggr.group_expr().clone(),
             aggr.aggr_expr().to_vec(),
             aggr.filter_expr().to_vec(),
-            aggr.input().clone(),
+            Arc::clone(aggr.input()),
             aggr.input_schema(),
         )
         .expect("Unable to copy Aggregate!")
@@ -138,7 +138,7 @@ impl LimitedDistinctAggregation {
             rewrite_applicable = false;
             Ok(Transformed::no(plan))
         };
-        let child = child.clone().transform_down(closure).data().ok()?;
+        let child = Arc::clone(child).transform_down(closure).data().ok()?;
         if is_global_limit {
             return Some(Arc::new(GlobalLimitExec::new(
                 child,
@@ -166,7 +166,7 @@ impl PhysicalOptimizerRule for LimitedDistinctAggregation {
             plan.transform_down(|plan| {
                 Ok(
                     if let Some(plan) =
-                        LimitedDistinctAggregation::transform_limit(plan.clone())
+                        LimitedDistinctAggregation::transform_limit(Arc::clone(&plan))
                     {
                         Transformed::yes(plan)
                     } else {

@@ -189,7 +189,7 @@ pub fn file_type_to_format(
         .as_any()
         .downcast_ref::<DefaultFileType>()
     {
-        Some(source) => Ok(source.file_format_factory.clone()),
+        Some(source) => Ok(Arc::clone(&source.file_format_factory)),
         _ => internal_err!("FileType was not DefaultFileType"),
     }
 }

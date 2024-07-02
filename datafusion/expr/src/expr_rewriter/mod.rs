@@ -215,7 +215,7 @@ pub fn coerce_plan_expr_for_schema(
         LogicalPlan::Projection(Projection { expr, input, .. }) => {
             let new_exprs =
                 coerce_exprs_for_schema(expr.clone(), input.schema(), schema)?;
-            let projection = Projection::try_new(new_exprs, input.clone())?;
+            let projection = Projection::try_new(new_exprs, Arc::clone(input))?;
             Ok(LogicalPlan::Projection(projection))
         }
         _ => {

@@ -106,8 +106,8 @@ impl AggregateUDF {
         Self::new_from_impl(AggregateUDFLegacyWrapper {
             name: name.to_owned(),
             signature: signature.clone(),
-            return_type: return_type.clone(),
-            accumulator: accumulator.clone(),
+            return_type: Arc::clone(return_type),
+            accumulator: Arc::clone(accumulator),
         })
     }
 
@@ -133,7 +133,10 @@ impl AggregateUDF {
     ///
     /// If you implement [`AggregateUDFImpl`] directly you should return aliases directly.
     pub fn with_aliases(self, aliases: impl IntoIterator<Item = &'static str>) -> Self {
-        Self::new_from_impl(AliasedAggregateUDFImpl::new(self.inner.clone(), aliases))
+        Self::new_from_impl(AliasedAggregateUDFImpl::new(
+            Arc::clone(&self.inner),
+            aliases,
+        ))
     }
 
     /// creates an [`Expr`] that calls the aggregate function.

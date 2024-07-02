@@ -270,7 +270,7 @@ pub fn convert_sort_expr_with_filter_schema(
     sort_expr: &PhysicalSortExpr,
 ) -> Result<Option<Arc<dyn PhysicalExpr>>> {
     let column_map = map_origin_col_to_filter_col(filter, schema, side)?;
-    let expr = sort_expr.expr.clone();
+    let expr = Arc::clone(&sort_expr.expr);
     // Get main schema columns:
     let expr_columns = collect_columns(&expr);
     // Calculation is possible with `column_map` since sort exprs belong to a child.
@@ -697,7 +697,7 @@ fn update_sorted_exprs_with_node_indices(
     // Extract filter expressions from the sorted expressions:
     let filter_exprs = sorted_exprs
         .iter()
-        .map(|expr| expr.filter_expr().clone())
+        .map(|expr| Arc::clone(expr.filter_expr()))
         .collect::<Vec<_>>();
 
     // Gather corresponding node indices for the extracted filter expressions from the graph:
@@ -756,7 +756,7 @@ pub fn prepare_sorted_exprs(
 
     // Build the expression interval graph
     let mut graph =
-        ExprIntervalGraph::try_new(filter.expression().clone(), filter.schema())?;
+        ExprIntervalGraph::try_new(Arc::clone(filter.expression()), filter.schema())?;
 
     // Update sorted expressions with node indices
     update_sorted_exprs_with_node_indices(&mut graph, &mut sorted_exprs);
@@ -818,9 +818,9 @@ pub mod tests {
             &intermediate_schema,
         )?;
         let filter_expr = binary(
-            filter_left.clone(),
+            Arc::clone(&filter_left),
             Operator::Gt,
-            filter_right.clone(),
+            Arc::clone(&filter_right),
             &intermediate_schema,
         )?;
         let column_indices = vec![

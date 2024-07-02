@@ -173,8 +173,8 @@ impl CaseExpr {
 
         if let Some(e) = &self.else_expr {
             // keep `else_expr`'s data type and return type consistent
-            let expr = try_cast(e.clone(), &batch.schema(), return_type.clone())
-                .unwrap_or_else(|_| e.clone());
+            let expr = try_cast(Arc::clone(e), &batch.schema(), return_type.clone())
+                .unwrap_or_else(|_| Arc::clone(e));
             // null and unmatched tuples should be assigned else value
             remainder = or(&base_nulls, &remainder)?;
             let else_ = expr
@@ -246,8 +246,8 @@ impl CaseExpr {
 
         if let Some(e) = &self.else_expr {
             // keep `else_expr`'s data type and return type consistent
-            let expr = try_cast(e.clone(), &batch.schema(), return_type.clone())
-                .unwrap_or_else(|_| e.clone());
+            let expr = try_cast(Arc::clone(e), &batch.schema(), return_type.clone())
+                .unwrap_or_else(|_| Arc::clone(e));
             let else_ = expr
                 .evaluate_selection(batch, &remainder)?
                 .into_array(batch.num_rows())?;
@@ -887,26 +887,26 @@ mod tests {
         let expr1 = generate_case_when_with_type_coercion(
             Some(col("a", &schema)?),
             vec![
-                (when1.clone(), then1.clone()),
-                (when2.clone(), then2.clone()),
+                (Arc::clone(&when1), Arc::clone(&then1)),
+                (Arc::clone(&when2), Arc::clone(&then2)),
             ],
-            Some(else_value.clone()),
+            Some(Arc::clone(&else_value)),
             &schema,
         )?;
 
         let expr2 = generate_case_when_with_type_coercion(
             Some(col("a", &schema)?),
             vec![
-                (when1.clone(), then1.clone()),
-                (when2.clone(), then2.clone()),
+                (Arc::clone(&when1), Arc::clone(&then1)),
+                (Arc::clone(&when2), Arc::clone(&then2)),
             ],
-            Some(else_value.clone()),
+            Some(Arc::clone(&else_value)),
             &schema,
         )?;
 
         let expr3 = generate_case_when_with_type_coercion(
             Some(col("a", &schema)?),
-            vec![(when1.clone(), then1.clone()), (when2, then2)],
+            vec![(Arc::clone(&when1), Arc::clone(&then1)), (when2, then2)],
             None,
             &schema,
         )?;
@@ -943,15 +943,14 @@ mod tests {
         let expr = generate_case_when_with_type_coercion(
             Some(col("a", &schema)?),
             vec![
-                (when1.clone(), then1.clone()),
-                (when2.clone(), then2.clone()),
+                (Arc::clone(&when1), Arc::clone(&then1)),
+                (Arc::clone(&when2), Arc::clone(&then2)),
             ],
-            Some(else_value.clone()),
+            Some(Arc::clone(&else_value)),
             &schema,
         )?;
 
-        let expr2 = expr
-            .clone()
+        let expr2 = Arc::clone(&expr)
             .transform(|e| {
                 let transformed =
                     match e.as_any().downcast_ref::<crate::expressions::Literal>() {
@@ -972,8 +971,7 @@ mod tests {
             .data()
             .unwrap();
 
-        let expr3 = expr
-            .clone()
+        let expr3 = Arc::clone(&expr)
             .transform_down(|e| {
                 let transformed =
                     match e.as_any().downcast_ref::<crate::expressions::Literal>() {

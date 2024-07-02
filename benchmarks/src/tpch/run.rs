@@ -214,7 +214,7 @@ impl RunOpt {
                 displayable(physical_plan.as_ref()).indent(true)
             );
         }
-        let result = collect(physical_plan.clone(), state.task_ctx()).await?;
+        let result = collect(Arc::clone(&physical_plan), state.task_ctx()).await?;
         if debug {
             println!(
                 "=== Physical plan with metrics ===\n{}\n",

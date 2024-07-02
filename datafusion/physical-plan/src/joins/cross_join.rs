@@ -79,7 +79,7 @@ impl CrossJoinExec {
         };
 
         let schema = Arc::new(Schema::new(all_columns));
-        let cache = Self::compute_properties(&left, &right, schema.clone());
+        let cache = Self::compute_properties(&left, &right, Arc::clone(&schema));
         CrossJoinExec {
             left,
             right,
@@ -220,8 +220,8 @@ impl ExecutionPlan for CrossJoinExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(CrossJoinExec::new(
-            children[0].clone(),
-            children[1].clone(),
+            Arc::clone(&children[0]),
+            Arc::clone(&children[1]),
         )))
     }
 
@@ -237,7 +237,7 @@ impl ExecutionPlan for CrossJoinExec {
         partition: usize,
         context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        let stream = self.right.execute(partition, context.clone())?;
+        let stream = self.right.execute(partition, Arc::clone(&context))?;
 
         let join_metrics = BuildProbeJoinMetrics::new(partition, &self.metrics);
 
@@ -247,7 +247,7 @@ impl ExecutionPlan for CrossJoinExec {
 
         let left_fut = self.left_fut.once(|| {
             load_left_input(
-                self.left.clone(),
+                Arc::clone(&self.left),
                 context,
                 join_metrics.clone(),
                 reservation,
@@ -255,7 +255,7 @@ impl ExecutionPlan for CrossJoinExec {
         });
 
         Ok(Box::pin(CrossJoinStream {
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
             left_fut,
             right: stream,
             left_index: 0,
@@ -337,7 +337,7 @@ struct CrossJoinStream {
 
 impl RecordBatchStream for CrossJoinStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 

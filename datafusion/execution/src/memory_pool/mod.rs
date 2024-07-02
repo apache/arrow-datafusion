@@ -268,7 +268,7 @@ impl MemoryReservation {
         self.size = self.size.checked_sub(capacity).unwrap();
         Self {
             size: capacity,
-            registration: self.registration.clone(),
+            registration: Arc::clone(&self.registration),
         }
     }
 
@@ -276,7 +276,7 @@ impl MemoryReservation {
     pub fn new_empty(&self) -> Self {
         Self {
             size: 0,
-            registration: self.registration.clone(),
+            registration: Arc::clone(&self.registration),
         }
     }
 

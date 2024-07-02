@@ -198,7 +198,7 @@ impl<'a> FilterCandidateBuilder<'a> {
         mut self,
         metadata: &ParquetMetaData,
     ) -> Result<Option<FilterCandidate>> {
-        let expr = self.expr.clone().rewrite(&mut self).data()?;
+        let expr = Arc::clone(&self.expr).rewrite(&mut self).data()?;
 
         if self.non_primitive_columns || self.projected_columns {
             Ok(None)
@@ -342,7 +342,7 @@ pub fn build_row_filter(
         .into_iter()
         .flat_map(|expr| {
             if let Ok(candidate) =
-                FilterCandidateBuilder::new(expr.clone(), file_schema, table_schema)
+                FilterCandidateBuilder::new(Arc::clone(expr), file_schema, table_schema)
                     .build(metadata)
             {
                 candidate

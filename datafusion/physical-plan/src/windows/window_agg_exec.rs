@@ -79,7 +79,7 @@ impl WindowAggExec {
 
         let ordered_partition_by_indices =
             get_ordered_partition_by_indices(window_expr[0].partition_by(), &input);
-        let cache = Self::compute_properties(schema.clone(), &input, &window_expr);
+        let cache = Self::compute_properties(Arc::clone(&schema), &input, &window_expr);
         Ok(Self {
             input,
             window_expr,
@@ -220,7 +220,7 @@ impl ExecutionPlan for WindowAggExec {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(WindowAggExec::try_new(
             self.window_expr.clone(),
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.partition_keys.clone(),
         )?))
     }
@@ -232,7 +232,7 @@ impl ExecutionPlan for WindowAggExec {
     ) -> Result<SendableRecordBatchStream> {
         let input = self.input.execute(partition, context)?;
         let stream = Box::pin(WindowAggStream::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             self.window_expr.clone(),
             input,
             BaselineMetrics::new(&self.metrics, partition),
@@ -333,7 +333,7 @@ impl WindowAggStream {
         let _timer = self.baseline_metrics.elapsed_compute().timer();
         let batch = concat_batches(&self.input.schema(), &self.batches)?;
         if batch.num_rows() == 0 {
-            return Ok(RecordBatch::new_empty(self.schema.clone()));
+            return Ok(RecordBatch::new_empty(Arc::clone(&self.schema)));
         }
 
         let partition_by_sort_keys = self
@@ -366,7 +366,10 @@ impl WindowAggStream {
         let mut batch_columns = batch.columns().to_vec();
         // calculate window cols
         batch_columns.extend_from_slice(&columns);
-        Ok(RecordBatch::try_new(self.schema.clone(), batch_columns)?)
+        Ok(RecordBatch::try_new(
+            Arc::clone(&self.schema),
+            batch_columns,
+        )?)
     }
 }
 
@@ -412,6 +415,6 @@ impl WindowAggStream {
 impl RecordBatchStream for WindowAggStream {
     /// Get the schema
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }

@@ -762,9 +762,9 @@ impl LogicalPlan {
                 // If inputs are not pruned do not change schema
                 // TODO this seems wrong (shouldn't we always use the schema of the input?)
                 let schema = if schema.fields().len() == input_schema.fields().len() {
-                    schema.clone()
+                    Arc::clone(&schema)
                 } else {
-                    input_schema.clone()
+                    Arc::clone(input_schema)
                 };
                 Ok(LogicalPlan::Union(Union { inputs, schema }))
             }
@@ -850,7 +850,7 @@ impl LogicalPlan {
                 ..
             }) => Ok(LogicalPlan::Dml(DmlStatement::new(
                 table_name.clone(),
-                table_schema.clone(),
+                Arc::clone(table_schema),
                 op.clone(),
                 Arc::new(inputs.swap_remove(0)),
             ))),
@@ -863,13 +863,13 @@ impl LogicalPlan {
             }) => Ok(LogicalPlan::Copy(CopyTo {
                 input: Arc::new(inputs.swap_remove(0)),
                 output_url: output_url.clone(),
-                file_type: file_type.clone(),
+                file_type: Arc::clone(file_type),
                 options: options.clone(),
                 partition_by: partition_by.clone(),
             })),
             LogicalPlan::Values(Values { schema, .. }) => {
                 Ok(LogicalPlan::Values(Values {
-                    schema: schema.clone(),
+                    schema: Arc::clone(schema),
                     values: expr
                         .chunks_exact(schema.fields().len())
                         .map(|s| s.to_vec())
@@ -1027,9 +1027,9 @@ impl LogicalPlan {
                 let input_schema = inputs[0].schema();
                 // If inputs are not pruned do not change schema.
                 let schema = if schema.fields().len() == input_schema.fields().len() {
-                    schema.clone()
+                    Arc::clone(schema)
                 } else {
-                    input_schema.clone()
+                    Arc::clone(input_schema)
                 };
                 Ok(LogicalPlan::Union(Union {
                     inputs: inputs.into_iter().map(Arc::new).collect(),
@@ -1073,7 +1073,7 @@ impl LogicalPlan {
                 assert_eq!(inputs.len(), 1);
                 Ok(LogicalPlan::Analyze(Analyze {
                     verbose: a.verbose,
-                    schema: a.schema.clone(),
+                    schema: Arc::clone(&a.schema),
                     input: Arc::new(inputs.swap_remove(0)),
                 }))
             }
@@ -1087,7 +1087,7 @@ impl LogicalPlan {
                     verbose: e.verbose,
                     plan: Arc::new(inputs.swap_remove(0)),
                     stringified_plans: e.stringified_plans.clone(),
-                    schema: e.schema.clone(),
+                    schema: Arc::clone(&e.schema),
                     logical_optimization_succeeded: e.logical_optimization_succeeded,
                 }))
             }
@@ -1369,7 +1369,7 @@ impl LogicalPlan {
         param_values: &ParamValues,
     ) -> Result<LogicalPlan> {
         self.transform_up_with_subqueries(|plan| {
-            let schema = plan.schema().clone();
+            let schema = Arc::clone(plan.schema());
             plan.map_expressions(|e| {
                 e.infer_placeholder_types(&schema)?.transform_up(|e| {
                     if let Expr::Placeholder(Placeholder { id, .. }) = e {
@@ -2227,7 +2227,7 @@ impl Window {
         let fields: Vec<(Option<TableReference>, Arc<Field>)> = input
             .schema()
             .iter()
-            .map(|(q, f)| (q.cloned(), f.clone()))
+            .map(|(q, f)| (q.cloned(), Arc::clone(f)))
             .collect();
         let input_len = fields.len();
         let mut window_fields = fields;
@@ -3352,7 +3352,7 @@ digraph {
             vec![col("a")],
             Arc::new(LogicalPlan::EmptyRelation(EmptyRelation {
                 produce_one_row: false,
-                schema: empty_schema.clone(),
+                schema: Arc::clone(&empty_schema),
             })),
             empty_schema,
         );
@@ -3467,9 +3467,9 @@ digraph {
         );
         let scan = Arc::new(LogicalPlan::TableScan(TableScan {
             table_name: TableReference::bare("tab"),
-            source: source.clone(),
+            source: Arc::clone(&source) as Arc<dyn TableSource>,
             projection: None,
-            projected_schema: schema.clone(),
+            projected_schema: Arc::clone(&schema),
             filters: vec![],
             fetch: None,
         }));
@@ -3499,7 +3499,7 @@ digraph {
             table_name: TableReference::bare("tab"),
             source,
             projection: None,
-            projected_schema: unique_schema.clone(),
+            projected_schema: Arc::clone(&unique_schema),
             filters: vec![],
             fetch: None,
         }));

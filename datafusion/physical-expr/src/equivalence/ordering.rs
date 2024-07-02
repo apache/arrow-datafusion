@@ -174,7 +174,7 @@ impl OrderingEquivalenceClass {
     pub fn add_offset(&mut self, offset: usize) {
         for ordering in self.orderings.iter_mut() {
             for sort_expr in ordering {
-                sort_expr.expr = add_offset_to_expr(sort_expr.expr.clone(), offset);
+                sort_expr.expr = add_offset_to_expr(Arc::clone(&sort_expr.expr), offset);
             }
         }
     }
@@ -264,12 +264,14 @@ mod tests {
             },
         ];
         // finer ordering satisfies, crude ordering should return true
-        let mut eq_properties_finer = EquivalenceProperties::new(input_schema.clone());
+        let mut eq_properties_finer =
+            EquivalenceProperties::new(Arc::clone(&input_schema));
         eq_properties_finer.oeq_class.push(finer.clone());
         assert!(eq_properties_finer.ordering_satisfy(&crude));
 
         // Crude ordering doesn't satisfy finer ordering. should return false
-        let mut eq_properties_crude = EquivalenceProperties::new(input_schema.clone());
+        let mut eq_properties_crude =
+            EquivalenceProperties::new(Arc::clone(&input_schema));
         eq_properties_crude.oeq_class.push(crude.clone());
         assert!(!eq_properties_crude.ordering_satisfy(&finer));
         Ok(())
@@ -307,9 +309,9 @@ mod tests {
             &DFSchema::empty(),
         )?;
         let a_plus_b = Arc::new(BinaryExpr::new(
-            col_a.clone(),
+            Arc::clone(col_a),
             Operator::Plus,
-            col_b.clone(),
+            Arc::clone(col_b),
         )) as Arc<dyn PhysicalExpr>;
         let options = SortOptions {
             descending: false,
@@ -541,7 +543,7 @@ mod tests {
         for (orderings, eq_group, constants, reqs, expected) in test_cases {
             let err_msg =
                 format!("error in test orderings: {orderings:?}, eq_group: {eq_group:?}, constants: {constants:?}, reqs: {reqs:?}, expected: {expected:?}");
-            let mut eq_properties = EquivalenceProperties::new(test_schema.clone());
+            let mut eq_properties = EquivalenceProperties::new(Arc::clone(&test_schema));
             let orderings = convert_to_orderings(&orderings);
             eq_properties.add_new_orderings(orderings);
             let eq_group = eq_group
@@ -715,7 +717,7 @@ mod tests {
             let required = cols
                 .into_iter()
                 .map(|(expr, options)| PhysicalSortExpr {
-                    expr: expr.clone(),
+                    expr: Arc::clone(expr),
                     options,
                 })
                 .collect::<Vec<_>>();
@@ -767,7 +769,7 @@ mod tests {
                     let requirement = exprs
                         .into_iter()
                         .map(|expr| PhysicalSortExpr {
-                            expr: expr.clone(),
+                            expr: Arc::clone(expr),
                             options: SORT_OPTIONS,
                         })
                         .collect::<Vec<_>>();
@@ -840,7 +842,7 @@ mod tests {
                     let requirement = exprs
                         .into_iter()
                         .map(|expr| PhysicalSortExpr {
-                            expr: expr.clone(),
+                            expr: Arc::clone(expr),
                             options: SORT_OPTIONS,
                         })
                         .collect::<Vec<_>>();

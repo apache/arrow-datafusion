@@ -115,7 +115,10 @@ impl PagePruningPredicate {
         let predicates = split_conjunction(expr)
             .into_iter()
             .filter_map(|predicate| {
-                match PruningPredicate::try_new(predicate.clone(), schema.clone()) {
+                match PruningPredicate::try_new(
+                    Arc::clone(predicate),
+                    Arc::clone(&schema),
+                ) {
                     Ok(p)
                         if (!p.always_true())
                             && (p.required_columns().n_columns() < 2) =>

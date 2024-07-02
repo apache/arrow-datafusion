@@ -78,17 +78,23 @@ pub async fn partitioned_sym_join_with_filter(
 ) -> Result<Vec<RecordBatch>> {
     let partition_count = 4;
 
-    let left_expr = on.iter().map(|(l, _)| l.clone() as _).collect::<Vec<_>>();
+    let left_expr = on
+        .iter()
+        .map(|(l, _)| Arc::clone(l) as _)
+        .collect::<Vec<_>>();
 
-    let right_expr = on.iter().map(|(_, r)| r.clone() as _).collect::<Vec<_>>();
+    let right_expr = on
+        .iter()
+        .map(|(_, r)| Arc::clone(r) as _)
+        .collect::<Vec<_>>();
 
     let join = SymmetricHashJoinExec::try_new(
         Arc::new(RepartitionExec::try_new(
-            left.clone(),
+            Arc::clone(&left),
             Partitioning::Hash(left_expr, partition_count),
         )?),
         Arc::new(RepartitionExec::try_new(
-            right.clone(),
+            Arc::clone(&right),
             Partitioning::Hash(right_expr, partition_count),
         )?),
         on,
@@ -102,7 +108,7 @@ pub async fn partitioned_sym_join_with_filter(
 
     let mut batches = vec![];
     for i in 0..partition_count {
-        let stream = join.execute(i, context.clone())?;
+        let stream = join.execute(i, Arc::clone(&context))?;
         let more_batches = common::collect(stream).await?;
         batches.extend(
             more_batches
@@ -127,7 +133,7 @@ pub async fn partitioned_hash_join_with_filter(
     let partition_count = 4;
     let (left_expr, right_expr) = on
         .iter()
-        .map(|(l, r)| (l.clone() as _, r.clone() as _))
+        .map(|(l, r)| (Arc::clone(l) as _, Arc::clone(r) as _))
         .unzip();
 
     let join = Arc::new(HashJoinExec::try_new(
@@ -149,7 +155,7 @@ pub async fn partitioned_hash_join_with_filter(
 
     let mut batches = vec![];
     for i in 0..partition_count {
-        let stream = join.execute(i, context.clone())?;
+        let stream = join.execute(i, Arc::clone(&context))?;
         let more_batches = common::collect(stream).await?;
         batches.extend(
             more_batches
@@ -475,20 +481,29 @@ pub fn build_sides_record_batches(
     ));
 
     let left = RecordBatch::try_from_iter(vec![
-        ("la1", ordered.clone()),
-        ("lb1", cardinality.clone()),
+        ("la1", Arc::clone(&ordered)),
+        ("lb1", Arc::clone(&cardinality) as ArrayRef),
         ("lc1", cardinality_key_left),
-        ("lt1", time.clone()),
-        ("la2", ordered.clone()),
-        ("la1_des", ordered_des.clone()),
-        ("l_asc_null_first", ordered_asc_null_first.clone()),
-        ("l_asc_null_last", ordered_asc_null_last.clone()),
-        ("l_desc_null_first", ordered_desc_null_first.clone()),
-        ("li1", interval_time.clone()),
-        ("l_float", float_asc.clone()),
+        ("lt1", Arc::clone(&time) as ArrayRef),
+        ("la2", Arc::clone(&ordered)),
+        ("la1_des", Arc::clone(&ordered_des) as ArrayRef),
+        (
+            "l_asc_null_first",
+            Arc::clone(&ordered_asc_null_first) as ArrayRef,
+        ),
+        (
+            "l_asc_null_last",
+            Arc::clone(&ordered_asc_null_last) as ArrayRef,
+        ),
+        (
+            "l_desc_null_first",
+            Arc::clone(&ordered_desc_null_first) as ArrayRef,
+        ),
+        ("li1", Arc::clone(&interval_time)),
+        ("l_float", Arc::clone(&float_asc) as ArrayRef),
     ])?;
     let right = RecordBatch::try_from_iter(vec![
-        ("ra1", ordered.clone()),
+        ("ra1", Arc::clone(&ordered)),
         ("rb1", cardinality),
         ("rc1", cardinality_key_right),
         ("rt1", time),

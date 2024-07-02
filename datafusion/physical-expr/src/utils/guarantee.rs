@@ -870,14 +870,12 @@ mod test {
 
     // Schema for testing
     fn schema() -> SchemaRef {
-        SCHEMA
-            .get_or_init(|| {
-                Arc::new(Schema::new(vec![
-                    Field::new("a", DataType::Utf8, false),
-                    Field::new("b", DataType::Int32, false),
-                ]))
-            })
-            .clone()
+        Arc::clone(SCHEMA.get_or_init(|| {
+            Arc::new(Schema::new(vec![
+                Field::new("a", DataType::Utf8, false),
+                Field::new("b", DataType::Int32, false),
+            ]))
+        }))
     }
 
     static SCHEMA: OnceLock<SchemaRef> = OnceLock::new();

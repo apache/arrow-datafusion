@@ -144,7 +144,7 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
         // as the input to the recursive term
         let work_table_plan = LogicalPlanBuilder::scan(
             cte_name.to_string(),
-            work_table_source.clone(),
+            Arc::clone(&work_table_source),
             None,
         )?
         .build()?;

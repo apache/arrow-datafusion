@@ -119,7 +119,7 @@ fn plan_with_order_preserving_variants(
     {
         // When a `RepartitionExec` doesn't preserve ordering, replace it with
         // a sort-preserving variant if appropriate:
-        let child = sort_input.children[0].plan.clone();
+        let child = Arc::clone(&sort_input.children[0].plan);
         let partitioning = sort_input.plan.output_partitioning().clone();
         sort_input.plan = Arc::new(
             RepartitionExec::try_new(child, partitioning)?.with_preserve_order(),
@@ -131,7 +131,7 @@ fn plan_with_order_preserving_variants(
         if let Some(ordering) = child.output_ordering().map(Vec::from) {
             // When the input of a `CoalescePartitionsExec` has an ordering,
             // replace it with a `SortPreservingMergeExec` if appropriate:
-            let spm = SortPreservingMergeExec::new(ordering, child.clone());
+            let spm = SortPreservingMergeExec::new(ordering, Arc::clone(child));
             sort_input.plan = Arc::new(spm) as _;
             sort_input.children[0].data = true;
             return Ok(sort_input);
@@ -175,12 +175,12 @@ fn plan_with_order_breaking_variants(
     if is_repartition(plan) && plan.maintains_input_order()[0] {
         // When a `RepartitionExec` preserves ordering, replace it with a
         // non-sort-preserving variant:
-        let child = sort_input.children[0].plan.clone();
+        let child = Arc::clone(&sort_input.children[0].plan);
         let partitioning = plan.output_partitioning().clone();
         sort_input.plan = Arc::new(RepartitionExec::try_new(child, partitioning)?) as _;
     } else if is_sort_preserving_merge(plan) {
         // Replace `SortPreservingMergeExec` with a `CoalescePartitionsExec`:
-        let child = sort_input.children[0].plan.clone();
+        let child = Arc::clone(&sort_input.children[0].plan);
         let coalesce = CoalescePartitionsExec::new(child);
         sort_input.plan = Arc::new(coalesce) as _;
     } else {

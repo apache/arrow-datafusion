@@ -77,7 +77,7 @@ impl ScalarUDFImpl for Flatten {
                     get_base_type(field.data_type())
                 }
                 Null | List(_) | LargeList(_) => Ok(data_type.to_owned()),
-                FixedSizeList(field, _) => Ok(List(field.clone())),
+                FixedSizeList(field, _) => Ok(List(Arc::clone(field))),
                 _ => exec_err!(
                     "Not reachable, data_type should be List, LargeList or FixedSizeList"
                 ),
@@ -115,7 +115,7 @@ pub fn flatten_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
             let flattened_array = flatten_internal::<i64>(list_arr.clone(), None)?;
             Ok(Arc::new(flattened_array) as ArrayRef)
         }
-        Null => Ok(args[0].clone()),
+        Null => Ok(Arc::clone(&args[0])),
         _ => {
             exec_err!("flatten does not support type '{array_type:?}'")
         }

@@ -328,9 +328,9 @@ impl PhysicalExpr for BinaryExpr {
         children: Vec<Arc<dyn PhysicalExpr>>,
     ) -> Result<Arc<dyn PhysicalExpr>> {
         Ok(Arc::new(BinaryExpr::new(
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.op.clone(),
-            children[1].clone(),
+            Arc::clone(&children[1]),
         )))
     }
 
@@ -1493,8 +1493,11 @@ mod tests {
         let b = Arc::new(Int32Array::from(vec![1, 2, 3, 4, 5]));
 
         apply_arithmetic::<Int32Type>(
-            schema.clone(),
-            vec![a.clone(), b.clone()],
+            Arc::clone(&schema),
+            vec![
+                Arc::clone(&a) as Arc<dyn Array>,
+                Arc::clone(&b) as Arc<dyn Array>,
+            ],
             Operator::Minus,
             Int32Array::from(vec![0, 0, 1, 4, 11]),
         )?;
@@ -2376,8 +2379,8 @@ mod tests {
         expected: BooleanArray,
     ) -> Result<()> {
         let op = binary_op(col("a", schema)?, op, col("b", schema)?, schema)?;
-        let data: Vec<ArrayRef> = vec![left.clone(), right.clone()];
-        let batch = RecordBatch::try_new(schema.clone(), data)?;
+        let data: Vec<ArrayRef> = vec![Arc::clone(left), Arc::clone(right)];
+        let batch = RecordBatch::try_new(Arc::clone(schema), data)?;
         let result = op
             .evaluate(&batch)?
             .into_array(batch.num_rows())
@@ -3471,8 +3474,8 @@ mod tests {
         expected: ArrayRef,
     ) -> Result<()> {
         let arithmetic_op = binary_op(col("a", schema)?, op, col("b", schema)?, schema)?;
-        let data: Vec<ArrayRef> = vec![left.clone(), right.clone()];
-        let batch = RecordBatch::try_new(schema.clone(), data)?;
+        let data: Vec<ArrayRef> = vec![Arc::clone(left), Arc::clone(right)];
+        let batch = RecordBatch::try_new(Arc::clone(schema), data)?;
         let result = arithmetic_op
             .evaluate(&batch)?
             .into_array(batch.num_rows())
@@ -3767,15 +3770,15 @@ mod tests {
         let left = Arc::new(Int32Array::from(vec![Some(12), None, Some(11)])) as ArrayRef;
         let right =
             Arc::new(Int32Array::from(vec![Some(1), Some(3), Some(7)])) as ArrayRef;
-        let mut result = bitwise_and_dyn(left.clone(), right.clone())?;
+        let mut result = bitwise_and_dyn(Arc::clone(&left), Arc::clone(&right))?;
         let expected = Int32Array::from(vec![Some(0), None, Some(3)]);
         assert_eq!(result.as_ref(), &expected);
 
-        result = bitwise_or_dyn(left.clone(), right.clone())?;
+        result = bitwise_or_dyn(Arc::clone(&left), Arc::clone(&right))?;
         let expected = Int32Array::from(vec![Some(13), None, Some(15)]);
         assert_eq!(result.as_ref(), &expected);
 
-        result = bitwise_xor_dyn(left.clone(), right.clone())?;
+        result = bitwise_xor_dyn(Arc::clone(&left), Arc::clone(&right))?;
         let expected = Int32Array::from(vec![Some(13), None, Some(12)]);
         assert_eq!(result.as_ref(), &expected);
 
@@ -3783,15 +3786,15 @@ mod tests {
             Arc::new(UInt32Array::from(vec![Some(12), None, Some(11)])) as ArrayRef;
         let right =
             Arc::new(UInt32Array::from(vec![Some(1), Some(3), Some(7)])) as ArrayRef;
-        let mut result = bitwise_and_dyn(left.clone(), right.clone())?;
+        let mut result = bitwise_and_dyn(Arc::clone(&left), Arc::clone(&right))?;
         let expected = UInt32Array::from(vec![Some(0), None, Some(3)]);
         assert_eq!(result.as_ref(), &expected);
 
-        result = bitwise_or_dyn(left.clone(), right.clone())?;
+        result = bitwise_or_dyn(Arc::clone(&left), Arc::clone(&right))?;
         let expected = UInt32Array::from(vec![Some(13), None, Some(15)]);
         assert_eq!(result.as_ref(), &expected);
 
-        result = bitwise_xor_dyn(left.clone(), right.clone())?;
+        result = bitwise_xor_dyn(Arc::clone(&left), Arc::clone(&right))?;
         let expected = UInt32Array::from(vec![Some(13), None, Some(12)]);
         assert_eq!(result.as_ref(), &expected);
 
@@ -3803,24 +3806,26 @@ mod tests {
         let input = Arc::new(Int32Array::from(vec![Some(2), None, Some(10)])) as ArrayRef;
         let modules =
             Arc::new(Int32Array::from(vec![Some(2), Some(4), Some(8)])) as ArrayRef;
-        let mut result = bitwise_shift_left_dyn(input.clone(), modules.clone())?;
+        let mut result =
+            bitwise_shift_left_dyn(Arc::clone(&input), Arc::clone(&modules))?;
 
         let expected = Int32Array::from(vec![Some(8), None, Some(2560)]);
         assert_eq!(result.as_ref(), &expected);
 
-        result = bitwise_shift_right_dyn(result.clone(), modules.clone())?;
+        result = bitwise_shift_right_dyn(Arc::clone(&result), Arc::clone(&modules))?;
         assert_eq!(result.as_ref(), &input);
 
         let input =
             Arc::new(UInt32Array::from(vec![Some(2), None, Some(10)])) as ArrayRef;
         let modules =
             Arc::new(UInt32Array::from(vec![Some(2), Some(4), Some(8)])) as ArrayRef;
-        let mut result = bitwise_shift_left_dyn(input.clone(), modules.clone())?;
+        let mut result =
+            bitwise_shift_left_dyn(Arc::clone(&input), Arc::clone(&modules))?;
 
         let expected = UInt32Array::from(vec![Some(8), None, Some(2560)]);
         assert_eq!(result.as_ref(), &expected);
 
-        result = bitwise_shift_right_dyn(result.clone(), modules.clone())?;
+        result = bitwise_shift_right_dyn(Arc::clone(&result), Arc::clone(&modules))?;
         assert_eq!(result.as_ref(), &input);
         Ok(())
     }
@@ -3829,14 +3834,14 @@ mod tests {
     fn bitwise_shift_array_overflow_test() -> Result<()> {
         let input = Arc::new(Int32Array::from(vec![Some(2)])) as ArrayRef;
         let modules = Arc::new(Int32Array::from(vec![Some(100)])) as ArrayRef;
-        let result = bitwise_shift_left_dyn(input.clone(), modules.clone())?;
+        let result = bitwise_shift_left_dyn(Arc::clone(&input), Arc::clone(&modules))?;
 
         let expected = Int32Array::from(vec![Some(32)]);
         assert_eq!(result.as_ref(), &expected);
 
         let input = Arc::new(UInt32Array::from(vec![Some(2)])) as ArrayRef;
         let modules = Arc::new(UInt32Array::from(vec![Some(100)])) as ArrayRef;
-        let result = bitwise_shift_left_dyn(input.clone(), modules.clone())?;
+        let result = bitwise_shift_left_dyn(Arc::clone(&input), Arc::clone(&modules))?;
 
         let expected = UInt32Array::from(vec![Some(32)]);
         assert_eq!(result.as_ref(), &expected);
@@ -3973,9 +3978,12 @@ mod tests {
             Arc::new(DictionaryArray::try_new(keys, values).unwrap()) as ArrayRef;
 
         // Casting Dictionary to Int32
-        let casted =
-            to_result_type_array(&Operator::Plus, dictionary.clone(), &DataType::Int32)
-                .unwrap();
+        let casted = to_result_type_array(
+            &Operator::Plus,
+            Arc::clone(&dictionary),
+            &DataType::Int32,
+        )
+        .unwrap();
         assert_eq!(
             &casted,
             &(Arc::new(Int32Array::from(vec![Some(1), None, Some(3), Some(4)]))
@@ -3985,16 +3993,19 @@ mod tests {
         // Array has same datatype as result type, no casting
         let casted = to_result_type_array(
             &Operator::Plus,
-            dictionary.clone(),
+            Arc::clone(&dictionary),
             dictionary.data_type(),
         )
         .unwrap();
         assert_eq!(&casted, &dictionary);
 
         // Not numerical operator, no casting
-        let casted =
-            to_result_type_array(&Operator::Eq, dictionary.clone(), &DataType::Int32)
-                .unwrap();
+        let casted = to_result_type_array(
+            &Operator::Eq,
+            Arc::clone(&dictionary),
+            &DataType::Int32,
+        )
+        .unwrap();
         assert_eq!(&casted, &dictionary);
     }
 }

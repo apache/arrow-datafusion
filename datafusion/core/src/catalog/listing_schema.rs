@@ -146,7 +146,8 @@ impl ListingSchemaProvider {
                         },
                     )
                     .await?;
-                let _ = self.register_table(table_name.to_string(), provider.clone())?;
+                let _ =
+                    self.register_table(table_name.to_string(), Arc::clone(&provider))?;
             }
         }
         Ok(())
@@ -188,7 +189,7 @@ impl SchemaProvider for ListingSchemaProvider {
         self.tables
             .lock()
             .expect("Can't lock tables")
-            .insert(name, table.clone());
+            .insert(name, Arc::clone(&table));
         Ok(Some(table))
     }
 

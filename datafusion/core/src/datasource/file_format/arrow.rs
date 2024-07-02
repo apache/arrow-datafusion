@@ -180,7 +180,7 @@ impl FileFormat for ArrowFormat {
             return not_impl_err!("Overwrites are not implemented yet for Arrow format");
         }
 
-        let sink_schema = conf.output_schema().clone();
+        let sink_schema = Arc::clone(conf.output_schema());
         let sink = Arc::new(ArrowFileSink::new(conf));
 
         Ok(Arc::new(DataSinkExec::new(
@@ -223,7 +223,7 @@ impl ArrowFileSink {
                     .collect::<Vec<_>>(),
             ))
         } else {
-            self.config.output_schema().clone()
+            Arc::clone(self.config.output_schema())
         }
     }
 }
@@ -296,7 +296,7 @@ impl DataSink for ArrowFileSink {
             let mut object_store_writer = create_writer(
                 FileCompressionType::UNCOMPRESSED,
                 &path,
-                object_store.clone(),
+                Arc::clone(&object_store),
             )
             .await?;
             file_write_tasks.spawn(async move {

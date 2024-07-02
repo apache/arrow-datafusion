@@ -389,7 +389,7 @@ impl PhysicalExpr for InListExpr {
     ) -> Result<Arc<dyn PhysicalExpr>> {
         // assume the static_filter will not change during the rewrite process
         Ok(Arc::new(InListExpr::new(
-            children[0].clone(),
+            Arc::clone(&children[0]),
             children[1..].to_vec(),
             self.negated,
             self.static_filter.clone(),
@@ -540,7 +540,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -551,7 +551,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -562,7 +562,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -573,7 +573,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -598,7 +598,7 @@ mod tests {
             list.clone(),
             &false,
             vec![Some(true), Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -608,7 +608,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -623,7 +623,7 @@ mod tests {
             list.clone(),
             &false,
             vec![Some(true), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -633,7 +633,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -654,7 +654,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -665,7 +665,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -676,7 +676,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -687,7 +687,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -714,7 +714,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), Some(false), None, Some(false), Some(false)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -725,7 +725,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None, Some(true), Some(true)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -736,7 +736,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None, None, None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -747,7 +747,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, None, None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -758,7 +758,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), Some(false), None, Some(true), Some(false)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -769,7 +769,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None, Some(false), Some(true)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -780,7 +780,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), Some(false), None, Some(false), Some(true)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -791,7 +791,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None, Some(true), Some(false)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -812,7 +812,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -823,7 +823,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -834,7 +834,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -845,7 +845,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -869,7 +869,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -883,7 +883,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -898,7 +898,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -913,7 +913,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -937,7 +937,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -951,7 +951,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -966,7 +966,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -981,7 +981,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1008,7 +1008,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None, Some(false)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
         // expression: "a not in (100,200)
@@ -1018,7 +1018,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, Some(true)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1029,7 +1029,7 @@ mod tests {
             list.clone(),
             &false,
             vec![Some(true), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
         // expression: "a not in (200,NULL), the data type of list is INT32 AND NULL
@@ -1038,7 +1038,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1049,7 +1049,7 @@ mod tests {
             list,
             &false,
             vec![Some(true), None, Some(true)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1060,7 +1060,7 @@ mod tests {
             list,
             &true,
             vec![Some(true), None, Some(false)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1073,7 +1073,7 @@ mod tests {
             list.clone(),
             &false,
             vec![Some(true), None, Some(false)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1082,7 +1082,7 @@ mod tests {
             list,
             &true,
             vec![Some(false), None, Some(true)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1168,7 +1168,7 @@ mod tests {
             list.clone(),
             &false,
             vec![Some(true), Some(false), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1177,7 +1177,7 @@ mod tests {
             list.clone(),
             &true,
             vec![Some(false), Some(true), None],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
         Ok(())
@@ -1219,13 +1219,13 @@ mod tests {
             vec![Arc::new(a), Arc::new(b), Arc::new(c)],
         )?;
 
-        let list = vec![col_b.clone(), col_c.clone()];
+        let list = vec![Arc::clone(&col_b), Arc::clone(&col_c)];
         in_list!(
             batch,
             list.clone(),
             &false,
             vec![Some(false), Some(true), None, Some(true), Some(true)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1234,7 +1234,7 @@ mod tests {
             list,
             &true,
             vec![Some(true), Some(false), None, Some(false), Some(false)],
-            col_a.clone(),
+            Arc::clone(&col_a),
             &schema
         );
 
@@ -1262,22 +1262,22 @@ mod tests {
 
         // static_filter has no nulls
         let list = vec![lit(1_i64), lit(2_i64)];
-        test_nullable!(c1_nullable.clone(), list.clone(), &schema, true);
-        test_nullable!(c2_non_nullable.clone(), list.clone(), &schema, false);
+        test_nullable!(Arc::clone(&c1_nullable), list.clone(), &schema, true);
+        test_nullable!(Arc::clone(&c2_non_nullable), list.clone(), &schema, false);
 
         // static_filter has nulls
         let list = vec![lit(1_i64), lit(2_i64), lit(ScalarValue::Null)];
-        test_nullable!(c1_nullable.clone(), list.clone(), &schema, true);
-        test_nullable!(c2_non_nullable.clone(), list.clone(), &schema, true);
+        test_nullable!(Arc::clone(&c1_nullable), list.clone(), &schema, true);
+        test_nullable!(Arc::clone(&c2_non_nullable), list.clone(), &schema, true);
 
-        let list = vec![c1_nullable.clone()];
-        test_nullable!(c2_non_nullable.clone(), list.clone(), &schema, true);
+        let list = vec![Arc::clone(&c1_nullable)];
+        test_nullable!(Arc::clone(&c2_non_nullable), list.clone(), &schema, true);
 
-        let list = vec![c2_non_nullable.clone()];
-        test_nullable!(c1_nullable.clone(), list.clone(), &schema, true);
+        let list = vec![Arc::clone(&c2_non_nullable)];
+        test_nullable!(Arc::clone(&c1_nullable), list.clone(), &schema, true);
 
-        let list = vec![c2_non_nullable.clone(), c2_non_nullable.clone()];
-        test_nullable!(c2_non_nullable.clone(), list.clone(), &schema, false);
+        let list = vec![Arc::clone(&c2_non_nullable), Arc::clone(&c2_non_nullable)];
+        test_nullable!(Arc::clone(&c2_non_nullable), list.clone(), &schema, false);
 
         Ok(())
     }
@@ -1370,7 +1370,7 @@ mod tests {
                 list.clone(),
                 &false,
                 vec![Some(true), Some(false), None],
-                col_a.clone(),
+                Arc::clone(&col_a),
                 &schema
             );
         }
@@ -1382,7 +1382,7 @@ mod tests {
                 list.clone(),
                 &true,
                 vec![Some(false), Some(true), None],
-                col_a.clone(),
+                Arc::clone(&col_a),
                 &schema
             );
         }
@@ -1402,7 +1402,7 @@ mod tests {
                 list.clone(),
                 &false,
                 vec![Some(true), None, None],
-                col_a.clone(),
+                Arc::clone(&col_a),
                 &schema
             );
         }
@@ -1414,7 +1414,7 @@ mod tests {
                 list.clone(),
                 &true,
                 vec![Some(false), None, None],
-                col_a.clone(),
+                Arc::clone(&col_a),
                 &schema
             );
         }

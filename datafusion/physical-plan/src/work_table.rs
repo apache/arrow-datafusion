@@ -110,7 +110,7 @@ pub struct WorkTableExec {
 impl WorkTableExec {
     /// Create a new execution plan for a worktable exec.
     pub fn new(name: String, schema: SchemaRef) -> Self {
-        let cache = Self::compute_properties(schema.clone());
+        let cache = Self::compute_properties(Arc::clone(&schema));
         Self {
             name,
             schema,
@@ -123,7 +123,7 @@ impl WorkTableExec {
     pub(super) fn with_work_table(&self, work_table: Arc<WorkTable>) -> Self {
         Self {
             name: self.name.clone(),
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
             metrics: ExecutionPlanMetricsSet::new(),
             work_table,
             cache: self.cache.clone(),
@@ -185,7 +185,7 @@ impl ExecutionPlan for WorkTableExec {
         self: Arc<Self>,
         _: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        Ok(self.clone())
+        Ok(Arc::clone(&self) as Arc<dyn ExecutionPlan>)
     }
 
     /// Stream the batches that were written to the work table.
@@ -202,7 +202,7 @@ impl ExecutionPlan for WorkTableExec {
         }
         let batch = self.work_table.take()?;
         Ok(Box::pin(
-            MemoryStream::try_new(batch.batches, self.schema.clone(), None)?
+            MemoryStream::try_new(batch.batches, Arc::clone(&self.schema), None)?
                 .with_reservation(batch.reservation),
         ))
     }

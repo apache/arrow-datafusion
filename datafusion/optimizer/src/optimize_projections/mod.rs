@@ -205,7 +205,7 @@ fn optimize_projections(
             });
         }
         LogicalPlan::Window(window) => {
-            let input_schema = window.input.schema().clone();
+            let input_schema = Arc::clone(window.input.schema());
             // Split parent requirements to child and window expression sections:
             let n_input_fields = input_schema.fields().len();
             // Offset window expression indices so that they point to valid

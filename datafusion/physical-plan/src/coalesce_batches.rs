@@ -134,7 +134,7 @@ impl ExecutionPlan for CoalesceBatchesExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(CoalesceBatchesExec::new(
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.target_batch_size,
         )))
     }
@@ -272,7 +272,7 @@ impl CoalesceBatchesStream {
 
 impl RecordBatchStream for CoalesceBatchesStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -329,7 +329,7 @@ mod tests {
         target_batch_size: usize,
     ) -> Result<Vec<Vec<RecordBatch>>> {
         // create physical plan
-        let exec = MemoryExec::try_new(&input_partitions, schema.clone(), None)?;
+        let exec = MemoryExec::try_new(&input_partitions, Arc::clone(schema), None)?;
         let exec =
             RepartitionExec::try_new(Arc::new(exec), Partitioning::RoundRobinBatch(1))?;
         let exec: Arc<dyn ExecutionPlan> =
@@ -341,7 +341,7 @@ mod tests {
         for i in 0..output_partition_count {
             // execute this *output* partition and collect all batches
             let task_ctx = Arc::new(TaskContext::default());
-            let mut stream = exec.execute(i, task_ctx.clone())?;
+            let mut stream = exec.execute(i, Arc::clone(&task_ctx))?;
             let mut batches = vec![];
             while let Some(result) = stream.next().await {
                 batches.push(result?);

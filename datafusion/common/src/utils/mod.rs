@@ -245,7 +245,10 @@ pub fn evaluate_partition_ranges(
             end: num_rows,
         }]
     } else {
-        let cols: Vec<_> = partition_columns.iter().map(|x| x.values.clone()).collect();
+        let cols: Vec<_> = partition_columns
+            .iter()
+            .map(|x| Arc::clone(&x.values))
+            .collect();
         partition(&cols)?.ranges()
     })
 }

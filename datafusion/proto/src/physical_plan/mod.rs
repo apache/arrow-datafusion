@@ -1101,7 +1101,7 @@ impl AsExecutionPlan for protobuf::PhysicalPlanNode {
     where
         Self: Sized,
     {
-        let plan_clone = plan.clone();
+        let plan_clone = Arc::clone(&plan);
         let plan = plan.as_any();
 
         if let Some(exec) = plan.downcast_ref::<ExplainExec>() {
@@ -1128,7 +1128,7 @@ impl AsExecutionPlan for protobuf::PhysicalPlanNode {
             let expr = exec
                 .expr()
                 .iter()
-                .map(|expr| serialize_physical_expr(expr.0.clone(), extension_codec))
+                .map(|expr| serialize_physical_expr(Arc::clone(&expr.0), extension_codec))
                 .collect::<Result<Vec<_>>>()?;
             let expr_name = exec.expr().iter().map(|expr| expr.1.clone()).collect();
             return Ok(protobuf::PhysicalPlanNode {
@@ -1169,7 +1169,7 @@ impl AsExecutionPlan for protobuf::PhysicalPlanNode {
                     protobuf::FilterExecNode {
                         input: Some(Box::new(input)),
                         expr: Some(serialize_physical_expr(
-                            exec.predicate().clone(),
+                            Arc::clone(exec.predicate()),
                             extension_codec,
                         )?),
                         default_filter_selectivity: exec.default_selectivity() as u32,
@@ -1585,7 +1585,7 @@ impl AsExecutionPlan for protobuf::PhysicalPlanNode {
         if let Some(exec) = plan.downcast_ref::<ParquetExec>() {
             let predicate = exec
                 .predicate()
-                .map(|pred| serialize_physical_expr(pred.clone(), extension_codec))
+                .map(|pred| serialize_physical_expr(Arc::clone(pred), extension_codec))
                 .transpose()?;
             return Ok(protobuf::PhysicalPlanNode {
                 physical_plan_type: Some(PhysicalPlanType::ParquetScan(
@@ -1810,13 +1810,13 @@ impl AsExecutionPlan for protobuf::PhysicalPlanNode {
             let window_expr = exec
                 .window_expr()
                 .iter()
-                .map(|e| serialize_physical_window_expr(e.clone(), extension_codec))
+                .map(|e| serialize_physical_window_expr(Arc::clone(e), extension_codec))
                 .collect::<Result<Vec<protobuf::PhysicalWindowExprNode>>>()?;
 
             let partition_keys = exec
                 .partition_keys
                 .iter()
-                .map(|e| serialize_physical_expr(e.clone(), extension_codec))
+                .map(|e| serialize_physical_expr(Arc::clone(e), extension_codec))
                 .collect::<Result<Vec<protobuf::PhysicalExprNode>>>()?;
 
             return Ok(protobuf::PhysicalPlanNode {
@@ -1840,13 +1840,13 @@ impl AsExecutionPlan for protobuf::PhysicalPlanNode {
             let window_expr = exec
                 .window_expr()
                 .iter()
-                .map(|e| serialize_physical_window_expr(e.clone(), extension_codec))
+                .map(|e| serialize_physical_window_expr(Arc::clone(e), extension_codec))
                 .collect::<Result<Vec<protobuf::PhysicalWindowExprNode>>>()?;
 
             let partition_keys = exec
                 .partition_keys
                 .iter()
-                .map(|e| serialize_physical_expr(e.clone(), extension_codec))
+                .map(|e| serialize_physical_expr(Arc::clone(e), extension_codec))
                 .collect::<Result<Vec<protobuf::PhysicalExprNode>>>()?;
 
             let input_order_mode = match &exec.input_order_mode {
@@ -1949,7 +1949,7 @@ impl AsExecutionPlan for protobuf::PhysicalPlanNode {
         }
 
         let mut buf: Vec<u8> = vec![];
-        match extension_codec.try_encode(plan_clone.clone(), &mut buf) {
+        match extension_codec.try_encode(Arc::clone(&plan_clone), &mut buf) {
             Ok(_) => {
                 let inputs: Vec<protobuf::PhysicalPlanNode> = plan_clone
                     .children()

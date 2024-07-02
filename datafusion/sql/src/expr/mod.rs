@@ -954,7 +954,7 @@ mod tests {
     impl ContextProvider for TestContextProvider {
         fn get_table_source(&self, name: TableReference) -> Result<Arc<dyn TableSource>> {
             match self.tables.get(name.table()) {
-                Some(table) => Ok(table.clone()),
+                Some(table) => Ok(Arc::clone(table)),
                 _ => plan_err!("Table not found: {}", name.table()),
             }
         }

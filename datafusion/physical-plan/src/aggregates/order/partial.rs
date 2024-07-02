@@ -22,6 +22,7 @@ use datafusion_common::Result;
 use datafusion_execution::memory_pool::proxy::VecAllocExt;
 use datafusion_expr::EmitTo;
 use datafusion_physical_expr::PhysicalSortExpr;
+use std::sync::Arc;
 
 /// Tracks grouping state when the data is ordered by some subset of
 /// the group keys.
@@ -138,7 +139,7 @@ impl GroupOrderingPartial {
         let sort_values: Vec<_> = self
             .order_indices
             .iter()
-            .map(|&idx| group_values[idx].clone())
+            .map(|&idx| Arc::clone(&group_values[idx]))
             .collect();
 
         Ok(self.row_converter.convert_columns(&sort_values)?)

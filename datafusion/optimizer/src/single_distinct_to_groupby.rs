@@ -279,7 +279,7 @@ impl OptimizerRule for SingleDistinctToGroupBy {
                                 let alias_str = format!("alias{}", index);
                                 inner_aggr_exprs.push(
                                     Expr::AggregateFunction(AggregateFunction::new_udf(
-                                        udf.clone(),
+                                        Arc::clone(&udf),
                                         args,
                                         false,
                                         None,

@@ -98,7 +98,7 @@ impl CatalogProviderList for MemoryCatalogProviderList {
     }
 
     fn catalog(&self, name: &str) -> Option<Arc<dyn CatalogProvider>> {
-        self.catalogs.get(name).map(|c| c.value().clone())
+        self.catalogs.get(name).map(|c| Arc::clone(c.value()))
     }
 }
 
@@ -262,7 +262,7 @@ impl CatalogProvider for MemoryCatalogProvider {
     }
 
     fn schema(&self, name: &str) -> Option<Arc<dyn SchemaProvider>> {
-        self.schemas.get(name).map(|s| s.value().clone())
+        self.schemas.get(name).map(|s| Arc::clone(s.value()))
     }
 
     fn register_schema(

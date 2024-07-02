@@ -180,7 +180,7 @@ impl ExprIntervalGraphNode {
     /// object. Literals are created with definite, singleton intervals while
     /// any other expression starts with an indefinite interval ([-∞, ∞]).
     pub fn make_node(node: &ExprTreeNode<NodeIndex>, schema: &Schema) -> Result<Self> {
-        let expr = node.expr.clone();
+        let expr = Arc::clone(&node.expr);
         if let Some(literal) = expr.as_any().downcast_ref::<Literal>() {
             let value = literal.value();
             Interval::try_new(value.clone(), value.clone())
@@ -422,7 +422,7 @@ impl ExprIntervalGraph {
         let mut removals = vec![];
         let mut expr_node_indices = exprs
             .iter()
-            .map(|e| (e.clone(), usize::MAX))
+            .map(|e| (Arc::clone(e), usize::MAX))
             .collect::<Vec<_>>();
         while let Some(node) = bfs.next(graph) {
             // Get the plan corresponding to this node:
@@ -744,16 +744,17 @@ mod tests {
         schema: &Schema,
     ) -> Result<()> {
         let col_stats = vec![
-            (exprs_with_interval.0.clone(), left_interval),
-            (exprs_with_interval.1.clone(), right_interval),
+            (Arc::clone(&exprs_with_interval.0), left_interval),
+            (Arc::clone(&exprs_with_interval.1), right_interval),
         ];
         let expected = vec![
-            (exprs_with_interval.0.clone(), left_expected),
-            (exprs_with_interval.1.clone(), right_expected),
+            (Arc::clone(&exprs_with_interval.0), left_expected),
+            (Arc::clone(&exprs_with_interval.1), right_expected),
         ];
         let mut graph = ExprIntervalGraph::try_new(expr, schema)?;
-        let expr_indexes = graph
-            .gather_node_indices(&col_stats.iter().map(|(e, _)| e.clone()).collect_vec());
+        let expr_indexes = graph.gather_node_indices(
+            &col_stats.iter().map(|(e, _)| Arc::clone(e)).collect_vec(),
+        );
 
         let mut col_stat_nodes = col_stats
             .iter()
@@ -870,14 +871,21 @@ mod tests {
 
         // left_watermark > right_watermark + 5
         let left_and_1 = Arc::new(BinaryExpr::new(
-            left_col.clone(),
+            Arc::clone(&left_col) as Arc<dyn PhysicalExpr>,
             Operator::Plus,
             Arc::new(Literal::new(ScalarValue::Int32(Some(5)))),
         ));
-        let expr = Arc::new(BinaryExpr::new(left_and_1, Operator::Gt, right_col.clone()));
+        let expr = Arc::new(BinaryExpr::new(
+            left_and_1,
+            Operator::Gt,
+            Arc::clone(&right_col) as Arc<dyn PhysicalExpr>,
+        ));
         experiment(
             expr,
-            (left_col.clone(), right_col.clone()),
+            (
+                Arc::clone(&left_col) as Arc<dyn PhysicalExpr>,
+                Arc::clone(&right_col) as Arc<dyn PhysicalExpr>,
+            ),
             Interval::make(Some(10_i32), Some(20_i32))?,
             Interval::make(Some(100), None)?,
             Interval::make(Some(10), Some(20))?,

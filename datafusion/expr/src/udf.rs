@@ -87,8 +87,8 @@ impl ScalarUDF {
         Self::new_from_impl(ScalarUdfLegacyWrapper {
             name: name.to_owned(),
             signature: signature.clone(),
-            return_type: return_type.clone(),
-            fun: fun.clone(),
+            return_type: Arc::clone(return_type),
+            fun: Arc::clone(fun),
         })
     }
 
@@ -114,7 +114,7 @@ impl ScalarUDF {
     ///
     /// If you implement [`ScalarUDFImpl`] directly you should return aliases directly.
     pub fn with_aliases(self, aliases: impl IntoIterator<Item = &'static str>) -> Self {
-        Self::new_from_impl(AliasedScalarUDFImpl::new(self.inner.clone(), aliases))
+        Self::new_from_impl(AliasedScalarUDFImpl::new(Arc::clone(&self.inner), aliases))
     }
 
     /// Returns a [`Expr`] logical expression to call this UDF with specified
@@ -199,7 +199,7 @@ impl ScalarUDF {
     /// Returns a `ScalarFunctionImplementation` that can invoke the function
     /// during execution
     pub fn fun(&self) -> ScalarFunctionImplementation {
-        let captured = self.inner.clone();
+        let captured = Arc::clone(&self.inner);
         Arc::new(move |args| captured.invoke(args))
     }
 

@@ -338,13 +338,13 @@ impl ExternalSorter {
                         spill.path()
                     )));
                 }
-                let stream = read_spill_as_stream(spill, self.schema.clone(), 2)?;
+                let stream = read_spill_as_stream(spill, Arc::clone(&self.schema), 2)?;
                 streams.push(stream);
             }
 
             streaming_merge(
                 streams,
-                self.schema.clone(),
+                Arc::clone(&self.schema),
                 &self.expr,
                 self.metrics.baseline.clone(),
                 self.batch_size,
@@ -354,7 +354,9 @@ impl ExternalSorter {
         } else if !self.in_mem_batches.is_empty() {
             self.in_mem_sort_stream(self.metrics.baseline.clone())
         } else {
-            Ok(Box::pin(EmptyRecordBatchStream::new(self.schema.clone())))
+            Ok(Box::pin(EmptyRecordBatchStream::new(Arc::clone(
+                &self.schema,
+            ))))
         }
     }
 
@@ -394,8 +396,11 @@ impl ExternalSorter {
 
         let spill_file = self.runtime.disk_manager.create_tmp_file("Sorting")?;
         let batches = std::mem::take(&mut self.in_mem_batches);
-        let spilled_rows =
-            spill_record_batches(batches, spill_file.path().into(), self.schema.clone())?;
+        let spilled_rows = spill_record_batches(
+            batches,
+            spill_file.path().into(),
+            Arc::clone(&self.schema),
+        )?;
         let used = self.reservation.free();
         self.metrics.spill_count.add(1);
         self.metrics.spilled_bytes.add(used);
@@ -525,7 +530,7 @@ impl ExternalSorter {
 
         streaming_merge(
             streams,
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             &self.expr,
             metrics,
             self.batch_size,
@@ -548,7 +553,7 @@ impl ExternalSorter {
         let schema = batch.schema();
 
         let fetch = self.fetch;
-        let expressions = self.expr.clone();
+        let expressions = Arc::clone(&self.expr);
         let stream = futures::stream::once(futures::future::lazy(move |_| {
             let sorted = sort_batch(&batch, &expressions, fetch)?;
             metrics.record_output(sorted.num_rows());
@@ -844,7 +849,7 @@ impl ExecutionPlan for SortExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        let new_sort = SortExec::new(self.expr.clone(), children[0].clone())
+        let new_sort = SortExec::new(self.expr.clone(), Arc::clone(&children[0]))
             .with_fetch(self.fetch)
             .with_preserve_partitioning(self.preserve_partitioning);
 
@@ -858,7 +863,7 @@ impl ExecutionPlan for SortExec {
     ) -> Result<SendableRecordBatchStream> {
         trace!("Start SortExec::execute for partition {} of context session_id {} and task_id {:?}", partition, context.session_id(), context.task_id());
 
-        let mut input = self.input.execute(partition, context.clone())?;
+        let mut input = self.input.execute(partition, Arc::clone(&context))?;
 
         let execution_options = &context.session_config().options().execution;
 
@@ -962,7 +967,7 @@ mod tests {
             Arc::new(CoalescePartitionsExec::new(csv)),
         ));
 
-        let result = collect(sort_exec, task_ctx.clone()).await?;
+        let result = collect(sort_exec, Arc::clone(&task_ctx)).await?;
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].num_rows(), 400);
@@ -1005,7 +1010,11 @@ mod tests {
             Arc::new(CoalescePartitionsExec::new(input)),
         ));
 
-        let result = collect(sort_exec.clone(), task_ctx.clone()).await?;
+        let result = collect(
+            Arc::clone(&sort_exec) as Arc<dyn ExecutionPlan>,
+            Arc::clone(&task_ctx),
+        )
+        .await?;
 
         assert_eq!(result.len(), 2);
 
@@ -1081,7 +1090,11 @@ mod tests {
                 .with_fetch(fetch),
             );
 
-            let result = collect(sort_exec.clone(), task_ctx.clone()).await?;
+            let result = collect(
+                Arc::clone(&sort_exec) as Arc<dyn ExecutionPlan>,
+                Arc::clone(&task_ctx),
+            )
+            .await?;
             assert_eq!(result.len(), 1);
 
             let metrics = sort_exec.metrics().unwrap();
@@ -1111,9 +1124,10 @@ mod tests {
         let data: ArrayRef =
             Arc::new(vec![3, 2, 1].into_iter().map(Some).collect::<UInt64Array>());
 
-        let batch = RecordBatch::try_new(schema.clone(), vec![data]).unwrap();
-        let input =
-            Arc::new(MemoryExec::try_new(&[vec![batch]], schema.clone(), None).unwrap());
+        let batch = RecordBatch::try_new(Arc::clone(&schema), vec![data]).unwrap();
+        let input = Arc::new(
+            MemoryExec::try_new(&[vec![batch]], Arc::clone(&schema), None).unwrap(),
+        );
 
         let sort_exec = Arc::new(SortExec::new(
             vec![PhysicalSortExpr {
@@ -1128,7 +1142,7 @@ mod tests {
         let expected_data: ArrayRef =
             Arc::new(vec![1, 2, 3].into_iter().map(Some).collect::<UInt64Array>());
         let expected_batch =
-            RecordBatch::try_new(schema.clone(), vec![expected_data]).unwrap();
+            RecordBatch::try_new(Arc::clone(&schema), vec![expected_data]).unwrap();
 
         // Data is correct
         assert_eq!(&vec![expected_batch], &result);
@@ -1154,7 +1168,7 @@ mod tests {
 
         // define data.
         let batch = RecordBatch::try_new(
-            schema.clone(),
+            Arc::clone(&schema),
             vec![
                 Arc::new(Int32Array::from(vec![Some(2), None, Some(1), Some(2)])),
                 Arc::new(ListArray::from_iter_primitive::<Int32Type, _, _>(vec![
@@ -1183,7 +1197,11 @@ mod tests {
                     },
                 },
             ],
-            Arc::new(MemoryExec::try_new(&[vec![batch]], schema.clone(), None)?),
+            Arc::new(MemoryExec::try_new(
+                &[vec![batch]],
+                Arc::clone(&schema),
+                None,
+            )?),
         ));
 
         assert_eq!(DataType::Int32, *sort_exec.schema().field(0).data_type());
@@ -1192,7 +1210,8 @@ mod tests {
             *sort_exec.schema().field(1).data_type()
         );
 
-        let result: Vec<RecordBatch> = collect(sort_exec.clone(), task_ctx).await?;
+        let result: Vec<RecordBatch> =
+            collect(Arc::clone(&sort_exec) as Arc<dyn ExecutionPlan>, task_ctx).await?;
         let metrics = sort_exec.metrics().unwrap();
         assert!(metrics.elapsed_compute().unwrap() > 0);
         assert_eq!(metrics.output_rows().unwrap(), 4);
@@ -1226,7 +1245,7 @@ mod tests {
 
         // define data.
         let batch = RecordBatch::try_new(
-            schema.clone(),
+            Arc::clone(&schema),
             vec![
                 Arc::new(Float32Array::from(vec![
                     Some(f32::NAN),
@@ -1274,7 +1293,8 @@ mod tests {
         assert_eq!(DataType::Float32, *sort_exec.schema().field(0).data_type());
         assert_eq!(DataType::Float64, *sort_exec.schema().field(1).data_type());
 
-        let result: Vec<RecordBatch> = collect(sort_exec.clone(), task_ctx).await?;
+        let result: Vec<RecordBatch> =
+            collect(Arc::clone(&sort_exec) as Arc<dyn ExecutionPlan>, task_ctx).await?;
         let metrics = sort_exec.metrics().unwrap();
         assert!(metrics.elapsed_compute().unwrap() > 0);
         assert_eq!(metrics.output_rows().unwrap(), 8);
@@ -1337,7 +1357,7 @@ mod tests {
             blocking_exec,
         ));
 
-        let fut = collect(sort_exec, task_ctx.clone());
+        let fut = collect(sort_exec, Arc::clone(&task_ctx));
         let mut fut = fut.boxed();
 
         assert_is_pending(&mut fut);
@@ -1358,7 +1378,8 @@ mod tests {
         let schema = Arc::new(Schema::empty());
         let options = RecordBatchOptions::new().with_row_count(Some(1));
         let batch =
-            RecordBatch::try_new_with_options(schema.clone(), vec![], &options).unwrap();
+            RecordBatch::try_new_with_options(Arc::clone(&schema), vec![], &options)
+                .unwrap();
 
         let expressions = vec![PhysicalSortExpr {
             expr: Arc::new(Literal::new(ScalarValue::Int64(Some(1)))),

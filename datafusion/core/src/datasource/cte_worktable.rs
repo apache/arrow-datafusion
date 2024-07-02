@@ -68,7 +68,7 @@ impl TableProvider for CteWorkTable {
     }
 
     fn schema(&self) -> SchemaRef {
-        self.table_schema.clone()
+        Arc::clone(&self.table_schema)
     }
 
     fn table_type(&self) -> TableType {
@@ -85,7 +85,7 @@ impl TableProvider for CteWorkTable {
         // TODO: pushdown filters and limits
         Ok(Arc::new(WorkTableExec::new(
             self.name.clone(),
-            self.table_schema.clone(),
+            Arc::clone(&self.table_schema),
         )))
     }
 

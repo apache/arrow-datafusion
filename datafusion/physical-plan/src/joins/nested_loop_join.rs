@@ -173,7 +173,8 @@ impl NestedLoopJoinExec {
         let (schema, column_indices) =
             build_join_schema(&left_schema, &right_schema, join_type);
         let schema = Arc::new(schema);
-        let cache = Self::compute_properties(&left, &right, schema.clone(), *join_type);
+        let cache =
+            Self::compute_properties(&left, &right, Arc::clone(&schema), *join_type);
 
         Ok(NestedLoopJoinExec {
             left,
@@ -287,8 +288,8 @@ impl ExecutionPlan for NestedLoopJoinExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(NestedLoopJoinExec::try_new(
-            children[0].clone(),
-            children[1].clone(),
+            Arc::clone(&children[0]),
+            Arc::clone(&children[1]),
             self.filter.clone(),
             &self.join_type,
         )?))
@@ -308,8 +309,8 @@ impl ExecutionPlan for NestedLoopJoinExec {
 
         let inner_table = self.inner_table.once(|| {
             collect_left_input(
-                self.left.clone(),
-                context.clone(),
+                Arc::clone(&self.left),
+                Arc::clone(&context),
                 join_metrics.clone(),
                 load_reservation,
                 need_produce_result_in_final(self.join_type),
@@ -319,7 +320,7 @@ impl ExecutionPlan for NestedLoopJoinExec {
         let outer_table = self.right.execute(partition, context)?;
 
         Ok(Box::pin(NestedLoopJoinStream {
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
             filter: self.filter.clone(),
             join_type: self.join_type,
             outer_table,
@@ -336,8 +337,8 @@ impl ExecutionPlan for NestedLoopJoinExec {
 
     fn statistics(&self) -> Result<Statistics> {
         estimate_join_statistics(
-            self.left.clone(),
-            self.right.clone(),
+            Arc::clone(&self.left),
+            Arc::clone(&self.right),
             vec![],
             &self.join_type,
             &self.schema,
@@ -641,7 +642,7 @@ impl Stream for NestedLoopJoinStream {
 
 impl RecordBatchStream for NestedLoopJoinStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -752,7 +753,7 @@ mod tests {
         let columns = columns(&nested_loop_join.schema());
         let mut batches = vec![];
         for i in 0..partition_count {
-            let stream = nested_loop_join.execute(i, context.clone())?;
+            let stream = nested_loop_join.execute(i, Arc::clone(&context))?;
             let more_batches = common::collect(stream).await?;
             batches.extend(
                 more_batches
@@ -1037,8 +1038,8 @@ mod tests {
             let task_ctx = Arc::new(task_ctx);
 
             let err = multi_partitioned_join_collect(
-                left.clone(),
-                right.clone(),
+                Arc::clone(&left),
+                Arc::clone(&right),
                 &join_type,
                 Some(filter.clone()),
                 task_ctx,

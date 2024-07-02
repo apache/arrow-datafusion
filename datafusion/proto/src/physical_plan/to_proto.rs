@@ -327,11 +327,11 @@ pub fn serialize_physical_expr(
     } else if let Some(expr) = expr.downcast_ref::<BinaryExpr>() {
         let binary_expr = Box::new(protobuf::PhysicalBinaryExprNode {
             l: Some(Box::new(serialize_physical_expr(
-                expr.left().clone(),
+                Arc::clone(expr.left()),
                 codec,
             )?)),
             r: Some(Box::new(serialize_physical_expr(
-                expr.right().clone(),
+                Arc::clone(expr.right()),
                 codec,
             )?)),
             op: format!("{:?}", expr.op()),
@@ -351,7 +351,7 @@ pub fn serialize_physical_expr(
                             expr: expr
                                 .expr()
                                 .map(|exp| {
-                                    serialize_physical_expr(exp.clone(), codec)
+                                    serialize_physical_expr(Arc::clone(exp), codec)
                                         .map(Box::new)
                                 })
                                 .transpose()?,
@@ -368,7 +368,7 @@ pub fn serialize_physical_expr(
                             else_expr: expr
                                 .else_expr()
                                 .map(|a| {
-                                    serialize_physical_expr(a.clone(), codec)
+                                    serialize_physical_expr(Arc::clone(a), codec)
                                         .map(Box::new)
                                 })
                                 .transpose()?,
@@ -539,8 +539,8 @@ fn serialize_when_then_expr(
     codec: &dyn PhysicalExtensionCodec,
 ) -> Result<protobuf::PhysicalWhenThen> {
     Ok(protobuf::PhysicalWhenThen {
-        when_expr: Some(serialize_physical_expr(when_expr.clone(), codec)?),
-        then_expr: Some(serialize_physical_expr(then_expr.clone(), codec)?),
+        when_expr: Some(serialize_physical_expr(Arc::clone(when_expr), codec)?),
+        then_expr: Some(serialize_physical_expr(Arc::clone(then_expr), codec)?),
     })
 }
 

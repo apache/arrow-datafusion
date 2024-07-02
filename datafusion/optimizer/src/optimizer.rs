@@ -205,7 +205,7 @@ impl OptimizerConfig for OptimizerContext {
     }
 
     fn alias_generator(&self) -> Arc<AliasGenerator> {
-        self.alias_generator.clone()
+        Arc::clone(&self.alias_generator)
     }
 
     fn options(&self) -> &ConfigOptions {
@@ -381,7 +381,7 @@ impl Optimizer {
                     .skip_failed_rules
                     .then(|| new_plan.clone());
 
-                let starting_schema = new_plan.schema().clone();
+                let starting_schema = Arc::clone(new_plan.schema());
 
                 let result = match rule.apply_order() {
                     // optimizer handles recursion

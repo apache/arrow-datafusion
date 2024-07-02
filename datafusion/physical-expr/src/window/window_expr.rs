@@ -137,7 +137,7 @@ pub trait WindowExpr: Send + Sync + Debug {
         let order_by_exprs = self
             .order_by()
             .iter()
-            .map(|sort_expr| sort_expr.expr.clone())
+            .map(|sort_expr| Arc::clone(&sort_expr.expr))
             .collect::<Vec<_>>();
         WindowPhysicalExpressions {
             args,
@@ -193,7 +193,7 @@ pub trait AggregateWindowExpr: WindowExpr {
         let sort_options: Vec<SortOptions> =
             self.order_by().iter().map(|o| o.options).collect();
         let mut window_frame_ctx =
-            WindowFrameContext::new(self.get_window_frame().clone(), sort_options);
+            WindowFrameContext::new(Arc::clone(self.get_window_frame()), sort_options);
         self.get_result_column(
             &mut accumulator,
             batch,
@@ -241,7 +241,7 @@ pub trait AggregateWindowExpr: WindowExpr {
             let window_frame_ctx = state.window_frame_ctx.get_or_insert_with(|| {
                 let sort_options: Vec<SortOptions> =
                     self.order_by().iter().map(|o| o.options).collect();
-                WindowFrameContext::new(self.get_window_frame().clone(), sort_options)
+                WindowFrameContext::new(Arc::clone(self.get_window_frame()), sort_options)
             });
             let out_col = self.get_result_column(
                 accumulator,

@@ -91,7 +91,7 @@ impl AggregateExpr for ArrayAgg {
     }
 
     fn expressions(&self) -> Vec<Arc<dyn PhysicalExpr>> {
-        vec![self.expr.clone()]
+        vec![Arc::clone(&self.expr)]
     }
 
     fn name(&self) -> &str {
@@ -137,7 +137,7 @@ impl Accumulator for ArrayAggAccumulator {
             return Ok(());
         }
         assert!(values.len() == 1, "array_agg can only take 1 param!");
-        let val = values[0].clone();
+        let val = Arc::clone(&values[0]);
         self.values.push(val);
         Ok(())
     }

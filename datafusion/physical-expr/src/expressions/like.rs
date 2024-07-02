@@ -123,8 +123,8 @@ impl PhysicalExpr for LikeExpr {
         Ok(Arc::new(LikeExpr::new(
             self.negated,
             self.case_insensitive,
-            children[0].clone(),
-            children[1].clone(),
+            Arc::clone(&children[0]),
+            Arc::clone(&children[1]),
         )))
     }
 

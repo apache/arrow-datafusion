@@ -520,7 +520,7 @@ pub fn cast_subquery(subquery: Subquery, cast_to_type: &DataType) -> Result<Subq
                 .cast_to(cast_to_type, projection.input.schema())?;
             LogicalPlan::Projection(Projection::try_new(
                 vec![cast_expr],
-                projection.input.clone(),
+                Arc::clone(&projection.input),
             )?)
         }
         _ => {

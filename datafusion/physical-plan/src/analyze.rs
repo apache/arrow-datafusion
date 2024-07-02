@@ -59,7 +59,7 @@ impl AnalyzeExec {
         input: Arc<dyn ExecutionPlan>,
         schema: SchemaRef,
     ) -> Self {
-        let cache = Self::compute_properties(&input, schema.clone());
+        let cache = Self::compute_properties(&input, Arc::clone(&schema));
         AnalyzeExec {
             verbose,
             show_statistics,
@@ -141,7 +141,7 @@ impl ExecutionPlan for AnalyzeExec {
             self.verbose,
             self.show_statistics,
             children.pop().unwrap(),
-            self.schema.clone(),
+            Arc::clone(&self.schema),
         )))
     }
 
@@ -164,13 +164,17 @@ impl ExecutionPlan for AnalyzeExec {
             RecordBatchReceiverStream::builder(self.schema(), num_input_partitions);
 
         for input_partition in 0..num_input_partitions {
-            builder.run_input(self.input.clone(), input_partition, context.clone());
+            builder.run_input(
+                Arc::clone(&self.input),
+                input_partition,
+                Arc::clone(&context),
+            );
         }
 
         // Create future that computes thefinal output
         let start = Instant::now();
-        let captured_input = self.input.clone();
-        let captured_schema = self.schema.clone();
+        let captured_input = Arc::clone(&self.input);
+        let captured_schema = Arc::clone(&self.schema);
         let verbose = self.verbose;
         let show_statistics = self.show_statistics;
 
@@ -196,7 +200,7 @@ impl ExecutionPlan for AnalyzeExec {
         };
 
         Ok(Box::pin(RecordBatchStreamAdapter::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             futures::stream::once(output),
         )))
     }

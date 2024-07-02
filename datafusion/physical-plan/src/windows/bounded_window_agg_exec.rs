@@ -289,7 +289,7 @@ impl ExecutionPlan for BoundedWindowAggExec {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(BoundedWindowAggExec::try_new(
             self.window_expr.clone(),
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.partition_keys.clone(),
             self.input_order_mode.clone(),
         )?))
@@ -303,7 +303,7 @@ impl ExecutionPlan for BoundedWindowAggExec {
         let input = self.input.execute(partition, context)?;
         let search_mode = self.get_search_algo()?;
         let stream = Box::pin(BoundedWindowAggStream::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             self.window_expr.clone(),
             input,
             BaselineMetrics::new(&self.metrics, partition),
@@ -394,7 +394,9 @@ trait PartitionSearcher: Send {
                 // as it may not have the "correct" schema in terms of output
                 // nullability constraints. For details, see the following issue:
                 // https://github.com/apache/datafusion/issues/9320
-                .or_insert_with(|| PartitionBatchState::new(self.input_schema().clone()));
+                .or_insert_with(|| {
+                    PartitionBatchState::new(Arc::clone(self.input_schema()))
+                });
             partition_batch_state.extend(&partition_batch)?;
         }
 
@@ -513,7 +515,7 @@ impl PartitionSearcher for LinearSearch {
             let length = indices.len();
             for (idx, window_agg_state) in window_agg_states.iter().enumerate() {
                 let partition = &window_agg_state[&row];
-                let values = partition.state.out_col.slice(0, length).clone();
+                let values = Arc::clone(&partition.state.out_col.slice(0, length));
                 new_columns[idx].push(values);
             }
             let partition_batch_state = &mut partition_buffers[&row];
@@ -935,7 +937,7 @@ impl BoundedWindowAggStream {
         search_mode: Box<dyn PartitionSearcher>,
     ) -> Result<Self> {
         let state = window_expr.iter().map(|_| IndexMap::new()).collect();
-        let empty_batch = RecordBatch::new_empty(schema.clone());
+        let empty_batch = RecordBatch::new_empty(Arc::clone(&schema));
         Ok(Self {
             schema,
             input,
@@ -957,7 +959,7 @@ impl BoundedWindowAggStream {
             cur_window_expr.evaluate_stateful(&self.partition_buffers, state)?;
         }
 
-        let schema = self.schema.clone();
+        let schema = Arc::clone(&self.schema);
         let window_expr_out = self.search_mode.calculate_out_columns(
             &self.input_buffer,
             &self.window_agg_states,
@@ -1114,7 +1116,7 @@ impl BoundedWindowAggStream {
 impl RecordBatchStream for BoundedWindowAggStream {
     /// Get the schema
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -1287,7 +1289,7 @@ mod tests {
 
     impl RecordBatchStream for TestStreamPartition {
         fn schema(&self) -> SchemaRef {
-            self.schema.clone()
+            Arc::clone(&self.schema)
         }
     }
 
@@ -1467,7 +1469,7 @@ mod tests {
             }
 
             let batch = RecordBatch::try_new(
-                schema.clone(),
+                Arc::clone(schema),
                 vec![Arc::new(sn1_array.finish()), Arc::new(hash_array.finish())],
             )?;
             batches.push(batch);
@@ -1500,7 +1502,7 @@ mod tests {
         // Source has 2 partitions
         let partitions = vec![
             Arc::new(TestStreamPartition {
-                schema: schema.clone(),
+                schema: Arc::clone(&schema),
                 batches: batches.clone(),
                 idx: 0,
                 state: PolingState::BatchReturn,
@@ -1510,7 +1512,7 @@ mod tests {
             n_partition
         ];
         let source = Arc::new(StreamingTableExec::try_new(
-            schema.clone(),
+            Arc::clone(&schema),
             partitions,
             None,
             orderings,
@@ -1533,28 +1535,38 @@ mod tests {
         let schema = Arc::new(Schema::new(vec![Field::new("a", DataType::Int32, false)]));
         // Create a new batch of data to insert into the table
         let batch = RecordBatch::try_new(
-            schema.clone(),
+            Arc::clone(&schema),
             vec![Arc::new(arrow_array::Int32Array::from(vec![1, 2, 3]))],
         )?;
 
         let memory_exec = MemoryExec::try_new(
             &[vec![batch.clone(), batch.clone(), batch.clone()]],
-            schema.clone(),
+            Arc::clone(&schema),
             None,
         )
         .map(|e| Arc::new(e) as Arc<dyn ExecutionPlan>)?;
         let col_a = col("a", &schema)?;
-        let nth_value_func1 =
-            NthValue::nth("nth_value(-1)", col_a.clone(), DataType::Int32, 1, false)?
-                .reverse_expr()
-                .unwrap();
-        let nth_value_func2 =
-            NthValue::nth("nth_value(-2)", col_a.clone(), DataType::Int32, 2, false)?
-                .reverse_expr()
-                .unwrap();
+        let nth_value_func1 = NthValue::nth(
+            "nth_value(-1)",
+            Arc::clone(&col_a),
+            DataType::Int32,
+            1,
+            false,
+        )?
+        .reverse_expr()
+        .unwrap();
+        let nth_value_func2 = NthValue::nth(
+            "nth_value(-2)",
+            Arc::clone(&col_a),
+            DataType::Int32,
+            2,
+            false,
+        )?
+        .reverse_expr()
+        .unwrap();
         let last_value_func = Arc::new(NthValue::last(
             "last",
-            col_a.clone(),
+            Arc::clone(&col_a),
             DataType::Int32,
             false,
         )) as _;

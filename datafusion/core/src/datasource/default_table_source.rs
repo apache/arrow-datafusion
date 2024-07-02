@@ -96,7 +96,7 @@ pub fn source_as_provider(
         .as_any()
         .downcast_ref::<DefaultTableSource>()
     {
-        Some(source) => Ok(source.table_provider.clone()),
+        Some(source) => Ok(Arc::clone(&source.table_provider)),
         _ => internal_err!("TableSource was not DefaultTableSource"),
     }
 }

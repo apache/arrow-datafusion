@@ -56,8 +56,7 @@ impl ProjectionMapping {
             .enumerate()
             .map(|(expr_idx, (expression, name))| {
                 let target_expr = Arc::new(Column::new(name, expr_idx)) as _;
-                expression
-                    .clone()
+                Arc::clone(expression)
                     .transform_down(|e| match e.as_any().downcast_ref::<Column>() {
                         Some(col) => {
                             // Sometimes, an expression and its name in the input_schema
@@ -107,7 +106,7 @@ impl ProjectionMapping {
         self.map
             .iter()
             .find(|(source, _)| source.eq(expr))
-            .map(|(_, target)| target.clone())
+            .map(|(_, target)| Arc::clone(target))
     }
 }
 
@@ -149,24 +148,24 @@ mod tests {
         let col_e = &col("e", &schema)?;
         let col_ts = &col("ts", &schema)?;
         let a_plus_b = Arc::new(BinaryExpr::new(
-            col_a.clone(),
+            Arc::clone(col_a),
             Operator::Plus,
-            col_b.clone(),
+            Arc::clone(col_b),
         )) as Arc<dyn PhysicalExpr>;
         let b_plus_d = Arc::new(BinaryExpr::new(
-            col_b.clone(),
+            Arc::clone(col_b),
             Operator::Plus,
-            col_d.clone(),
+            Arc::clone(col_d),
         )) as Arc<dyn PhysicalExpr>;
         let b_plus_e = Arc::new(BinaryExpr::new(
-            col_b.clone(),
+            Arc::clone(col_b),
             Operator::Plus,
-            col_e.clone(),
+            Arc::clone(col_e),
         )) as Arc<dyn PhysicalExpr>;
         let c_plus_d = Arc::new(BinaryExpr::new(
-            col_c.clone(),
+            Arc::clone(col_c),
             Operator::Plus,
-            col_d.clone(),
+            Arc::clone(col_d),
         )) as Arc<dyn PhysicalExpr>;
 
         let option_asc = SortOptions {
@@ -587,14 +586,14 @@ mod tests {
 
         for (idx, (orderings, proj_exprs, expected)) in test_cases.into_iter().enumerate()
         {
-            let mut eq_properties = EquivalenceProperties::new(schema.clone());
+            let mut eq_properties = EquivalenceProperties::new(Arc::clone(&schema));
 
             let orderings = convert_to_orderings(&orderings);
             eq_properties.add_new_orderings(orderings);
 
             let proj_exprs = proj_exprs
                 .into_iter()
-                .map(|(expr, name)| (expr.clone(), name))
+                .map(|(expr, name)| (Arc::clone(expr), name))
                 .collect::<Vec<_>>();
             let projection_mapping = ProjectionMapping::try_new(&proj_exprs, &schema)?;
             let output_schema = output_schema(&projection_mapping, &schema)?;
@@ -643,15 +642,15 @@ mod tests {
         let col_c = &col("c", &schema)?;
         let col_ts = &col("ts", &schema)?;
         let a_plus_b = Arc::new(BinaryExpr::new(
-            col_a.clone(),
+            Arc::clone(col_a),
             Operator::Plus,
-            col_b.clone(),
+            Arc::clone(col_b),
         )) as Arc<dyn PhysicalExpr>;
 
         let test_fun = ScalarUDF::new_from_impl(TestScalarUDF::new());
         let round_c = &create_physical_expr(
             &test_fun,
-            &[col_c.clone()],
+            &[Arc::clone(col_c)],
             &schema,
             &[],
             &DFSchema::empty(),
@@ -670,7 +669,7 @@ mod tests {
         ];
         let proj_exprs = proj_exprs
             .into_iter()
-            .map(|(expr, name)| (expr.clone(), name))
+            .map(|(expr, name)| (Arc::clone(expr), name))
             .collect::<Vec<_>>();
         let projection_mapping = ProjectionMapping::try_new(&proj_exprs, &schema)?;
         let output_schema = output_schema(&projection_mapping, &schema)?;
@@ -680,9 +679,9 @@ mod tests {
         let col_c_new = &col("c_new", &output_schema)?;
         let col_round_c_res = &col("round_c_res", &output_schema)?;
         let a_new_plus_b_new = Arc::new(BinaryExpr::new(
-            col_a_new.clone(),
+            Arc::clone(col_a_new),
             Operator::Plus,
-            col_b_new.clone(),
+            Arc::clone(col_b_new),
         )) as Arc<dyn PhysicalExpr>;
 
         let test_cases = vec![
@@ -793,7 +792,7 @@ mod tests {
         ];
 
         for (idx, (orderings, expected)) in test_cases.iter().enumerate() {
-            let mut eq_properties = EquivalenceProperties::new(schema.clone());
+            let mut eq_properties = EquivalenceProperties::new(Arc::clone(&schema));
 
             let orderings = convert_to_orderings(orderings);
             eq_properties.add_new_orderings(orderings);
@@ -801,7 +800,7 @@ mod tests {
             let expected = convert_to_orderings(expected);
 
             let projected_eq =
-                eq_properties.project(&projection_mapping, output_schema.clone());
+                eq_properties.project(&projection_mapping, Arc::clone(&output_schema));
             let orderings = projected_eq.oeq_class();
 
             let err_msg = format!(
@@ -834,9 +833,9 @@ mod tests {
         let col_e = &col("e", &schema)?;
         let col_f = &col("f", &schema)?;
         let a_plus_b = Arc::new(BinaryExpr::new(
-            col_a.clone(),
+            Arc::clone(col_a),
             Operator::Plus,
-            col_b.clone(),
+            Arc::clone(col_b),
         )) as Arc<dyn PhysicalExpr>;
 
         let option_asc = SortOptions {
@@ -851,7 +850,7 @@ mod tests {
         ];
         let proj_exprs = proj_exprs
             .into_iter()
-            .map(|(expr, name)| (expr.clone(), name))
+            .map(|(expr, name)| (Arc::clone(expr), name))
             .collect::<Vec<_>>();
         let projection_mapping = ProjectionMapping::try_new(&proj_exprs, &schema)?;
         let output_schema = output_schema(&projection_mapping, &schema)?;
@@ -936,7 +935,7 @@ mod tests {
             ),
         ];
         for (orderings, equal_columns, expected) in test_cases {
-            let mut eq_properties = EquivalenceProperties::new(schema.clone());
+            let mut eq_properties = EquivalenceProperties::new(Arc::clone(&schema));
             for (lhs, rhs) in equal_columns {
                 eq_properties.add_equal_conditions(lhs, rhs)?;
             }
@@ -947,7 +946,7 @@ mod tests {
             let expected = convert_to_orderings(&expected);
 
             let projected_eq =
-                eq_properties.project(&projection_mapping, output_schema.clone());
+                eq_properties.project(&projection_mapping, Arc::clone(&output_schema));
             let orderings = projected_eq.oeq_class();
 
             let err_msg = format!(
@@ -1006,7 +1005,7 @@ mod tests {
                 for proj_exprs in proj_exprs.iter().combinations(n_req) {
                     let proj_exprs = proj_exprs
                         .into_iter()
-                        .map(|(expr, name)| (expr.clone(), name.to_string()))
+                        .map(|(expr, name)| (Arc::clone(expr), name.to_string()))
                         .collect::<Vec<_>>();
                     let (projected_batch, projected_eq) = apply_projection(
                         proj_exprs.clone(),
@@ -1084,7 +1083,7 @@ mod tests {
                 for proj_exprs in proj_exprs.iter().combinations(n_req) {
                     let proj_exprs = proj_exprs
                         .into_iter()
-                        .map(|(expr, name)| (expr.clone(), name.to_string()))
+                        .map(|(expr, name)| (Arc::clone(expr), name.to_string()))
                         .collect::<Vec<_>>();
                     let (projected_batch, projected_eq) = apply_projection(
                         proj_exprs.clone(),
@@ -1097,7 +1096,7 @@ mod tests {
 
                     let projected_exprs = projection_mapping
                         .iter()
-                        .map(|(_source, target)| target.clone())
+                        .map(|(_source, target)| Arc::clone(target))
                         .collect::<Vec<_>>();
 
                     for n_req in 0..=projected_exprs.len() {
@@ -1105,7 +1104,7 @@ mod tests {
                             let requirement = exprs
                                 .into_iter()
                                 .map(|expr| PhysicalSortExpr {
-                                    expr: expr.clone(),
+                                    expr: Arc::clone(expr),
                                     options: SORT_OPTIONS,
                                 })
                                 .collect::<Vec<_>>();

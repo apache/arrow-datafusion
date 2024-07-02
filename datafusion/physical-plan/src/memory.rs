@@ -140,7 +140,7 @@ impl ExecutionPlan for MemoryExec {
     ) -> Result<SendableRecordBatchStream> {
         Ok(Box::pin(MemoryStream::try_new(
             self.partitions[partition].clone(),
-            self.projected_schema.clone(),
+            Arc::clone(&self.projected_schema),
             self.projection.clone(),
         )?))
     }
@@ -164,7 +164,8 @@ impl MemoryExec {
         projection: Option<Vec<usize>>,
     ) -> Result<Self> {
         let projected_schema = project_schema(&schema, projection.as_ref())?;
-        let cache = Self::compute_properties(projected_schema.clone(), &[], partitions);
+        let cache =
+            Self::compute_properties(Arc::clone(&projected_schema), &[], partitions);
         Ok(Self {
             partitions: partitions.to_vec(),
             schema,
@@ -219,7 +220,7 @@ impl MemoryExec {
     }
 
     pub fn original_schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 
     /// This function creates the cache object that stores the plan properties such as schema, equivalence properties, ordering, partitioning, etc.
@@ -305,7 +306,7 @@ impl Stream for MemoryStream {
 impl RecordBatchStream for MemoryStream {
     /// Get the schema
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 

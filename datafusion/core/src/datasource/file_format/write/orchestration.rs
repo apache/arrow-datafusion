@@ -58,7 +58,7 @@ pub(crate) async fn serialize_rb_stream_to_object_store(
         // subsequent batches, so we track that here.
         let mut initial = true;
         while let Some(batch) = data_rx.recv().await {
-            let serializer_clone = serializer.clone();
+            let serializer_clone = Arc::clone(&serializer);
             let task = SpawnedTask::spawn(async move {
                 let num_rows = batch.num_rows();
                 let bytes = serializer_clone.serialize(batch, initial)?;
@@ -240,7 +240,8 @@ pub(crate) async fn stateless_multipart_put(
     });
     while let Some((location, rb_stream)) = file_stream_rx.recv().await {
         let serializer = get_serializer();
-        let writer = create_writer(compression, &location, object_store.clone()).await?;
+        let writer =
+            create_writer(compression, &location, Arc::clone(&object_store)).await?;
 
         tx_file_bundle
             .send((rb_stream, serializer, writer))

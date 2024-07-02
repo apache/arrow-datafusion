@@ -76,7 +76,7 @@ impl TableProvider for StreamingTable {
     }
 
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 
     fn table_type(&self) -> TableType {
@@ -91,7 +91,7 @@ impl TableProvider for StreamingTable {
         limit: Option<usize>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(StreamingTableExec::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             self.partitions.clone(),
             projection,
             None,

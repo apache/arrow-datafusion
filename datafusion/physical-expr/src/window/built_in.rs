@@ -137,7 +137,7 @@ impl WindowExpr for BuiltInWindowExpr {
             let order_bys_ref = &values[n_args..];
 
             let mut window_frame_ctx =
-                WindowFrameContext::new(self.window_frame.clone(), sort_options);
+                WindowFrameContext::new(Arc::clone(&self.window_frame), sort_options);
             let mut last_range = Range { start: 0, end: 0 };
             // We iterate on each row to calculate window frame range and and window function result
             for idx in 0..num_rows {
@@ -217,7 +217,7 @@ impl WindowExpr for BuiltInWindowExpr {
                         .window_frame_ctx
                         .get_or_insert_with(|| {
                             WindowFrameContext::new(
-                                self.window_frame.clone(),
+                                Arc::clone(&self.window_frame),
                                 sort_options.clone(),
                             )
                         })

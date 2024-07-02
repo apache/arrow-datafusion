@@ -16,6 +16,7 @@
 // under the License.
 
 use std::any::Any;
+use std::sync::Arc;
 
 use arrow::datatypes::DataType::Timestamp;
 use arrow::datatypes::TimeUnit::{Microsecond, Millisecond, Nanosecond, Second};
@@ -387,7 +388,7 @@ impl ScalarUDFImpl for ToTimestampNanosFunc {
 /// the timezone if it exists.
 fn return_type_for(arg: &DataType, unit: TimeUnit) -> DataType {
     match arg {
-        Timestamp(_, Some(tz)) => Timestamp(unit, Some(tz.clone())),
+        Timestamp(_, Some(tz)) => Timestamp(unit, Some(Arc::clone(tz))),
         _ => Timestamp(unit, None),
     }
 }
@@ -794,10 +795,10 @@ mod tests {
             Arc::new(sec_builder.finish().with_timezone("UTC")) as ArrayRef;
 
         let arrays = &[
-            ColumnarValue::Array(nanos_timestamps.clone()),
-            ColumnarValue::Array(millis_timestamps.clone()),
-            ColumnarValue::Array(micros_timestamps.clone()),
-            ColumnarValue::Array(sec_timestamps.clone()),
+            ColumnarValue::Array(Arc::clone(&nanos_timestamps)),
+            ColumnarValue::Array(Arc::clone(&millis_timestamps)),
+            ColumnarValue::Array(Arc::clone(&micros_timestamps)),
+            ColumnarValue::Array(Arc::clone(&sec_timestamps)),
         ];
 
         for udf in &udfs {
@@ -836,11 +837,11 @@ mod tests {
         let i64_timestamps = Arc::new(i64_builder.finish()) as ArrayRef;
 
         let arrays = &[
-            ColumnarValue::Array(nanos_timestamps.clone()),
-            ColumnarValue::Array(millis_timestamps.clone()),
-            ColumnarValue::Array(micros_timestamps.clone()),
-            ColumnarValue::Array(sec_timestamps.clone()),
-            ColumnarValue::Array(i64_timestamps.clone()),
+            ColumnarValue::Array(Arc::clone(&nanos_timestamps)),
+            ColumnarValue::Array(Arc::clone(&millis_timestamps)),
+            ColumnarValue::Array(Arc::clone(&micros_timestamps)),
+            ColumnarValue::Array(Arc::clone(&sec_timestamps)),
+            ColumnarValue::Array(Arc::clone(&i64_timestamps)),
         ];
 
         for udf in &udfs {

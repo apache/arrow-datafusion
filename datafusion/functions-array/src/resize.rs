@@ -67,8 +67,8 @@ impl ScalarUDFImpl for ArrayResize {
 
     fn return_type(&self, arg_types: &[DataType]) -> Result<DataType> {
         match &arg_types[0] {
-            List(field) | FixedSizeList(field, _) => Ok(List(field.clone())),
-            LargeList(field) => Ok(LargeList(field.clone())),
+            List(field) | FixedSizeList(field, _) => Ok(List(Arc::clone(field))),
+            LargeList(field) => Ok(LargeList(Arc::clone(field))),
             _ => exec_err!(
                 "Not reachable, data_type should be List, LargeList or FixedSizeList"
             ),
@@ -92,7 +92,7 @@ pub(crate) fn array_resize_inner(arg: &[ArrayRef]) -> Result<ArrayRef> {
 
     let new_len = as_int64_array(&arg[1])?;
     let new_element = if arg.len() == 3 {
-        Some(arg[2].clone())
+        Some(Arc::clone(&arg[2]))
     } else {
         None
     };
@@ -168,7 +168,7 @@ fn general_list_resize<O: OffsetSizeTrait + TryInto<i64>>(
 
     let data = mutable.freeze();
     Ok(Arc::new(GenericListArray::<O>::try_new(
-        field.clone(),
+        Arc::clone(field),
         OffsetBuffer::<O>::new(offsets.into()),
         arrow_array::make_array(data),
         None,

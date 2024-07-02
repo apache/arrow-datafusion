@@ -269,7 +269,7 @@ async fn prune_partitions(
         Default::default(),
     )?;
 
-    let batch = RecordBatch::try_new(schema.clone(), arrays)?;
+    let batch = RecordBatch::try_new(Arc::clone(&schema), arrays)?;
 
     // TODO: Plumb this down
     let props = ExecutionProps::new();

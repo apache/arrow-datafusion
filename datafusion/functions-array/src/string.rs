@@ -381,7 +381,7 @@ pub(super) fn array_to_string_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
             let delimiter = delimiters[0].unwrap();
             let s = compute_array_to_string(
                 &mut arg,
-                arr.clone(),
+                Arc::clone(arr),
                 delimiter.to_string(),
                 null_string,
                 with_null_string,

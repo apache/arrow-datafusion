@@ -123,7 +123,7 @@ fn pushdown_requirement_to_children(
     if is_window(plan) {
         let required_input_ordering = plan.required_input_ordering();
         let request_child = required_input_ordering[0].as_deref().unwrap_or(&[]);
-        let child_plan = plan.children().swap_remove(0).clone();
+        let child_plan = Arc::clone(plan.children().swap_remove(0));
         match determine_children_requirement(parent_required, request_child, child_plan) {
             RequirementsCompatibility::Satisfy => {
                 let req = (!request_child.is_empty()).then(|| request_child.to_vec());

@@ -40,7 +40,7 @@ fn array_struct(args: &[ArrayRef]) -> Result<ArrayRef> {
                     arg.data_type().clone(),
                     true,
                 )),
-                arg.clone(),
+                Arc::clone(arg),
             ))
         })
         .collect::<Result<Vec<_>>>()?;
@@ -121,30 +121,21 @@ mod tests {
             as_struct_array(&struc).expect("failed to initialize function struct");
         assert_eq!(
             &Int64Array::from(vec![1]),
-            result
-                .column_by_name("c0")
-                .unwrap()
-                .clone()
+            Arc::clone(result.column_by_name("c0").unwrap())
                 .as_any()
                 .downcast_ref::<Int64Array>()
                 .unwrap()
         );
         assert_eq!(
             &Int64Array::from(vec![2]),
-            result
-                .column_by_name("c1")
-                .unwrap()
-                .clone()
+            Arc::clone(result.column_by_name("c1").unwrap())
                 .as_any()
                 .downcast_ref::<Int64Array>()
                 .unwrap()
         );
         assert_eq!(
             &Int64Array::from(vec![3]),
-            result
-                .column_by_name("c2")
-                .unwrap()
-                .clone()
+            Arc::clone(result.column_by_name("c2").unwrap())
                 .as_any()
                 .downcast_ref::<Int64Array>()
                 .unwrap()

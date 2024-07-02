@@ -119,7 +119,7 @@ impl AggregateExpr for NthValueAgg {
 
     fn expressions(&self) -> Vec<Arc<dyn PhysicalExpr>> {
         let n = Arc::new(Literal::new(ScalarValue::Int64(Some(self.n)))) as _;
-        vec![self.expr.clone(), n]
+        vec![Arc::clone(&self.expr), n]
     }
 
     fn order_bys(&self) -> Option<&[PhysicalSortExpr]> {
@@ -138,7 +138,7 @@ impl AggregateExpr for NthValueAgg {
         Some(Arc::new(Self {
             name: self.name.to_string(),
             input_data_type: self.input_data_type.clone(),
-            expr: self.expr.clone(),
+            expr: Arc::clone(&self.expr),
             // index should be from the opposite side
             n: -self.n,
             nullable: self.nullable,

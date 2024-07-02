@@ -136,7 +136,7 @@ impl MemTable {
 
         for part_idx in 0..partition_count {
             let task = state.task_ctx();
-            let exec = exec.clone();
+            let exec = Arc::clone(&exec);
             join_set.spawn(async move {
                 let stream = exec.execute(part_idx, task)?;
                 common::collect(stream).await
@@ -159,7 +159,7 @@ impl MemTable {
             }
         }
 
-        let exec = MemoryExec::try_new(&data, schema.clone(), None)?;
+        let exec = MemoryExec::try_new(&data, Arc::clone(&schema), None)?;
 
         if let Some(num_partitions) = output_partitions {
             let exec = RepartitionExec::try_new(
@@ -180,9 +180,9 @@ impl MemTable {
                 output_partitions.push(batches);
             }
 
-            return MemTable::try_new(schema.clone(), output_partitions);
+            return MemTable::try_new(Arc::clone(&schema), output_partitions);
         }
-        MemTable::try_new(schema.clone(), data)
+        MemTable::try_new(schema, data)
     }
 }
 
@@ -193,7 +193,7 @@ impl TableProvider for MemTable {
     }
 
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 
     fn constraints(&self) -> Option<&Constraints> {
@@ -282,7 +282,7 @@ impl TableProvider for MemTable {
         Ok(Arc::new(DataSinkExec::new(
             input,
             sink,
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             None,
         )))
     }

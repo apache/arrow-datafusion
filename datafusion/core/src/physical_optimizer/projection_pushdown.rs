@@ -100,7 +100,7 @@ pub fn remove_unnecessary_projections(
         // If the projection does not cause any change on the input, we can
         // safely remove it:
         if is_projection_removable(projection) {
-            return Ok(Transformed::yes(projection.input().clone()));
+            return Ok(Transformed::yes(Arc::clone(projection.input())));
         }
         // If it does, check if we can push it under its child(ren):
         let input = projection.input().as_any();
@@ -255,7 +255,7 @@ fn try_swapping_with_streaming_table(
     }
 
     StreamingTableExec::try_new(
-        streaming_table.partition_schema().clone(),
+        Arc::clone(streaming_table.partition_schema()),
         streaming_table.partitions().clone(),
         Some(new_projections.as_ref()),
         lex_orderings,
@@ -291,7 +291,7 @@ fn try_unifying_projections(
     // beneficial as caching mechanism for non-trivial computations.
     // See discussion in: https://github.com/apache/datafusion/issues/8296
     if column_ref_map.iter().any(|(column, count)| {
-        *count > 1 && !is_expr_trivial(&child.expr()[column.index()].0.clone())
+        *count > 1 && !is_expr_trivial(&Arc::clone(&child.expr()[column.index()].0))
     }) {
         return Ok(None);
     }
@@ -306,7 +306,7 @@ fn try_unifying_projections(
         projected_exprs.push((expr, alias.clone()));
     }
 
-    ProjectionExec::try_new(projected_exprs, child.input().clone())
+    ProjectionExec::try_new(projected_exprs, Arc::clone(child.input()))
         .map(|e| Some(Arc::new(e) as _))
 }
 
@@ -581,7 +581,7 @@ fn try_embed_to_hash_join(
     // Old projection may contain some alias or expression such as `a + 1` and `CAST('true' AS BOOLEAN)`, but our projection_exprs in hash join just contain column, so we need to create the new projection to keep the original projection.
     let new_projection = Arc::new(ProjectionExec::try_new(
         new_projection_exprs,
-        new_hash_join.clone(),
+        Arc::clone(&new_hash_join) as Arc<dyn ExecutionPlan>,
     )?);
     if is_projection_removable(&new_projection) {
         Ok(Some(new_hash_join))
@@ -977,8 +977,7 @@ fn update_expr(
 
     let mut state = RewriteState::Unchanged;
 
-    let new_expr = expr
-        .clone()
+    let new_expr = Arc::clone(expr)
         .transform_up(|expr: Arc<dyn PhysicalExpr>| {
             if state == RewriteState::RewrittenInvalid {
                 return Ok(Transformed::no(expr));
@@ -990,7 +989,9 @@ fn update_expr(
             if sync_with_child {
                 state = RewriteState::RewrittenValid;
                 // Update the index of `column`:
-                Ok(Transformed::yes(projected_exprs[column.index()].0.clone()))
+                Ok(Transformed::yes(Arc::clone(
+                    &projected_exprs[column.index()].0,
+                )))
             } else {
                 // default to invalid, in case we can't find the relevant column
                 state = RewriteState::RewrittenInvalid;
@@ -1027,7 +1028,7 @@ fn make_with_child(
     projection: &ProjectionExec,
     child: &Arc<dyn ExecutionPlan>,
 ) -> Result<Arc<dyn ExecutionPlan>> {
-    ProjectionExec::try_new(projection.expr().to_vec(), child.clone())
+    ProjectionExec::try_new(projection.expr().to_vec(), Arc::clone(child))
         .map(|e| Arc::new(e) as _)
 }
 
@@ -1120,8 +1121,7 @@ fn new_columns_for_join_on(
         .iter()
         .filter_map(|on| {
             // Rewrite all columns in `on`
-            (*on)
-                .clone()
+            Arc::clone(*on)
                 .transform(|expr| {
                     if let Some(column) = expr.as_any().downcast_ref::<Column>() {
                         // Find the column in the projection expressions
@@ -1183,7 +1183,7 @@ fn update_join_filter(
         == join_filter.column_indices().len())
     .then(|| {
         JoinFilter::new(
-            join_filter.expression().clone(),
+            Arc::clone(join_filter.expression()),
             join_filter
                 .column_indices()
                 .iter()
@@ -1262,7 +1262,7 @@ fn new_join_children(
                 )
             })
             .collect_vec(),
-        left_child.clone(),
+        Arc::clone(left_child),
     )?;
     let left_size = left_child.schema().fields().len() as i32;
     let new_right = ProjectionExec::try_new(
@@ -1280,7 +1280,7 @@ fn new_join_children(
                 )
             })
             .collect_vec(),
-        right_child.clone(),
+        Arc::clone(right_child),
     )?;
 
     Ok((new_left, new_right))

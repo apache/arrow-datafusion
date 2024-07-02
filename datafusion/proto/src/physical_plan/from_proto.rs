@@ -365,7 +365,7 @@ pub fn parse_physical_expr(
                 Some(buf) => codec.try_decode_udf(&e.name, buf)?,
                 None => registry.udf(e.name.as_str())?,
             };
-            let scalar_fun_def = udf.clone();
+            let scalar_fun_def = Arc::clone(&udf);
 
             let args = parse_physical_exprs(&e.args, registry, input_schema, codec)?;
 

@@ -591,7 +591,7 @@ impl DefaultPhysicalPlanner {
         // Spawning tasks which will traverse leaf up to the root.
         let tasks = flat_tree_leaf_indices
             .into_iter()
-            .map(|index| self.task_helper(index, flat_tree.clone(), session_state));
+            .map(|index| self.task_helper(index, Arc::clone(&flat_tree), session_state));
         let mut outputs = futures::stream::iter(tasks)
             .buffer_unordered(max_concurrency)
             .try_collect::<Vec<_>>()
@@ -750,7 +750,7 @@ impl DefaultPhysicalPlanner {
                 output_schema,
             }) => {
                 let output_schema: Schema = output_schema.as_ref().into();
-                self.plan_describe(schema.clone(), Arc::new(output_schema))?
+                self.plan_describe(Arc::clone(schema), Arc::new(output_schema))?
             }
 
             // 1 Child
@@ -962,7 +962,7 @@ impl DefaultPhysicalPlanner {
                     aggregates.clone(),
                     filters.clone(),
                     input_exec,
-                    physical_input_schema.clone(),
+                    Arc::clone(&physical_input_schema),
                 )?);
 
                 // update group column indices based on partial aggregate plan evaluation
@@ -993,7 +993,7 @@ impl DefaultPhysicalPlanner {
                     final_group
                         .iter()
                         .enumerate()
-                        .map(|(i, expr)| (expr.clone(), groups.expr()[i].1.clone()))
+                        .map(|(i, expr)| (Arc::clone(expr), groups.expr()[i].1.clone()))
                         .collect(),
                 );
 
@@ -1003,7 +1003,7 @@ impl DefaultPhysicalPlanner {
                     updated_aggregates,
                     filters,
                     initial_aggr,
-                    physical_input_schema.clone(),
+                    Arc::clone(&physical_input_schema),
                 )?)
             }
             LogicalPlan::Projection(Projection { input, expr, .. }) => self
@@ -1156,8 +1156,8 @@ impl DefaultPhysicalPlanner {
                     let right = Arc::new(right);
                     let new_join = LogicalPlan::Join(Join::try_new_with_project_input(
                         node,
-                        left.clone(),
-                        right.clone(),
+                        Arc::clone(&left),
+                        Arc::clone(&right),
                         column_on,
                     )?);
 

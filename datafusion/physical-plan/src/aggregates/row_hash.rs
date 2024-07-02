@@ -358,7 +358,7 @@ impl GroupedHashAggregateStream {
         let spill_state = SpillState {
             spills: vec![],
             spill_expr,
-            spill_schema: agg_schema.clone(),
+            spill_schema: Arc::clone(&agg_schema),
             is_stream_merging: false,
             merging_aggregate_arguments,
             merging_group_by: PhysicalGroupBy::new_single(agg_group_by.expr.clone()),
@@ -401,7 +401,7 @@ pub(crate) fn create_group_accumulator(
             "Creating GroupsAccumulatorAdapter for {}: {agg_expr:?}",
             agg_expr.name()
         );
-        let agg_expr_captured = agg_expr.clone();
+        let agg_expr_captured = Arc::clone(agg_expr);
         let factory = move || agg_expr_captured.create_accumulator();
         Ok(Box::new(GroupsAccumulatorAdapter::new(factory)))
     }
@@ -515,7 +515,7 @@ impl Stream for GroupedHashAggregateStream {
 
 impl RecordBatchStream for GroupedHashAggregateStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -625,7 +625,7 @@ impl GroupedHashAggregateStream {
     /// accumulator states/values specified in emit_to
     fn emit(&mut self, emit_to: EmitTo, spilling: bool) -> Result<RecordBatch> {
         let schema = if spilling {
-            self.spill_state.spill_schema.clone()
+            Arc::clone(&self.spill_state.spill_schema)
         } else {
             self.schema()
         };
@@ -746,13 +746,13 @@ impl GroupedHashAggregateStream {
         let expr = self.spill_state.spill_expr.clone();
         let schema = batch.schema();
         streams.push(Box::pin(RecordBatchStreamAdapter::new(
-            schema.clone(),
+            Arc::clone(&schema),
             futures::stream::once(futures::future::lazy(move |_| {
                 sort_batch(&batch, &expr, None)
             })),
         )));
         for spill in self.spill_state.spills.drain(..) {
-            let stream = read_spill_as_stream(spill, schema.clone(), 2)?;
+            let stream = read_spill_as_stream(spill, Arc::clone(&schema), 2)?;
             streams.push(stream);
         }
         self.spill_state.is_stream_merging = true;

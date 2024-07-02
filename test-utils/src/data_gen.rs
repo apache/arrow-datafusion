@@ -285,7 +285,7 @@ impl AccessLogGenerator {
 
     /// Return the schema of the [`RecordBatch`]es  created
     pub fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 
     /// Limit the maximum batch size

@@ -447,7 +447,7 @@ impl TryFrom<&protobuf::ScalarValue> for ScalarValue {
                                 None,
                                 &message.version(),
                             )?;
-                            Ok(record_batch.column(0).clone())
+                            Ok(Arc::clone(record_batch.column(0)))
                         }
                         _ => Err(Error::General("dictionary id not found in schema while deserializing ScalarValue::List".to_string())),
                     }?;

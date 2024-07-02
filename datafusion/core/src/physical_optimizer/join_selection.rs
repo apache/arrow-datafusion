@@ -171,7 +171,7 @@ pub fn swap_hash_join(
         hash_join
             .on()
             .iter()
-            .map(|(l, r)| (r.clone(), l.clone()))
+            .map(|(l, r)| (Arc::clone(r), Arc::clone(l)))
             .collect(),
         swap_join_filter(hash_join.filter()),
         &swap_join_type(*hash_join.join_type()),
@@ -270,7 +270,7 @@ fn swap_filter(filter: &JoinFilter) -> JoinFilter {
         .collect();
 
     JoinFilter::new(
-        filter.expression().clone(),
+        Arc::clone(filter.expression()),
         column_indices,
         filter.schema().clone(),
     )
@@ -584,8 +584,8 @@ fn hash_join_convert_symmetric_subrule(
             let right_order = determine_order(JoinSide::Right);
 
             return SymmetricHashJoinExec::try_new(
-                hash_join.left().clone(),
-                hash_join.right().clone(),
+                Arc::clone(hash_join.left()),
+                Arc::clone(hash_join.right()),
                 hash_join.on().to_vec(),
                 hash_join.filter().cloned(),
                 hash_join.join_type(),

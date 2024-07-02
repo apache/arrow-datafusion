@@ -389,7 +389,7 @@ impl SessionContext {
 
     /// Return the [RuntimeEnv] used to run queries with this `SessionContext`
     pub fn runtime_env(&self) -> Arc<RuntimeEnv> {
-        self.state.read().runtime_env().clone()
+        Arc::clone(self.state.read().runtime_env())
     }
 
     /// Returns an id that uniquely identifies this `SessionContext`.
@@ -1117,7 +1117,7 @@ impl SessionContext {
         // check schema uniqueness
         let mut batches = batches.into_iter().peekable();
         let schema = if let Some(batch) = batches.peek() {
-            batch.schema().clone()
+            Arc::clone(&batch.schema())
         } else {
             Arc::new(Schema::empty())
         };
@@ -1333,7 +1333,7 @@ impl SessionContext {
 
     /// Get reference to [`SessionState`]
     pub fn state_ref(&self) -> Arc<RwLock<SessionState>> {
-        self.state.clone()
+        Arc::clone(&self.state)
     }
 
     /// Get weak reference to [`SessionState`]

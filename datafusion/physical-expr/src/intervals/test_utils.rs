@@ -41,12 +41,12 @@ pub fn gen_conjunctive_numerical_expr(
 ) -> Arc<dyn PhysicalExpr> {
     let (op_1, op_2, op_3, op_4) = op;
     let left_and_1 = Arc::new(BinaryExpr::new(
-        left_col.clone(),
+        Arc::clone(&left_col),
         op_1,
         Arc::new(Literal::new(a)),
     ));
     let left_and_2 = Arc::new(BinaryExpr::new(
-        right_col.clone(),
+        Arc::clone(&right_col),
         op_2,
         Arc::new(Literal::new(b)),
     ));
@@ -78,8 +78,18 @@ pub fn gen_conjunctive_temporal_expr(
     d: ScalarValue,
     schema: &Schema,
 ) -> Result<Arc<dyn PhysicalExpr>, DataFusionError> {
-    let left_and_1 = binary(left_col.clone(), op_1, Arc::new(Literal::new(a)), schema)?;
-    let left_and_2 = binary(right_col.clone(), op_2, Arc::new(Literal::new(b)), schema)?;
+    let left_and_1 = binary(
+        Arc::clone(&left_col),
+        op_1,
+        Arc::new(Literal::new(a)),
+        schema,
+    )?;
+    let left_and_2 = binary(
+        Arc::clone(&right_col),
+        op_2,
+        Arc::new(Literal::new(b)),
+        schema,
+    )?;
     let right_and_1 = binary(left_col, op_3, Arc::new(Literal::new(c)), schema)?;
     let right_and_2 = binary(right_col, op_4, Arc::new(Literal::new(d)), schema)?;
     let left_expr = Arc::new(BinaryExpr::new(left_and_1, Operator::Gt, left_and_2));

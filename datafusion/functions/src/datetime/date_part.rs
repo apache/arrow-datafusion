@@ -123,7 +123,7 @@ impl ScalarUDFImpl for DatePartFunc {
         let is_scalar = matches!(array, ColumnarValue::Scalar(_));
 
         let array = match array {
-            ColumnarValue::Array(array) => array.clone(),
+            ColumnarValue::Array(array) => Arc::clone(array),
             ColumnarValue::Scalar(scalar) => scalar.to_array()?,
         };
 

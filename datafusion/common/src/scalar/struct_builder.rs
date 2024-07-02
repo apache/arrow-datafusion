@@ -144,7 +144,7 @@ impl IntoFieldRef for FieldRef {
 
 impl IntoFieldRef for &FieldRef {
     fn into_field_ref(self) -> FieldRef {
-        self.clone()
+        Arc::clone(self)
     }
 }
 

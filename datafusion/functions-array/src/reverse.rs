@@ -93,7 +93,7 @@ pub fn array_reverse_inner(arg: &[ArrayRef]) -> Result<ArrayRef> {
             let array = as_large_list_array(&arg[0])?;
             general_array_reverse::<i64>(array, field)
         }
-        Null => Ok(arg[0].clone()),
+        Null => Ok(Arc::clone(&arg[0])),
         array_type => exec_err!("array_reverse does not support type '{array_type:?}'."),
     }
 }
@@ -137,7 +137,7 @@ fn general_array_reverse<O: OffsetSizeTrait + TryFrom<i64>>(
 
     let data = mutable.freeze();
     Ok(Arc::new(GenericListArray::<O>::try_new(
-        field.clone(),
+        Arc::clone(field),
         OffsetBuffer::<O>::new(offsets.into()),
         arrow_array::make_array(data),
         Some(nulls.into()),

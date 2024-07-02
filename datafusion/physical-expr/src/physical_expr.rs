@@ -117,12 +117,12 @@ mod tests {
 
         // lit(true), lit(false), lit(4), lit(2), Col(a), Col(b)
         let physical_exprs: Vec<Arc<dyn PhysicalExpr>> = vec![
-            lit_true.clone(),
-            lit_false.clone(),
-            lit4.clone(),
-            lit2.clone(),
-            col_a_expr.clone(),
-            col_b_expr.clone(),
+            Arc::clone(&lit_true),
+            Arc::clone(&lit_false),
+            Arc::clone(&lit4),
+            Arc::clone(&lit2),
+            Arc::clone(&col_a_expr),
+            Arc::clone(&col_b_expr),
         ];
         // below expressions are inside physical_exprs
         assert!(physical_exprs_contains(&physical_exprs, &lit_true));
@@ -146,10 +146,10 @@ mod tests {
             Arc::new(Literal::new(ScalarValue::Int32(Some(2)))) as Arc<dyn PhysicalExpr>;
         let col_b_expr = Arc::new(Column::new("b", 1)) as Arc<dyn PhysicalExpr>;
 
-        let vec1 = vec![lit_true.clone(), lit_false.clone()];
-        let vec2 = vec![lit_true.clone(), col_b_expr.clone()];
-        let vec3 = vec![lit2.clone(), lit1.clone()];
-        let vec4 = vec![lit_true.clone(), lit_false.clone()];
+        let vec1 = vec![Arc::clone(&lit_true), Arc::clone(&lit_false)];
+        let vec2 = vec![Arc::clone(&lit_true), Arc::clone(&col_b_expr)];
+        let vec3 = vec![Arc::clone(&lit2), Arc::clone(&lit1)];
+        let vec4 = vec![Arc::clone(&lit_true), Arc::clone(&lit_false)];
 
         // these vectors are same
         assert!(physical_exprs_equal(&vec1, &vec1));

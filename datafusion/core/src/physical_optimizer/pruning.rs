@@ -802,7 +802,7 @@ impl RequiredColumns {
                 Field::new(stat_column.name(), field.data_type().clone(), nullable);
             self.columns.push((column.clone(), stat_type, stat_field));
         }
-        rewrite_column_expr(column_expr.clone(), column, &stat_column)
+        rewrite_column_expr(Arc::clone(column_expr), column, &stat_column)
     }
 
     /// rewrite col --> col_min
@@ -1075,7 +1075,7 @@ fn rewrite_expr_to_prunable(
         .is_some()
     {
         // `col op lit()`
-        Ok((column_expr.clone(), op, scalar_expr.clone()))
+        Ok((Arc::clone(column_expr), op, Arc::clone(scalar_expr)))
     } else if let Some(cast) = column_expr_any.downcast_ref::<phys_expr::CastExpr>() {
         // `cast(col) op lit()`
         let arrow_schema: SchemaRef = schema.clone().into();
@@ -1120,8 +1120,8 @@ fn rewrite_expr_to_prunable(
             .downcast_ref::<phys_expr::Column>()
             .is_some()
         {
-            let left = not.arg().clone();
-            let right = Arc::new(phys_expr::NotExpr::new(scalar_expr.clone()));
+            let left = Arc::clone(not.arg());
+            let right = Arc::new(phys_expr::NotExpr::new(Arc::clone(scalar_expr)));
             Ok((left, reverse_operator(op)?, right))
         } else {
             plan_err!("Not with complex expression {column_expr:?} is not supported")
@@ -1357,9 +1357,9 @@ fn build_predicate_expression(
                 .cloned()
                 .map(|e| {
                     Arc::new(phys_expr::BinaryExpr::new(
-                        in_list.expr().clone(),
+                        Arc::clone(in_list.expr()),
                         eq_op.clone(),
-                        e.clone(),
+                        e,
                     )) as _
                 })
                 .reduce(|a, b| {
@@ -1375,9 +1375,9 @@ fn build_predicate_expression(
     let (left, op, right) = {
         if let Some(bin_expr) = expr_any.downcast_ref::<phys_expr::BinaryExpr>() {
             (
-                bin_expr.left().clone(),
+                Arc::clone(bin_expr.left()),
                 bin_expr.op().clone(),
-                bin_expr.right().clone(),
+                Arc::clone(bin_expr.right()),
             )
         } else {
             return unhandled;
@@ -1433,11 +1433,11 @@ fn build_statistics_expr(
                 Arc::new(phys_expr::BinaryExpr::new(
                     min_column_expr,
                     Operator::NotEq,
-                    expr_builder.scalar_expr().clone(),
+                    Arc::clone(expr_builder.scalar_expr()),
                 )),
                 Operator::Or,
                 Arc::new(phys_expr::BinaryExpr::new(
-                    expr_builder.scalar_expr().clone(),
+                    Arc::clone(expr_builder.scalar_expr()),
                     Operator::NotEq,
                     max_column_expr,
                 )),
@@ -1452,11 +1452,11 @@ fn build_statistics_expr(
                 Arc::new(phys_expr::BinaryExpr::new(
                     min_column_expr,
                     Operator::LtEq,
-                    expr_builder.scalar_expr().clone(),
+                    Arc::clone(expr_builder.scalar_expr()),
                 )),
                 Operator::And,
                 Arc::new(phys_expr::BinaryExpr::new(
-                    expr_builder.scalar_expr().clone(),
+                    Arc::clone(expr_builder.scalar_expr()),
                     Operator::LtEq,
                     max_column_expr,
                 )),
@@ -1467,7 +1467,7 @@ fn build_statistics_expr(
             Arc::new(phys_expr::BinaryExpr::new(
                 expr_builder.max_column_expr()?,
                 Operator::Gt,
-                expr_builder.scalar_expr().clone(),
+                Arc::clone(expr_builder.scalar_expr()),
             ))
         }
         Operator::GtEq => {
@@ -1475,7 +1475,7 @@ fn build_statistics_expr(
             Arc::new(phys_expr::BinaryExpr::new(
                 expr_builder.max_column_expr()?,
                 Operator::GtEq,
-                expr_builder.scalar_expr().clone(),
+                Arc::clone(expr_builder.scalar_expr()),
             ))
         }
         Operator::Lt => {
@@ -1483,7 +1483,7 @@ fn build_statistics_expr(
             Arc::new(phys_expr::BinaryExpr::new(
                 expr_builder.min_column_expr()?,
                 Operator::Lt,
-                expr_builder.scalar_expr().clone(),
+                Arc::clone(expr_builder.scalar_expr()),
             ))
         }
         Operator::LtEq => {
@@ -1491,7 +1491,7 @@ fn build_statistics_expr(
             Arc::new(phys_expr::BinaryExpr::new(
                 expr_builder.min_column_expr()?,
                 Operator::LtEq,
-                expr_builder.scalar_expr().clone(),
+                Arc::clone(expr_builder.scalar_expr()),
             ))
         }
         // other expressions are not supported

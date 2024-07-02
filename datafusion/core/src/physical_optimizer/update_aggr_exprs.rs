@@ -84,7 +84,10 @@ impl PhysicalOptimizerRule for OptimizeAggregateOrder {
                 let requirement = indices
                     .iter()
                     .map(|&idx| {
-                        PhysicalSortRequirement::new(groupby_exprs[idx].clone(), None)
+                        PhysicalSortRequirement::new(
+                            Arc::clone(&groupby_exprs[idx]),
+                            None,
+                        )
                     })
                     .collect::<Vec<_>>();
 

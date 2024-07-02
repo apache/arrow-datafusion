@@ -83,7 +83,7 @@ impl UnnestExec {
         schema: SchemaRef,
         options: UnnestOptions,
     ) -> Self {
-        let cache = Self::compute_properties(&input, schema.clone());
+        let cache = Self::compute_properties(&input, Arc::clone(&schema));
 
         UnnestExec {
             input,
@@ -147,10 +147,10 @@ impl ExecutionPlan for UnnestExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(UnnestExec::new(
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.list_column_indices.clone(),
             self.struct_column_indices.clone(),
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             self.options.clone(),
         )))
     }
@@ -169,7 +169,7 @@ impl ExecutionPlan for UnnestExec {
 
         Ok(Box::pin(UnnestStream {
             input,
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
             list_type_columns: self.list_column_indices.clone(),
             struct_column_indices: self.struct_column_indices.iter().copied().collect(),
             options: self.options.clone(),
@@ -237,7 +237,7 @@ struct UnnestStream {
 
 impl RecordBatchStream for UnnestStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -330,13 +330,13 @@ fn flatten_struct_cols(
                     data_type
                 ),
             },
-            None => Ok(vec![column_data.clone()]),
+            None => Ok(vec![Arc::clone(column_data)]),
         })
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .flatten()
         .collect();
-    Ok(RecordBatch::try_new(schema.clone(), columns_expanded)?)
+    Ok(RecordBatch::try_new(Arc::clone(schema), columns_expanded)?)
 }
 
 /// For each row in a `RecordBatch`, some list/struct columns need to be unnested.
@@ -357,7 +357,7 @@ fn build_batch(
             let list_arrays: Vec<ArrayRef> = list_type_columns
                 .iter()
                 .map(|index| {
-                    ColumnarValue::Array(batch.column(*index).clone())
+                    ColumnarValue::Array(Arc::clone(batch.column(*index)))
                         .into_array(batch.num_rows())
                 })
                 .collect::<Result<_>>()?;
@@ -372,7 +372,7 @@ fn build_batch(
                 })? as usize
             };
             if total_length == 0 {
-                return Ok(RecordBatch::new_empty(schema.clone()));
+                return Ok(RecordBatch::new_empty(Arc::clone(schema)));
             }
 
             // Unnest all the list arrays
@@ -444,7 +444,7 @@ fn find_longest_length(
         .collect::<Result<_>>()?;
 
     let longest_length = list_lengths.iter().skip(1).try_fold(
-        list_lengths[0].clone(),
+        Arc::clone(&list_lengths[0]),
         |longest, current| {
             let is_lt = lt(&longest, &current)?;
             zip(&is_lt, &current, &longest)
@@ -649,7 +649,7 @@ fn flatten_list_cols_from_indices(
         .iter()
         .enumerate()
         .map(|(col_idx, arr)| match unnested_list_arrays.get(&col_idx) {
-            Some(unnested_array) => Ok(unnested_array.clone()),
+            Some(unnested_array) => Ok(Arc::clone(unnested_array)),
             None => Ok(kernels::take::take(arr, indices, None)?),
         })
         .collect::<Result<Vec<_>>>()?;
@@ -813,27 +813,27 @@ mod tests {
         // Test with single ListArray
         //  [A, B, C], [], NULL, [D], NULL, [NULL, F]
         let list_array = Arc::new(make_generic_array::<i32>()) as ArrayRef;
-        verify_longest_length(&[list_array.clone()], false, vec![3, 0, 0, 1, 0, 2])?;
-        verify_longest_length(&[list_array.clone()], true, vec![3, 0, 1, 1, 1, 2])?;
+        verify_longest_length(&[Arc::clone(&list_array)], false, vec![3, 0, 0, 1, 0, 2])?;
+        verify_longest_length(&[Arc::clone(&list_array)], true, vec![3, 0, 1, 1, 1, 2])?;
 
         // Test with single LargeListArray
         //  [A, B, C], [], NULL, [D], NULL, [NULL, F]
         let list_array = Arc::new(make_generic_array::<i64>()) as ArrayRef;
-        verify_longest_length(&[list_array.clone()], false, vec![3, 0, 0, 1, 0, 2])?;
-        verify_longest_length(&[list_array.clone()], true, vec![3, 0, 1, 1, 1, 2])?;
+        verify_longest_length(&[Arc::clone(&list_array)], false, vec![3, 0, 0, 1, 0, 2])?;
+        verify_longest_length(&[Arc::clone(&list_array)], true, vec![3, 0, 1, 1, 1, 2])?;
 
         // Test with single FixedSizeListArray
         //  [A, B], NULL, [C, D], NULL, [NULL, F], [NULL, NULL]
         let list_array = Arc::new(make_fixed_list()) as ArrayRef;
-        verify_longest_length(&[list_array.clone()], false, vec![2, 0, 2, 0, 2, 2])?;
-        verify_longest_length(&[list_array.clone()], true, vec![2, 1, 2, 1, 2, 2])?;
+        verify_longest_length(&[Arc::clone(&list_array)], false, vec![2, 0, 2, 0, 2, 2])?;
+        verify_longest_length(&[Arc::clone(&list_array)], true, vec![2, 1, 2, 1, 2, 2])?;
 
         // Test with multiple list arrays
         //  [A, B, C], [], NULL, [D], NULL, [NULL, F]
         //  [A, B], NULL, [C, D], NULL, [NULL, F], [NULL, NULL]
         let list1 = Arc::new(make_generic_array::<i32>()) as ArrayRef;
         let list2 = Arc::new(make_fixed_list()) as ArrayRef;
-        let list_arrays = vec![list1.clone(), list2.clone()];
+        let list_arrays = vec![Arc::clone(&list1), Arc::clone(&list2)];
         verify_longest_length(&list_arrays, false, vec![3, 0, 2, 1, 2, 2])?;
         verify_longest_length(&list_arrays, true, vec![3, 1, 2, 1, 2, 2])?;
 

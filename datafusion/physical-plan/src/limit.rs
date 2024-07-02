@@ -145,7 +145,7 @@ impl ExecutionPlan for GlobalLimitExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(GlobalLimitExec::new(
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.skip,
             self.fetch,
         )))
@@ -352,7 +352,7 @@ impl ExecutionPlan for LocalLimitExec {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         match children.len() {
             1 => Ok(Arc::new(LocalLimitExec::new(
-                children[0].clone(),
+                Arc::clone(&children[0]),
                 self.fetch,
             ))),
             _ => internal_err!("LocalLimitExec wrong number of children"),
@@ -551,7 +551,7 @@ impl Stream for LimitStream {
 impl RecordBatchStream for LimitStream {
     /// Get the schema
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -864,11 +864,11 @@ mod tests {
         // Adding a "GROUP BY i" changes the input stats from Exact to Inexact.
         let agg = AggregateExec::try_new(
             AggregateMode::Final,
-            build_group_by(&csv.schema().clone(), vec!["i".to_string()]),
+            build_group_by(&csv.schema(), vec!["i".to_string()]),
             vec![],
             vec![],
-            csv.clone(),
-            csv.schema().clone(),
+            Arc::clone(&csv),
+            Arc::clone(&csv.schema()),
         )?;
         let agg_exec: Arc<dyn ExecutionPlan> = Arc::new(agg);
 

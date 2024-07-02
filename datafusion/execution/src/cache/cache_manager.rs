@@ -54,10 +54,10 @@ impl CacheManager {
     pub fn try_new(config: &CacheManagerConfig) -> Result<Arc<Self>> {
         let mut manager = CacheManager::default();
         if let Some(cc) = &config.table_files_statistics_cache {
-            manager.file_statistic_cache = Some(cc.clone())
+            manager.file_statistic_cache = Some(Arc::clone(cc))
         }
         if let Some(lc) = &config.list_files_cache {
-            manager.list_files_cache = Some(lc.clone())
+            manager.list_files_cache = Some(Arc::clone(lc))
         }
         Ok(Arc::new(manager))
     }

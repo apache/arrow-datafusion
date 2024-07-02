@@ -104,7 +104,7 @@ impl BuiltInWindowFunctionExpr for WindowShift {
     }
 
     fn expressions(&self) -> Vec<Arc<dyn PhysicalExpr>> {
-        vec![self.expr.clone()]
+        vec![Arc::clone(&self.expr)]
     }
 
     fn name(&self) -> &str {
@@ -125,7 +125,7 @@ impl BuiltInWindowFunctionExpr for WindowShift {
             name: self.name.clone(),
             data_type: self.data_type.clone(),
             shift_offset: -self.shift_offset,
-            expr: self.expr.clone(),
+            expr: Arc::clone(&self.expr),
             default_value: self.default_value.clone(),
             ignore_nulls: self.ignore_nulls,
         }))
@@ -209,7 +209,7 @@ fn shift_with_default_value(
 
     let value_len = array.len() as i64;
     if offset == 0 {
-        Ok(array.clone())
+        Ok(Arc::clone(array))
     } else if offset == i64::MIN || offset.abs() >= value_len {
         default_value.to_array_of_size(value_len as usize)
     } else {

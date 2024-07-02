@@ -145,7 +145,7 @@ mod tests {
         let col_e = &col("e", &test_schema)?;
         let col_f = &col("f", &test_schema)?;
         let col_g = &col("g", &test_schema)?;
-        let mut eq_properties = EquivalenceProperties::new(test_schema.clone());
+        let mut eq_properties = EquivalenceProperties::new(Arc::clone(&test_schema));
         eq_properties.add_equal_conditions(col_a, col_c)?;
 
         let option_asc = SortOptions {
@@ -201,11 +201,11 @@ mod tests {
         let col_f = &col("f", &test_schema)?;
         let col_exprs = [col_a, col_b, col_c, col_d, col_e, col_f];
 
-        let mut eq_properties = EquivalenceProperties::new(test_schema.clone());
+        let mut eq_properties = EquivalenceProperties::new(Arc::clone(&test_schema));
         // Define a and f are aliases
         eq_properties.add_equal_conditions(col_a, col_f)?;
         // Column e has constant value.
-        eq_properties = eq_properties.add_constants([col_e.clone()]);
+        eq_properties = eq_properties.add_constants([Arc::clone(col_e)]);
 
         // Randomly order columns for sorting
         let mut rng = StdRng::seed_from_u64(seed);
@@ -223,7 +223,7 @@ mod tests {
             let ordering = remaining_exprs
                 .drain(0..n_sort_expr)
                 .map(|expr| PhysicalSortExpr {
-                    expr: expr.clone(),
+                    expr: Arc::clone(expr),
                     options: options_asc,
                 })
                 .collect();
@@ -241,7 +241,7 @@ mod tests {
         in_data
             .iter()
             .map(|(expr, options)| {
-                PhysicalSortRequirement::new((*expr).clone(), *options)
+                PhysicalSortRequirement::new(Arc::clone(*expr), *options)
             })
             .collect()
     }
@@ -253,7 +253,7 @@ mod tests {
         in_data
             .iter()
             .map(|(expr, options)| PhysicalSortExpr {
-                expr: (*expr).clone(),
+                expr: Arc::clone(*expr),
                 options: *options,
             })
             .collect()
@@ -276,7 +276,7 @@ mod tests {
         in_data
             .iter()
             .map(|(expr, options)| PhysicalSortExpr {
-                expr: (*expr).clone(),
+                expr: Arc::clone(expr),
                 options: *options,
             })
             .collect()
@@ -309,9 +309,9 @@ mod tests {
             .map(|(source, _target)| source.evaluate(input_data)?.into_array(num_rows))
             .collect::<Result<Vec<_>>>()?;
         let projected_batch = if projected_values.is_empty() {
-            RecordBatch::new_empty(output_schema.clone())
+            RecordBatch::new_empty(Arc::clone(&output_schema))
         } else {
-            RecordBatch::try_new(output_schema.clone(), projected_values)?
+            RecordBatch::try_new(Arc::clone(&output_schema), projected_values)?
         };
 
         let projected_eq =
@@ -399,7 +399,7 @@ mod tests {
         let vals: Vec<usize> = (0..n_row).collect::<Vec<_>>();
         let vals: Vec<f64> = vals.into_iter().map(|val| val as f64).collect();
         let unique_col = Arc::new(Float64Array::from_iter_values(vals)) as ArrayRef;
-        columns.push(unique_col.clone());
+        columns.push(Arc::clone(&unique_col));
 
         // Create a new schema with the added unique column
         let unique_col_name = "unique";
@@ -414,7 +414,7 @@ mod tests {
         let schema = Arc::new(Schema::new(fields));
 
         // Create a new batch with the added column
-        let new_batch = RecordBatch::try_new(schema.clone(), columns)?;
+        let new_batch = RecordBatch::try_new(Arc::clone(&schema), columns)?;
 
         // Add the unique column to the required ordering to ensure deterministic results
         required_ordering.push(PhysicalSortExpr {
@@ -454,7 +454,7 @@ mod tests {
             let col = expr.as_any().downcast_ref::<Column>().unwrap();
             let (idx, _field) = schema.column_with_name(col.name()).unwrap();
             if let Some(res) = &existing_vec[idx] {
-                return Some(res.clone());
+                return Some(Arc::clone(res));
             }
         }
         None
@@ -516,13 +516,13 @@ mod tests {
         // Fill columns based on equivalence groups
         for eq_group in eq_properties.eq_group.iter() {
             let representative_array =
-                get_representative_arr(eq_group, &schema_vec, schema.clone())
+                get_representative_arr(eq_group, &schema_vec, Arc::clone(schema))
                     .unwrap_or_else(|| generate_random_array(n_elem, n_distinct));
 
             for expr in eq_group.iter() {
                 let col = expr.as_any().downcast_ref::<Column>().unwrap();
                 let (idx, _field) = schema.column_with_name(col.name()).unwrap();
-                schema_vec[idx] = Some(representative_array.clone());
+                schema_vec[idx] = Some(Arc::clone(&representative_array));
             }
         }
 

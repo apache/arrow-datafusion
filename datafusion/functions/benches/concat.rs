@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use arrow::array::ArrayRef;
 use arrow::util::bench_util::create_string_array_with_len;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use datafusion_common::ScalarValue;
@@ -26,7 +27,7 @@ fn create_args(size: usize, str_len: usize) -> Vec<ColumnarValue> {
     let array = Arc::new(create_string_array_with_len::<i32>(size, 0.2, str_len));
     let scalar = ScalarValue::Utf8(Some(", ".to_string()));
     vec![
-        ColumnarValue::Array(array.clone()),
+        ColumnarValue::Array(Arc::clone(&array) as ArrayRef),
         ColumnarValue::Scalar(scalar),
         ColumnarValue::Array(array),
     ]

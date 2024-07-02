@@ -40,14 +40,14 @@ pub async fn plan_to_parquet(
     let store = task_ctx.runtime_env().object_store(&object_store_url)?;
     let mut join_set = JoinSet::new();
     for i in 0..plan.output_partitioning().partition_count() {
-        let plan: Arc<dyn ExecutionPlan> = plan.clone();
+        let plan: Arc<dyn ExecutionPlan> = Arc::clone(&plan);
         let filename = format!("{}/part-{i}.parquet", parsed.prefix());
         let file = Path::parse(filename)?;
         let propclone = writer_properties.clone();
 
-        let storeref = store.clone();
+        let storeref = Arc::clone(&store);
         let buf_writer = BufWriter::new(storeref, file.clone());
-        let mut stream = plan.execute(i, task_ctx.clone())?;
+        let mut stream = plan.execute(i, Arc::clone(&task_ctx))?;
         join_set.spawn(async move {
             let mut writer =
                 AsyncArrowWriter::try_new(buf_writer, plan.schema(), propclone)?;

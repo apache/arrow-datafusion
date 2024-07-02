@@ -234,7 +234,7 @@ impl ObjectStoreRegistry for DefaultObjectStoreRegistry {
         let s = get_url_key(url);
         self.object_stores
             .get(&s)
-            .map(|o| o.value().clone())
+            .map(|o| Arc::clone(o.value()))
             .ok_or_else(|| {
                 DataFusionError::Internal(format!(
                     "No suitable object store found for {url}. See `RuntimeEnv::register_object_store`"

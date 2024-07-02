@@ -121,7 +121,7 @@ impl TaskContext {
 
     /// Return the [RuntimeEnv] associated with this [TaskContext]
     pub fn runtime_env(&self) -> Arc<RuntimeEnv> {
-        self.runtime.clone()
+        Arc::clone(&self.runtime)
     }
 
     /// Update the [`SessionConfig`]
@@ -172,19 +172,22 @@ impl FunctionRegistry for TaskContext {
         udaf: Arc<AggregateUDF>,
     ) -> Result<Option<Arc<AggregateUDF>>> {
         udaf.aliases().iter().for_each(|alias| {
-            self.aggregate_functions.insert(alias.clone(), udaf.clone());
+            self.aggregate_functions
+                .insert(alias.clone(), Arc::clone(&udaf));
         });
         Ok(self.aggregate_functions.insert(udaf.name().into(), udaf))
     }
     fn register_udwf(&mut self, udwf: Arc<WindowUDF>) -> Result<Option<Arc<WindowUDF>>> {
         udwf.aliases().iter().for_each(|alias| {
-            self.window_functions.insert(alias.clone(), udwf.clone());
+            self.window_functions
+                .insert(alias.clone(), Arc::clone(&udwf));
         });
         Ok(self.window_functions.insert(udwf.name().into(), udwf))
     }
     fn register_udf(&mut self, udf: Arc<ScalarUDF>) -> Result<Option<Arc<ScalarUDF>>> {
         udf.aliases().iter().for_each(|alias| {
-            self.scalar_functions.insert(alias.clone(), udf.clone());
+            self.scalar_functions
+                .insert(alias.clone(), Arc::clone(&udf));
         });
         Ok(self.scalar_functions.insert(udf.name().into(), udf))
     }

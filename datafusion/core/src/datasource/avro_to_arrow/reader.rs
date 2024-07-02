@@ -142,7 +142,7 @@ impl<'a, R: Read> Reader<'a, R> {
         Ok(Self {
             array_reader: AvroArrowArrayReader::try_new(
                 reader,
-                schema.clone(),
+                Arc::clone(&schema),
                 projection,
             )?,
             schema,
@@ -153,7 +153,7 @@ impl<'a, R: Read> Reader<'a, R> {
     /// Returns the schema of the reader, useful for getting the schema without reading
     /// record batches
     pub fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 

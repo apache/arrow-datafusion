@@ -26,6 +26,7 @@ use datafusion_common::{
 use datafusion_expr::{ColumnarValue, Expr, ExprSchemable};
 use datafusion_expr::{ScalarUDFImpl, Signature, Volatility};
 use std::any::Any;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct GetFieldFunc {
@@ -151,7 +152,7 @@ impl ScalarUDFImpl for GetFieldFunc {
         }
 
         let arrays = ColumnarValue::values_to_arrays(args)?;
-        let array = arrays[0].clone();
+        let array = Arc::clone(&arrays[0]);
 
         let name = match &args[1] {
             ColumnarValue::Scalar(name) => name,
@@ -199,7 +200,7 @@ impl ScalarUDFImpl for GetFieldFunc {
                 let as_struct_array = as_struct_array(&array)?;
                 match as_struct_array.column_by_name(k) {
                     None => exec_err!("get indexed field {k} not found in struct"),
-                    Some(col) => Ok(ColumnarValue::Array(col.clone())),
+                    Some(col) => Ok(ColumnarValue::Array(Arc::clone(col))),
                 }
             }
             (DataType::Struct(_), name) => exec_err!(

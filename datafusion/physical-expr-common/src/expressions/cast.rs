@@ -131,7 +131,7 @@ impl PhysicalExpr for CastExpr {
         children: Vec<Arc<dyn PhysicalExpr>>,
     ) -> Result<Arc<dyn PhysicalExpr>> {
         Ok(Arc::new(CastExpr::new(
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.cast_type.clone(),
             Some(self.cast_options.clone()),
         )))
@@ -206,7 +206,7 @@ pub fn cast_with_options(
 ) -> Result<Arc<dyn PhysicalExpr>> {
     let expr_type = expr.data_type(input_schema)?;
     if expr_type == cast_type {
-        Ok(expr.clone())
+        Ok(Arc::clone(&expr))
     } else if can_cast_types(&expr_type, &cast_type) {
         Ok(Arc::new(CastExpr::new(expr, cast_type, cast_options)))
     } else {

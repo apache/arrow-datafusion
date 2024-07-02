@@ -45,7 +45,7 @@ pub fn add_sort_above<T: Clone + Default>(
             .equivalence_properties()
             .is_expr_constant(&sort_expr.expr)
     });
-    let mut new_sort = SortExec::new(sort_expr, node.plan.clone()).with_fetch(fetch);
+    let mut new_sort = SortExec::new(sort_expr, Arc::clone(&node.plan)).with_fetch(fetch);
     if node.plan.output_partitioning().partition_count() > 1 {
         new_sort = new_sort.with_preserve_partitioning(true);
     }

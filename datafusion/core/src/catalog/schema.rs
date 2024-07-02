@@ -118,7 +118,7 @@ impl SchemaProvider for MemorySchemaProvider {
         &self,
         name: &str,
     ) -> Result<Option<Arc<dyn TableProvider>>, DataFusionError> {
-        Ok(self.tables.get(name).map(|table| table.value().clone()))
+        Ok(self.tables.get(name).map(|table| Arc::clone(table.value())))
     }
 
     fn register_table(

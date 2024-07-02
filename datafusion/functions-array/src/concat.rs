@@ -249,7 +249,7 @@ pub(crate) fn array_concat_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
             return not_impl_err!("Array is not type '{base_type:?}'.");
         }
         if !base_type.eq(&DataType::Null) {
-            new_args.push(arg.clone());
+            new_args.push(Arc::clone(arg));
         }
     }
 

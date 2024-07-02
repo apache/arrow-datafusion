@@ -200,7 +200,7 @@ pub trait AggregateExpr: Send + Sync + Debug + PartialEq<dyn Any> {
         let order_bys = self.order_bys().unwrap_or(&[]);
         let order_by_exprs = order_bys
             .iter()
-            .map(|sort_expr| sort_expr.expr.clone())
+            .map(|sort_expr| Arc::clone(&sort_expr.expr))
             .collect::<Vec<_>>();
         AggregatePhysicalExpressions {
             args,

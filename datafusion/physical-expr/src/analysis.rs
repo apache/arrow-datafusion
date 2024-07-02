@@ -163,7 +163,7 @@ pub fn analyze(
 ) -> Result<AnalysisContext> {
     let target_boundaries = context.boundaries;
 
-    let mut graph = ExprIntervalGraph::try_new(expr.clone(), schema)?;
+    let mut graph = ExprIntervalGraph::try_new(Arc::clone(expr), schema)?;
 
     let columns = collect_columns(expr)
         .into_iter()

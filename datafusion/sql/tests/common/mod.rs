@@ -258,6 +258,6 @@ impl TableSource for EmptyTable {
     }
 
     fn schema(&self) -> SchemaRef {
-        self.table_schema.clone()
+        Arc::clone(&self.table_schema)
     }
 }

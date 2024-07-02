@@ -260,7 +260,7 @@ impl ExecutionPlan for PartialSortExec {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let new_partial_sort = PartialSortExec::new(
             self.expr.clone(),
-            children[0].clone(),
+            Arc::clone(&children[0]),
             self.common_prefix_length,
         )
         .with_fetch(self.fetch)
@@ -276,7 +276,7 @@ impl ExecutionPlan for PartialSortExec {
     ) -> Result<SendableRecordBatchStream> {
         trace!("Start PartialSortExec::execute for partition {} of context session_id {} and task_id {:?}", partition, context.session_id(), context.task_id());
 
-        let input = self.input.execute(partition, context.clone())?;
+        let input = self.input.execute(partition, Arc::clone(&context))?;
 
         trace!(
             "End PartialSortExec's input.execute for partition: {}",
@@ -485,11 +485,11 @@ mod tests {
                     options: option_asc,
                 },
             ],
-            source.clone(),
+            Arc::clone(&source),
             2,
         )) as Arc<dyn ExecutionPlan>;
 
-        let result = collect(partial_sort_exec, task_ctx.clone()).await?;
+        let result = collect(partial_sort_exec, Arc::clone(&task_ctx)).await?;
 
         let expected_after_sort = [
             "+---+---+---+",
@@ -549,13 +549,13 @@ mod tests {
                             options: option_asc,
                         },
                     ],
-                    source.clone(),
+                    Arc::clone(&source),
                     common_prefix_length,
                 )
                 .with_fetch(Some(4)),
             ) as Arc<dyn ExecutionPlan>;
 
-            let result = collect(partial_sort_exec, task_ctx.clone()).await?;
+            let result = collect(partial_sort_exec, Arc::clone(&task_ctx)).await?;
 
             let expected_after_sort = [
                 "+---+---+---+",
@@ -621,11 +621,11 @@ mod tests {
                         options: option_asc,
                     },
                 ],
-                source.clone(),
+                Arc::clone(source),
                 common_prefix_length,
             ));
 
-            let result = collect(partial_sort_exec, task_ctx.clone()).await?;
+            let result = collect(partial_sort_exec, Arc::clone(&task_ctx)).await?;
             assert_eq!(2, result.len());
             assert_eq!(
                 task_ctx.runtime_env().memory_pool.reserved(),
@@ -676,7 +676,7 @@ mod tests {
         Arc::new(
             MemoryExec::try_new(
                 &[vec![batch1, batch2, batch3, batch4]],
-                schema.clone(),
+                Arc::clone(&schema),
                 None,
             )
             .unwrap(),
@@ -711,7 +711,7 @@ mod tests {
                     options: option_asc,
                 },
             ],
-            mem_exec.clone(),
+            Arc::clone(&mem_exec),
             1,
         );
         let partial_sort_exec =
@@ -720,7 +720,7 @@ mod tests {
             partial_sort_executor.expr,
             partial_sort_executor.input,
         )) as Arc<dyn ExecutionPlan>;
-        let result = collect(partial_sort_exec, task_ctx.clone()).await?;
+        let result = collect(partial_sort_exec, Arc::clone(&task_ctx)).await?;
         assert_eq!(
             result.iter().map(|r| r.num_rows()).collect_vec(),
             [0, 125, 125, 0, 150]
@@ -732,7 +732,7 @@ mod tests {
             "The sort should have returned all memory used back to the memory manager"
         );
         let partial_sort_result = concat_batches(&schema, &result).unwrap();
-        let sort_result = collect(sort_exec, task_ctx.clone()).await?;
+        let sort_result = collect(sort_exec, Arc::clone(&task_ctx)).await?;
         assert_eq!(sort_result[0], partial_sort_result);
 
         Ok(())
@@ -772,7 +772,7 @@ mod tests {
                         options: option_asc,
                     },
                 ],
-                mem_exec.clone(),
+                Arc::clone(&mem_exec),
                 1,
             )
             .with_fetch(fetch_size);
@@ -783,7 +783,7 @@ mod tests {
                 SortExec::new(partial_sort_executor.expr, partial_sort_executor.input)
                     .with_fetch(fetch_size),
             ) as Arc<dyn ExecutionPlan>;
-            let result = collect(partial_sort_exec, task_ctx.clone()).await?;
+            let result = collect(partial_sort_exec, Arc::clone(&task_ctx)).await?;
             assert_eq!(
                 result.iter().map(|r| r.num_rows()).collect_vec(),
                 expected_batch_num_rows
@@ -795,7 +795,7 @@ mod tests {
                 "The sort should have returned all memory used back to the memory manager"
             );
             let partial_sort_result = concat_batches(&schema, &result)?;
-            let sort_result = collect(sort_exec, task_ctx.clone()).await?;
+            let sort_result = collect(sort_exec, Arc::clone(&task_ctx)).await?;
             assert_eq!(sort_result[0], partial_sort_result);
         }
 
@@ -822,8 +822,12 @@ mod tests {
         let data: ArrayRef =
             Arc::new(vec![1, 1, 2].into_iter().map(Some).collect::<UInt64Array>());
 
-        let batch = RecordBatch::try_new(schema.clone(), vec![data])?;
-        let input = Arc::new(MemoryExec::try_new(&[vec![batch]], schema.clone(), None)?);
+        let batch = RecordBatch::try_new(Arc::clone(&schema), vec![data])?;
+        let input = Arc::new(MemoryExec::try_new(
+            &[vec![batch]],
+            Arc::clone(&schema),
+            None,
+        )?);
 
         let partial_sort_exec = Arc::new(PartialSortExec::new(
             vec![PhysicalSortExpr {
@@ -837,13 +841,13 @@ mod tests {
         let result: Vec<RecordBatch> = collect(partial_sort_exec, task_ctx).await?;
         let expected_batch = vec![
             RecordBatch::try_new(
-                schema.clone(),
+                Arc::clone(&schema),
                 vec![Arc::new(
                     vec![1, 1].into_iter().map(Some).collect::<UInt64Array>(),
                 )],
             )?,
             RecordBatch::try_new(
-                schema.clone(),
+                Arc::clone(&schema),
                 vec![Arc::new(
                     vec![2].into_iter().map(Some).collect::<UInt64Array>(),
                 )],
@@ -879,7 +883,7 @@ mod tests {
 
         // define data.
         let batch = RecordBatch::try_new(
-            schema.clone(),
+            Arc::clone(&schema),
             vec![
                 Arc::new(Float32Array::from(vec![
                     Some(1.0_f32),
@@ -961,8 +965,11 @@ mod tests {
             *partial_sort_exec.schema().field(2).data_type()
         );
 
-        let result: Vec<RecordBatch> =
-            collect(partial_sort_exec.clone(), task_ctx).await?;
+        let result: Vec<RecordBatch> = collect(
+            Arc::clone(&partial_sort_exec) as Arc<dyn ExecutionPlan>,
+            task_ctx,
+        )
+        .await?;
         assert_batches_eq!(expected, &result);
         assert_eq!(result.len(), 2);
         let metrics = partial_sort_exec.metrics().unwrap();
@@ -997,7 +1004,7 @@ mod tests {
             1,
         ));
 
-        let fut = collect(sort_exec, task_ctx.clone());
+        let fut = collect(sort_exec, Arc::clone(&task_ctx));
         let mut fut = fut.boxed();
 
         assert_is_pending(&mut fut);

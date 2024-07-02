@@ -91,7 +91,7 @@ fn create_abs_function(input_data_type: &DataType) -> Result<MathArrayFunction> 
         | DataType::UInt8
         | DataType::UInt16
         | DataType::UInt32
-        | DataType::UInt64 => Ok(|args: &Vec<ArrayRef>| Ok(args[0].clone())),
+        | DataType::UInt64 => Ok(|args: &Vec<ArrayRef>| Ok(Arc::clone(&args[0]))),
 
         // Decimal types
         DataType::Decimal128(_, _) => Ok(make_decimal_abs_function!(Decimal128Array)),

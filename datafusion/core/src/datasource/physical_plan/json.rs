@@ -246,8 +246,8 @@ impl FileOpener for JsonOpener {
     ///
     /// See [`CsvOpener`](super::CsvOpener) for an example.
     fn open(&self, file_meta: FileMeta) -> Result<FileOpenFuture> {
-        let store = self.object_store.clone();
-        let schema = self.projected_schema.clone();
+        let store = Arc::clone(&self.object_store);
+        let schema = Arc::clone(&self.projected_schema);
         let batch_size = self.batch_size;
         let file_compression_type = self.file_compression_type.to_owned();
 
@@ -339,12 +339,12 @@ pub async fn plan_to_json(
     let store = task_ctx.runtime_env().object_store(&object_store_url)?;
     let mut join_set = JoinSet::new();
     for i in 0..plan.output_partitioning().partition_count() {
-        let storeref = store.clone();
-        let plan: Arc<dyn ExecutionPlan> = plan.clone();
+        let storeref = Arc::clone(&store);
+        let plan: Arc<dyn ExecutionPlan> = Arc::clone(&plan);
         let filename = format!("{}/part-{i}.json", parsed.prefix());
         let file = object_store::path::Path::parse(filename)?;
 
-        let mut stream = plan.execute(i, task_ctx.clone())?;
+        let mut stream = plan.execute(i, Arc::clone(&task_ctx))?;
         join_set.spawn(async move {
             let mut buf_writer = BufWriter::new(storeref, file.clone());
 

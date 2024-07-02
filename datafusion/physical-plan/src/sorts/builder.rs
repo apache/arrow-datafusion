@@ -20,6 +20,7 @@ use arrow::datatypes::SchemaRef;
 use arrow::record_batch::RecordBatch;
 use datafusion_common::Result;
 use datafusion_execution::memory_pool::MemoryReservation;
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone, Default)]
 struct BatchCursor {
@@ -145,6 +146,9 @@ impl BatchBuilder {
             retain
         });
 
-        Ok(Some(RecordBatch::try_new(self.schema.clone(), columns)?))
+        Ok(Some(RecordBatch::try_new(
+            Arc::clone(&self.schema),
+            columns,
+        )?))
     }
 }

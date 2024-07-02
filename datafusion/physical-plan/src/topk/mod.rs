@@ -131,7 +131,7 @@ impl TopK {
         );
 
         Ok(Self {
-            schema: schema.clone(),
+            schema: Arc::clone(&schema),
             metrics: TopKMetrics::new(metrics, partition),
             reservation,
             batch_size,
@@ -355,7 +355,7 @@ impl TopKHeap {
     /// high, as a single [`RecordBatch`], and a sorted vec of the
     /// current heap's contents
     pub fn emit_with_state(&mut self) -> Result<(RecordBatch, Vec<TopKRow>)> {
-        let schema = self.store.schema().clone();
+        let schema = Arc::clone(self.store.schema());
 
         // generate sorted rows
         let topk_rows = std::mem::take(&mut self.inner).into_sorted_vec();

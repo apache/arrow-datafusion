@@ -1005,7 +1005,7 @@ impl ListingTable {
         store: &Arc<dyn ObjectStore>,
         part_file: &PartitionedFile,
     ) -> Result<Statistics> {
-        let statistics_cache = self.collected_statistics.clone();
+        let statistics_cache = Arc::clone(&self.collected_statistics);
         return match statistics_cache
             .get_with_extra(&part_file.object_meta.location, &part_file.object_meta)
         {
@@ -1017,7 +1017,7 @@ impl ListingTable {
                     .infer_stats(
                         ctx,
                         store,
-                        self.file_schema.clone(),
+                        Arc::clone(&self.file_schema),
                         &part_file.object_meta,
                     )
                     .await?;

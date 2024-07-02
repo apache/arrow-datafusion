@@ -210,7 +210,7 @@ fn replace_with_partial_sort(
 ) -> Result<Arc<dyn ExecutionPlan>> {
     let plan_any = plan.as_any();
     if let Some(sort_plan) = plan_any.downcast_ref::<SortExec>() {
-        let child = sort_plan.children()[0].clone();
+        let child = Arc::clone(sort_plan.children()[0]);
         if !child.execution_mode().is_unbounded() {
             return Ok(plan);
         }
@@ -230,7 +230,7 @@ fn replace_with_partial_sort(
             return Ok(Arc::new(
                 PartialSortExec::new(
                     sort_plan.expr().to_vec(),
-                    sort_plan.input().clone(),
+                    Arc::clone(sort_plan.input()),
                     common_prefix_length,
                 )
                 .with_preserve_partitioning(sort_plan.preserve_partitioning())
@@ -287,7 +287,8 @@ fn parallelize_sorts(
 
         requirements = add_sort_above_with_check(requirements, sort_reqs, fetch);
 
-        let spm = SortPreservingMergeExec::new(sort_exprs, requirements.plan.clone());
+        let spm =
+            SortPreservingMergeExec::new(sort_exprs, Arc::clone(&requirements.plan));
         Ok(Transformed::yes(
             PlanWithCorrespondingCoalescePartitions::new(
                 Arc::new(spm.with_fetch(fetch)),
@@ -304,7 +305,7 @@ fn parallelize_sorts(
 
         Ok(Transformed::yes(
             PlanWithCorrespondingCoalescePartitions::new(
-                Arc::new(CoalescePartitionsExec::new(requirements.plan.clone())),
+                Arc::new(CoalescePartitionsExec::new(Arc::clone(&requirements.plan))),
                 false,
                 vec![requirements],
             ),
@@ -397,11 +398,11 @@ fn analyze_immediate_sort_removal(
             {
                 // Replace the sort with a sort-preserving merge:
                 let expr = sort_exec.expr().to_vec();
-                Arc::new(SortPreservingMergeExec::new(expr, sort_input.clone())) as _
+                Arc::new(SortPreservingMergeExec::new(expr, Arc::clone(sort_input))) as _
             } else {
                 // Remove the sort:
                 node.children = node.children.swap_remove(0).children;
-                sort_input.clone()
+                Arc::clone(sort_input)
             };
             for child in node.children.iter_mut() {
                 child.data = false;
@@ -460,7 +461,7 @@ fn adjust_window_sort_removal(
         // Satisfy the ordering requirement so that the window can run:
         let mut child_node = window_tree.children.swap_remove(0);
         child_node = add_sort_above(child_node, reqs, None);
-        let child_plan = child_node.plan.clone();
+        let child_plan = Arc::clone(&child_node.plan);
         window_tree.children.push(child_node);
 
         if window_expr.iter().all(|e| e.uses_bounded_memory()) {
@@ -567,12 +568,12 @@ fn remove_corresponding_sort_from_sub_plan(
         // Replace with variants that do not preserve order.
         if is_sort_preserving_merge(&node.plan) {
             node.children = node.children.swap_remove(0).children;
-            node.plan = node.plan.children().swap_remove(0).clone();
+            node.plan = Arc::clone(node.plan.children().swap_remove(0));
         } else if let Some(repartition) =
             node.plan.as_any().downcast_ref::<RepartitionExec>()
         {
             node.plan = Arc::new(RepartitionExec::try_new(
-                node.children[0].plan.clone(),
+                Arc::clone(&node.children[0].plan),
                 repartition.properties().output_partitioning().clone(),
             )?) as _;
         }
@@ -583,7 +584,7 @@ fn remove_corresponding_sort_from_sub_plan(
     {
         // If there is existing ordering, to preserve ordering use
         // `SortPreservingMergeExec` instead of a `CoalescePartitionsExec`.
-        let plan = node.plan.clone();
+        let plan = Arc::clone(&node.plan);
         let plan = if let Some(ordering) = plan.output_ordering() {
             Arc::new(SortPreservingMergeExec::new(ordering.to_vec(), plan)) as _
         } else {

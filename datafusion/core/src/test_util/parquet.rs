@@ -87,7 +87,8 @@ impl TestParquetFile {
         let first_batch = batches.next().expect("need at least one record batch");
         let schema = first_batch.schema();
 
-        let mut writer = ArrowWriter::try_new(file, schema.clone(), Some(props)).unwrap();
+        let mut writer =
+            ArrowWriter::try_new(file, Arc::clone(&schema), Some(props)).unwrap();
 
         writer.write(&first_batch).unwrap();
         let mut num_rows = first_batch.num_rows();
@@ -144,7 +145,7 @@ impl TestParquetFile {
         maybe_filter: Option<Expr>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         let scan_config =
-            FileScanConfig::new(self.object_store_url.clone(), self.schema.clone())
+            FileScanConfig::new(self.object_store_url.clone(), Arc::clone(&self.schema))
                 .with_file(PartitionedFile {
                     object_meta: self.object_meta.clone(),
                     partition_values: vec![],
@@ -153,11 +154,11 @@ impl TestParquetFile {
                     extensions: None,
                 });
 
-        let df_schema = self.schema.clone().to_dfschema_ref()?;
+        let df_schema = Arc::clone(&self.schema).to_dfschema_ref()?;
 
         // run coercion on the filters to coerce types etc.
         let props = ExecutionProps::new();
-        let context = SimplifyContext::new(&props).with_schema(df_schema.clone());
+        let context = SimplifyContext::new(&props).with_schema(Arc::clone(&df_schema));
         let parquet_options = ctx.copied_table_options().parquet;
         if let Some(filter) = maybe_filter {
             let simplifier = ExprSimplifier::new(context);
@@ -167,7 +168,7 @@ impl TestParquetFile {
 
             let parquet_exec =
                 ParquetExecBuilder::new_with_options(scan_config, parquet_options)
-                    .with_predicate(physical_filter_expr.clone())
+                    .with_predicate(Arc::clone(&physical_filter_expr))
                     .build_arc();
 
             let exec = Arc::new(FilterExec::try_new(physical_filter_expr, parquet_exec)?);
@@ -199,7 +200,7 @@ impl TestParquetFile {
 
     /// The schema of this parquet file
     pub fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 
     /// The path to the parquet file

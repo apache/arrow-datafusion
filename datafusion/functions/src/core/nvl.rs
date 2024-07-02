@@ -21,6 +21,7 @@ use arrow::compute::kernels::zip::zip;
 use arrow::datatypes::DataType;
 use datafusion_common::{internal_err, Result};
 use datafusion_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct NVLFunc {
@@ -101,13 +102,13 @@ fn nvl_func(args: &[ColumnarValue]) -> Result<ColumnarValue> {
     }
     let (lhs_array, rhs_array) = match (&args[0], &args[1]) {
         (ColumnarValue::Array(lhs), ColumnarValue::Scalar(rhs)) => {
-            (lhs.clone(), rhs.to_array_of_size(lhs.len())?)
+            (Arc::clone(lhs), rhs.to_array_of_size(lhs.len())?)
         }
         (ColumnarValue::Array(lhs), ColumnarValue::Array(rhs)) => {
-            (lhs.clone(), rhs.clone())
+            (Arc::clone(lhs), Arc::clone(rhs))
         }
         (ColumnarValue::Scalar(lhs), ColumnarValue::Array(rhs)) => {
-            (lhs.to_array_of_size(rhs.len())?, rhs.clone())
+            (lhs.to_array_of_size(rhs.len())?, Arc::clone(rhs))
         }
         (ColumnarValue::Scalar(lhs), ColumnarValue::Scalar(rhs)) => {
             let mut current_value = lhs;

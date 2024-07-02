@@ -21,6 +21,7 @@ use arrow::record_batch::RecordBatch;
 use datafusion_common::cast::as_int32_array;
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
+use std::sync::Arc;
 
 mod data_gen;
 mod string_gen;
@@ -65,7 +66,7 @@ pub fn add_empty_batches(
         .into_iter()
         .flat_map(|batch| {
             // insert 0, or 1 empty batches before and after the current batch
-            let empty_batch = RecordBatch::new_empty(schema.clone());
+            let empty_batch = RecordBatch::new_empty(Arc::clone(&schema));
             std::iter::repeat(empty_batch.clone())
                 .take(rng.gen_range(0..2))
                 .chain(std::iter::once(batch))

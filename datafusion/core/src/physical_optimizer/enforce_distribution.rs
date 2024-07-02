@@ -272,7 +272,7 @@ impl PhysicalOptimizerRule for EnforceDistribution {
 fn adjust_input_keys_ordering(
     mut requirements: PlanWithKeyRequirements,
 ) -> Result<Transformed<PlanWithKeyRequirements>> {
-    let plan = requirements.plan.clone();
+    let plan = Arc::clone(&requirements.plan);
 
     if let Some(HashJoinExec {
         left,
@@ -293,8 +293,8 @@ fn adjust_input_keys_ordering(
                     Vec<SortOptions>,
                 )| {
                     HashJoinExec::try_new(
-                        left.clone(),
-                        right.clone(),
+                        Arc::clone(left),
+                        Arc::clone(right),
                         new_conditions.0,
                         filter.clone(),
                         join_type,
@@ -359,8 +359,8 @@ fn adjust_input_keys_ordering(
             Vec<SortOptions>,
         )| {
             SortMergeJoinExec::try_new(
-                left.clone(),
-                right.clone(),
+                Arc::clone(left),
+                Arc::clone(right),
                 new_conditions.0,
                 filter.clone(),
                 *join_type,
@@ -492,8 +492,8 @@ fn reorder_aggregate_keys(
                         PhysicalGroupBy::new_single(new_group_exprs),
                         agg_exec.aggr_expr().to_vec(),
                         agg_exec.filter_expr().to_vec(),
-                        agg_exec.input().clone(),
-                        agg_exec.input_schema.clone(),
+                        Arc::clone(agg_exec.input()),
+                        Arc::clone(&agg_exec.input_schema),
                     )?);
                     // Build new group expressions that correspond to the output
                     // of the "reordered" aggregator:
@@ -511,11 +511,11 @@ fn reorder_aggregate_keys(
                         new_group_by,
                         agg_exec.aggr_expr().to_vec(),
                         agg_exec.filter_expr().to_vec(),
-                        partial_agg.clone(),
+                        Arc::clone(&partial_agg) as Arc<dyn ExecutionPlan>,
                         agg_exec.input_schema(),
                     )?);
 
-                    agg_node.plan = new_final_agg.clone();
+                    agg_node.plan = Arc::clone(&new_final_agg) as Arc<dyn ExecutionPlan>;
                     agg_node.data.clear();
                     agg_node.children = vec![PlanWithKeyRequirements::new(
                         partial_agg as _,
@@ -621,8 +621,8 @@ pub(crate) fn reorder_join_keys_to_inputs(
                 } = join_keys;
                 let new_join_on = new_join_conditions(&left_keys, &right_keys);
                 return Ok(Arc::new(HashJoinExec::try_new(
-                    left.clone(),
-                    right.clone(),
+                    Arc::clone(left),
+                    Arc::clone(right),
                     new_join_on,
                     filter.clone(),
                     join_type,
@@ -661,8 +661,8 @@ pub(crate) fn reorder_join_keys_to_inputs(
                     .map(|idx| sort_options[positions[idx]])
                     .collect();
                 return SortMergeJoinExec::try_new(
-                    left.clone(),
-                    right.clone(),
+                    Arc::clone(left),
+                    Arc::clone(right),
                     new_join_on,
                     filter.clone(),
                     *join_type,
@@ -723,19 +723,19 @@ fn try_reorder(
     } else if !equivalence_properties.eq_group().is_empty() {
         normalized_expected = expected
             .iter()
-            .map(|e| eq_groups.normalize_expr(e.clone()))
+            .map(|e| eq_groups.normalize_expr(Arc::clone(e)))
             .collect();
 
         normalized_left_keys = join_keys
             .left_keys
             .iter()
-            .map(|e| eq_groups.normalize_expr(e.clone()))
+            .map(|e| eq_groups.normalize_expr(Arc::clone(e)))
             .collect();
 
         normalized_right_keys = join_keys
             .right_keys
             .iter()
-            .map(|e| eq_groups.normalize_expr(e.clone()))
+            .map(|e| eq_groups.normalize_expr(Arc::clone(e)))
             .collect();
 
         if physical_exprs_equal(&normalized_expected, &normalized_left_keys)
@@ -758,8 +758,8 @@ fn try_reorder(
     let mut new_left_keys = vec![];
     let mut new_right_keys = vec![];
     for pos in positions.iter() {
-        new_left_keys.push(join_keys.left_keys[*pos].clone());
-        new_right_keys.push(join_keys.right_keys[*pos].clone());
+        new_left_keys.push(Arc::clone(&join_keys.left_keys[*pos]));
+        new_right_keys.push(Arc::clone(&join_keys.right_keys[*pos]));
     }
     let pairs = JoinKeyPairs {
         left_keys: new_left_keys,
@@ -797,7 +797,7 @@ fn expected_expr_positions(
 fn extract_join_keys(on: &[(PhysicalExprRef, PhysicalExprRef)]) -> JoinKeyPairs {
     let (left_keys, right_keys) = on
         .iter()
-        .map(|(l, r)| (l.clone() as _, r.clone() as _))
+        .map(|(l, r)| (Arc::clone(l) as _, Arc::clone(r) as _))
         .unzip();
     JoinKeyPairs {
         left_keys,
@@ -812,7 +812,7 @@ fn new_join_conditions(
     new_left_keys
         .iter()
         .zip(new_right_keys.iter())
-        .map(|(l_key, r_key)| (l_key.clone(), r_key.clone()))
+        .map(|(l_key, r_key)| (Arc::clone(l_key), Arc::clone(r_key)))
         .collect()
 }
 
@@ -841,8 +841,9 @@ fn add_roundrobin_on_top(
         // - Usage of order preserving variants is not desirable
         // (determined by flag `config.optimizer.prefer_existing_sort`)
         let partitioning = Partitioning::RoundRobinBatch(n_target);
-        let repartition = RepartitionExec::try_new(input.plan.clone(), partitioning)?
-            .with_preserve_order();
+        let repartition =
+            RepartitionExec::try_new(Arc::clone(&input.plan), partitioning)?
+                .with_preserve_order();
 
         let new_plan = Arc::new(repartition) as _;
 
@@ -898,8 +899,9 @@ fn add_hash_on_top(
         // - Usage of order preserving variants is not desirable (per the flag
         //   `config.optimizer.prefer_existing_sort`).
         let partitioning = dist.create_partitioning(n_target);
-        let repartition = RepartitionExec::try_new(input.plan.clone(), partitioning)?
-            .with_preserve_order();
+        let repartition =
+            RepartitionExec::try_new(Arc::clone(&input.plan), partitioning)?
+                .with_preserve_order();
         let plan = Arc::new(repartition) as _;
 
         return Ok(DistributionContext::new(plan, true, vec![input]));
@@ -933,10 +935,10 @@ fn add_spm_on_top(input: DistributionContext) -> DistributionContext {
         let new_plan = if should_preserve_ordering {
             Arc::new(SortPreservingMergeExec::new(
                 input.plan.output_ordering().unwrap_or(&[]).to_vec(),
-                input.plan.clone(),
+                Arc::clone(&input.plan),
             )) as _
         } else {
-            Arc::new(CoalescePartitionsExec::new(input.plan.clone())) as _
+            Arc::new(CoalescePartitionsExec::new(Arc::clone(&input.plan))) as _
         };
 
         DistributionContext::new(new_plan, true, vec![input])
@@ -1012,7 +1014,7 @@ fn replace_order_preserving_variants(
         .collect::<Result<Vec<_>>>()?;
 
     if is_sort_preserving_merge(&context.plan) {
-        let child_plan = context.children[0].plan.clone();
+        let child_plan = Arc::clone(&context.children[0].plan);
         context.plan = Arc::new(CoalescePartitionsExec::new(child_plan));
         return Ok(context);
     } else if let Some(repartition) =
@@ -1020,7 +1022,7 @@ fn replace_order_preserving_variants(
     {
         if repartition.preserve_order() {
             context.plan = Arc::new(RepartitionExec::try_new(
-                context.children[0].plan.clone(),
+                Arc::clone(&context.children[0].plan),
                 repartition.partitioning().clone(),
             )?);
             return Ok(context);
@@ -1191,7 +1193,10 @@ fn ensure_distribution(
     )
     .collect::<Result<Vec<_>>>()?;
 
-    let children_plans = children.iter().map(|c| c.plan.clone()).collect::<Vec<_>>();
+    let children_plans = children
+        .iter()
+        .map(|c| Arc::clone(&c.plan))
+        .collect::<Vec<_>>();
 
     plan = if plan.as_any().is::<UnionExec>()
         && !config.optimizer.prefer_existing_union

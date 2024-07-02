@@ -618,16 +618,17 @@ mod tests {
             expr: col("f32", &schema).unwrap(),
             options: SortOptions::default(),
         }];
-        let memory_exec = Arc::new(MemoryExec::try_new(&[], schema.clone(), None)?) as _;
+        let memory_exec =
+            Arc::new(MemoryExec::try_new(&[], Arc::clone(&schema), None)?) as _;
         let sort_exec = Arc::new(SortExec::new(sort_expr.clone(), memory_exec))
             as Arc<dyn ExecutionPlan>;
         let memory_exec2 = Arc::new(MemoryExec::try_new(&[], schema, None)?) as _;
         // memory_exec2 doesn't have output ordering
-        let union_exec = UnionExec::new(vec![sort_exec.clone(), memory_exec2]);
+        let union_exec = UnionExec::new(vec![Arc::clone(&sort_exec), memory_exec2]);
         let res = get_meet_of_orderings(union_exec.inputs());
         assert!(res.is_none());
 
-        let union_exec = UnionExec::new(vec![sort_exec.clone(), sort_exec]);
+        let union_exec = UnionExec::new(vec![Arc::clone(&sort_exec), sort_exec]);
         let res = get_meet_of_orderings(union_exec.inputs());
         assert_eq!(res, Some(&sort_expr[..]));
         Ok(())

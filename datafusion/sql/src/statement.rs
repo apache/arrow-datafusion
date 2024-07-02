@@ -870,12 +870,12 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                     self.context_provider.get_table_source(table_ref.clone())?;
                 let plan =
                     LogicalPlanBuilder::scan(table_name, table_source, None)?.build()?;
-                let input_schema = plan.schema().clone();
+                let input_schema = Arc::clone(plan.schema());
                 (plan, input_schema, Some(table_ref))
             }
             CopyToSource::Query(query) => {
                 let plan = self.query_to_plan(query, &mut PlannerContext::new())?;
-                let input_schema = plan.schema().clone();
+                let input_schema = Arc::clone(plan.schema());
                 (plan, input_schema, None)
             }
         };

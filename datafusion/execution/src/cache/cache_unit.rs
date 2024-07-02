@@ -39,7 +39,7 @@ impl CacheAccessor<Path, Arc<Statistics>> for DefaultFileStatisticsCache {
     fn get(&self, k: &Path) -> Option<Arc<Statistics>> {
         self.statistics
             .get(k)
-            .map(|s| Some(s.value().1.clone()))
+            .map(|s| Some(Arc::clone(&s.value().1)))
             .unwrap_or(None)
     }
 
@@ -55,7 +55,7 @@ impl CacheAccessor<Path, Arc<Statistics>> for DefaultFileStatisticsCache {
                     // file has changed
                     None
                 } else {
-                    Some(statistics.clone())
+                    Some(Arc::clone(statistics))
                 }
             })
             .unwrap_or(None)
@@ -108,7 +108,7 @@ impl CacheAccessor<Path, Arc<Vec<ObjectMeta>>> for DefaultListFilesCache {
     type Extra = ObjectMeta;
 
     fn get(&self, k: &Path) -> Option<Arc<Vec<ObjectMeta>>> {
-        self.statistics.get(k).map(|x| x.value().clone())
+        self.statistics.get(k).map(|x| Arc::clone(x.value()))
     }
 
     fn get_with_extra(

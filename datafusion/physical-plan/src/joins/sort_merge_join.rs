@@ -126,11 +126,11 @@ impl SortMergeJoinExec {
             .zip(sort_options.iter())
             .map(|((l, r), sort_op)| {
                 let left = PhysicalSortExpr {
-                    expr: l.clone(),
+                    expr: Arc::clone(l),
                     options: *sort_op,
                 };
                 let right = PhysicalSortExpr {
-                    expr: r.clone(),
+                    expr: Arc::clone(r),
                     options: *sort_op,
                 };
                 (left, right)
@@ -140,7 +140,7 @@ impl SortMergeJoinExec {
         let schema =
             Arc::new(build_join_schema(&left_schema, &right_schema, &join_type).0);
         let cache =
-            Self::compute_properties(&left, &right, schema.clone(), join_type, &on);
+            Self::compute_properties(&left, &right, Arc::clone(&schema), join_type, &on);
         Ok(Self {
             left,
             right,
@@ -271,8 +271,11 @@ impl ExecutionPlan for SortMergeJoinExec {
     }
 
     fn required_input_distribution(&self) -> Vec<Distribution> {
-        let (left_expr, right_expr) =
-            self.on.iter().map(|(l, r)| (l.clone(), r.clone())).unzip();
+        let (left_expr, right_expr) = self
+            .on
+            .iter()
+            .map(|(l, r)| (Arc::clone(l), Arc::clone(r)))
+            .unzip();
         vec![
             Distribution::HashPartitioned(left_expr),
             Distribution::HashPartitioned(right_expr),
@@ -304,8 +307,8 @@ impl ExecutionPlan for SortMergeJoinExec {
     ) -> Result<Arc<dyn ExecutionPlan>> {
         match &children[..] {
             [left, right] => Ok(Arc::new(SortMergeJoinExec::try_new(
-                left.clone(),
-                right.clone(),
+                Arc::clone(left),
+                Arc::clone(right),
                 self.on.clone(),
                 self.filter.clone(),
                 self.join_type,
@@ -332,14 +335,24 @@ impl ExecutionPlan for SortMergeJoinExec {
         let (on_left, on_right) = self.on.iter().cloned().unzip();
         let (streamed, buffered, on_streamed, on_buffered) =
             if SortMergeJoinExec::probe_side(&self.join_type) == JoinSide::Left {
-                (self.left.clone(), self.right.clone(), on_left, on_right)
+                (
+                    Arc::clone(&self.left),
+                    Arc::clone(&self.right),
+                    on_left,
+                    on_right,
+                )
             } else {
-                (self.right.clone(), self.left.clone(), on_right, on_left)
+                (
+                    Arc::clone(&self.right),
+                    Arc::clone(&self.left),
+                    on_right,
+                    on_left,
+                )
             };
 
         // execute children plans
-        let streamed = streamed.execute(partition, context.clone())?;
-        let buffered = buffered.execute(partition, context.clone())?;
+        let streamed = streamed.execute(partition, Arc::clone(&context))?;
+        let buffered = buffered.execute(partition, Arc::clone(&context))?;
 
         // create output buffer
         let batch_size = context.session_config().batch_size();
@@ -350,7 +363,7 @@ impl ExecutionPlan for SortMergeJoinExec {
 
         // create join stream
         Ok(Box::pin(SMJStream::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             self.sort_options.clone(),
             self.null_equals_null,
             streamed,
@@ -374,8 +387,8 @@ impl ExecutionPlan for SortMergeJoinExec {
         // There are some special cases though, for example:
         // - `A LEFT JOIN B ON A.col=B.col` with `COUNT_DISTINCT(B.col)=COUNT(B.col)`
         estimate_join_statistics(
-            self.left.clone(),
-            self.right.clone(),
+            Arc::clone(&self.left),
+            Arc::clone(&self.right),
             self.on.clone(),
             &self.join_type,
             &self.schema,
@@ -657,7 +670,7 @@ struct SMJStream {
 
 impl RecordBatchStream for SMJStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -780,7 +793,7 @@ impl SMJStream {
             sort_options,
             null_equals_null,
             schema,
-            streamed_schema: streamed_schema.clone(),
+            streamed_schema: Arc::clone(&streamed_schema),
             buffered_schema,
             streamed,
             buffered,
@@ -1233,7 +1246,7 @@ impl SMJStream {
             };
 
             let output_batch =
-                RecordBatch::try_new(self.schema.clone(), columns.clone())?;
+                RecordBatch::try_new(Arc::clone(&self.schema), columns.clone())?;
 
             // Apply join filter if any
             if !filter_columns.is_empty() {
@@ -1353,8 +1366,10 @@ impl SMJStream {
                         };
 
                         // Push the streamed/buffered batch joined nulls to the output
-                        let null_joined_streamed_batch =
-                            RecordBatch::try_new(self.schema.clone(), columns.clone())?;
+                        let null_joined_streamed_batch = RecordBatch::try_new(
+                            Arc::clone(&self.schema),
+                            columns.clone(),
+                        )?;
                         self.output_record_batches.push(null_joined_streamed_batch);
 
                         // For full join, we also need to output the null joined rows from the buffered side.
@@ -1430,14 +1445,14 @@ fn get_filter_column(
             .column_indices()
             .iter()
             .filter(|col_index| col_index.side == JoinSide::Left)
-            .map(|i| streamed_columns[i.index].clone())
+            .map(|i| Arc::clone(&streamed_columns[i.index]))
             .collect::<Vec<_>>();
 
         let right_columns = f
             .column_indices()
             .iter()
             .filter(|col_index| col_index.side == JoinSide::Right)
-            .map(|i| buffered_columns[i.index].clone())
+            .map(|i| Arc::clone(&buffered_columns[i.index]))
             .collect::<Vec<_>>();
 
         filter_columns.extend(left_columns);
@@ -1476,7 +1491,7 @@ fn produce_buffered_null_batch(
     streamed_columns.extend(buffered_columns);
 
     Ok(Some(RecordBatch::try_new(
-        schema.clone(),
+        Arc::clone(schema),
         streamed_columns,
     )?))
 }
@@ -1927,7 +1942,7 @@ mod tests {
             Field::new(c.0, DataType::Int32, true),
         ]));
         let batch = RecordBatch::try_new(
-            schema.clone(),
+            Arc::clone(&schema),
             vec![
                 Arc::new(Int32Array::from(a.1.clone())),
                 Arc::new(Int32Array::from(b.1.clone())),
@@ -2771,8 +2786,8 @@ mod tests {
             let task_ctx = Arc::new(task_ctx);
 
             let join = join_with_options(
-                left.clone(),
-                right.clone(),
+                Arc::clone(&left),
+                Arc::clone(&right),
                 on.clone(),
                 join_type,
                 sort_options.clone(),
@@ -2849,8 +2864,8 @@ mod tests {
                 .with_runtime(runtime);
             let task_ctx = Arc::new(task_ctx);
             let join = join_with_options(
-                left.clone(),
-                right.clone(),
+                Arc::clone(&left),
+                Arc::clone(&right),
                 on.clone(),
                 join_type,
                 sort_options.clone(),

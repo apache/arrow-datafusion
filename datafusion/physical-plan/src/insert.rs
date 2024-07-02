@@ -153,7 +153,7 @@ impl DataSinkExec {
         } else {
             // Check not null constraint on the input stream
             Ok(Box::pin(RecordBatchStreamAdapter::new(
-                self.sink_schema.clone(),
+                Arc::clone(&self.sink_schema),
                 input_stream
                     .map(move |batch| check_not_null_contraits(batch?, &risky_columns)),
             )))
@@ -252,9 +252,9 @@ impl ExecutionPlan for DataSinkExec {
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(Self::new(
-            children[0].clone(),
-            self.sink.clone(),
-            self.sink_schema.clone(),
+            Arc::clone(&children[0]),
+            Arc::clone(&self.sink),
+            Arc::clone(&self.sink_schema),
             self.sort_order.clone(),
         )))
     }
@@ -269,10 +269,10 @@ impl ExecutionPlan for DataSinkExec {
         if partition != 0 {
             return internal_err!("DataSinkExec can only be called on partition 0!");
         }
-        let data = self.execute_input_stream(0, context.clone())?;
+        let data = self.execute_input_stream(0, Arc::clone(&context))?;
 
-        let count_schema = self.count_schema.clone();
-        let sink = self.sink.clone();
+        let count_schema = Arc::clone(&self.count_schema);
+        let sink = Arc::clone(&self.sink);
 
         let stream = futures::stream::once(async move {
             sink.write_all(data, &context).await.map(make_count_batch)

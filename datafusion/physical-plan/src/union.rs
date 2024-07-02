@@ -417,7 +417,7 @@ impl ExecutionPlan for InterleaveExec {
         let mut input_stream_vec = vec![];
         for input in self.inputs.iter() {
             if partition < input.output_partitioning().partition_count() {
-                input_stream_vec.push(input.execute(partition, context.clone())?);
+                input_stream_vec.push(input.execute(partition, Arc::clone(&context))?);
             } else {
                 // Do not find a partition to execute
                 break;
@@ -518,7 +518,7 @@ impl CombinedRecordBatchStream {
 
 impl RecordBatchStream for CombinedRecordBatchStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -625,7 +625,7 @@ mod tests {
         in_data
             .iter()
             .map(|(expr, options)| PhysicalSortExpr {
-                expr: (*expr).clone(),
+                expr: Arc::clone(*expr),
                 options: *options,
             })
             .collect::<Vec<_>>()
@@ -810,11 +810,11 @@ mod tests {
                 .map(|ordering| convert_to_sort_exprs(ordering))
                 .collect::<Vec<_>>();
             let child1 = Arc::new(
-                MemoryExec::try_new(&[], schema.clone(), None)?
+                MemoryExec::try_new(&[], Arc::clone(&schema), None)?
                     .with_sort_information(first_orderings),
             );
             let child2 = Arc::new(
-                MemoryExec::try_new(&[], schema.clone(), None)?
+                MemoryExec::try_new(&[], Arc::clone(&schema), None)?
                     .with_sort_information(second_orderings),
             );
 

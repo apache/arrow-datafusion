@@ -16,6 +16,7 @@
 // under the License.
 
 use std::ops::Deref;
+use std::sync::Arc;
 
 use crate::analyzer::check_plan;
 use crate::utils::collect_subquery_cols;
@@ -245,7 +246,7 @@ fn check_aggregation_in_scalar_subquery(
     if !agg.group_expr.is_empty() {
         let correlated_exprs = get_correlated_expressions(inner_plan)?;
         let inner_subquery_cols =
-            collect_subquery_cols(&correlated_exprs, agg.input.schema().clone())?;
+            collect_subquery_cols(&correlated_exprs, Arc::clone(agg.input.schema()))?;
         let mut group_columns = agg
             .group_expr
             .iter()

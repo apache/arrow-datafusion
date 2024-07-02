@@ -348,7 +348,7 @@ impl FileFormat for CsvFormat {
 
         let writer_options = CsvWriterOptions::try_from(&self.options)?;
 
-        let sink_schema = conf.output_schema().clone();
+        let sink_schema = Arc::clone(conf.output_schema());
         let sink = Arc::new(CsvSink::new(conf, writer_options));
 
         Ok(Arc::new(DataSinkExec::new(

@@ -139,7 +139,7 @@ impl DiskManager {
 
         let dir_index = thread_rng().gen_range(0..local_dirs.len());
         Ok(RefCountedTempFile {
-            parent_temp_dir: local_dirs[dir_index].clone(),
+            parent_temp_dir: Arc::clone(&local_dirs[dir_index]),
             tempfile: Builder::new()
                 .tempfile_in(local_dirs[dir_index].as_ref())
                 .map_err(DataFusionError::IoError)?,

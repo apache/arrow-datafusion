@@ -239,7 +239,7 @@ impl SchemaProvider for InformationSchemaProvider {
         };
 
         Ok(Some(Arc::new(
-            StreamingTable::try_new(table.schema().clone(), vec![table]).unwrap(),
+            StreamingTable::try_new(Arc::clone(table.schema()), vec![table]).unwrap(),
         )))
     }
 
@@ -271,7 +271,7 @@ impl InformationSchemaTables {
             schema_names: StringBuilder::new(),
             table_names: StringBuilder::new(),
             table_types: StringBuilder::new(),
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
         }
     }
 }
@@ -285,7 +285,7 @@ impl PartitionStream for InformationSchemaTables {
         let mut builder = self.builder();
         let config = self.config.clone();
         Box::pin(RecordBatchStreamAdapter::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             // TODO: Stream this
             futures::stream::once(async move {
                 config.make_tables(&mut builder).await?;
@@ -327,7 +327,7 @@ impl InformationSchemaTablesBuilder {
 
     fn finish(&mut self) -> RecordBatch {
         RecordBatch::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             vec![
                 Arc::new(self.catalog_names.finish()),
                 Arc::new(self.schema_names.finish()),
@@ -362,7 +362,7 @@ impl InformationSchemaViews {
             schema_names: StringBuilder::new(),
             table_names: StringBuilder::new(),
             definitions: StringBuilder::new(),
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
         }
     }
 }
@@ -376,7 +376,7 @@ impl PartitionStream for InformationSchemaViews {
         let mut builder = self.builder();
         let config = self.config.clone();
         Box::pin(RecordBatchStreamAdapter::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             // TODO: Stream this
             futures::stream::once(async move {
                 config.make_views(&mut builder).await?;
@@ -414,7 +414,7 @@ impl InformationSchemaViewBuilder {
 
     fn finish(&mut self) -> RecordBatch {
         RecordBatch::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             vec![
                 Arc::new(self.catalog_names.finish()),
                 Arc::new(self.schema_names.finish()),
@@ -476,7 +476,7 @@ impl InformationSchemaColumns {
             numeric_scales: UInt64Builder::with_capacity(default_capacity),
             datetime_precisions: UInt64Builder::with_capacity(default_capacity),
             interval_types: StringBuilder::new(),
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
         }
     }
 }
@@ -490,7 +490,7 @@ impl PartitionStream for InformationSchemaColumns {
         let mut builder = self.builder();
         let config = self.config.clone();
         Box::pin(RecordBatchStreamAdapter::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             // TODO: Stream this
             futures::stream::once(async move {
                 config.make_columns(&mut builder).await?;
@@ -619,7 +619,7 @@ impl InformationSchemaColumnsBuilder {
 
     fn finish(&mut self) -> RecordBatch {
         RecordBatch::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             vec![
                 Arc::new(self.catalog_names.finish()),
                 Arc::new(self.schema_names.finish()),
@@ -663,7 +663,7 @@ impl InformationSchemata {
 
     fn builder(&self) -> InformationSchemataBuilder {
         InformationSchemataBuilder {
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
             catalog_name: StringBuilder::new(),
             schema_name: StringBuilder::new(),
             schema_owner: StringBuilder::new(),
@@ -709,7 +709,7 @@ impl InformationSchemataBuilder {
 
     fn finish(&mut self) -> RecordBatch {
         RecordBatch::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             vec![
                 Arc::new(self.catalog_name.finish()),
                 Arc::new(self.schema_name.finish()),
@@ -733,7 +733,7 @@ impl PartitionStream for InformationSchemata {
         let mut builder = self.builder();
         let config = self.config.clone();
         Box::pin(RecordBatchStreamAdapter::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             // TODO: Stream this
             futures::stream::once(async move {
                 config.make_schemata(&mut builder).await;
@@ -764,7 +764,7 @@ impl InformationSchemaDfSettings {
             names: StringBuilder::new(),
             values: StringBuilder::new(),
             descriptions: StringBuilder::new(),
-            schema: self.schema.clone(),
+            schema: Arc::clone(&self.schema),
         }
     }
 }
@@ -778,7 +778,7 @@ impl PartitionStream for InformationSchemaDfSettings {
         let config = self.config.clone();
         let mut builder = self.builder();
         Box::pin(RecordBatchStreamAdapter::new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             // TODO: Stream this
             futures::stream::once(async move {
                 // create a mem table with the names of tables
@@ -805,7 +805,7 @@ impl InformationSchemaDfSettingsBuilder {
 
     fn finish(&mut self) -> RecordBatch {
         RecordBatch::try_new(
-            self.schema.clone(),
+            Arc::clone(&self.schema),
             vec![
                 Arc::new(self.names.finish()),
                 Arc::new(self.values.finish()),

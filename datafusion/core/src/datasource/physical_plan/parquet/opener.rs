@@ -75,13 +75,13 @@ impl FileOpener for ParquetOpener {
             )?;
 
         let batch_size = self.batch_size;
-        let projection = self.projection.clone();
+        let projection = Arc::clone(&self.projection);
         let projected_schema = SchemaRef::from(self.table_schema.project(&projection)?);
         let schema_adapter = self.schema_adapter_factory.create(projected_schema);
         let predicate = self.predicate.clone();
         let pruning_predicate = self.pruning_predicate.clone();
         let page_pruning_predicate = self.page_pruning_predicate.clone();
-        let table_schema = self.table_schema.clone();
+        let table_schema = Arc::clone(&self.table_schema);
         let reorder_predicates = self.reorder_filters;
         let pushdown_filters = self.pushdown_filters;
         let enable_page_index = should_enable_page_index(
@@ -97,7 +97,7 @@ impl FileOpener for ParquetOpener {
                 ParquetRecordBatchStreamBuilder::new_with_options(reader, options)
                     .await?;
 
-            let file_schema = builder.schema().clone();
+            let file_schema = Arc::clone(builder.schema());
 
             let (schema_mapping, adapted_projections) =
                 schema_adapter.map_schema(&file_schema)?;
@@ -135,7 +135,7 @@ impl FileOpener for ParquetOpener {
 
             // Determine which row groups to actually read. The idea is to skip
             // as many row groups as possible based on the metadata and query
-            let file_metadata = builder.metadata().clone();
+            let file_metadata = Arc::clone(builder.metadata());
             let predicate = pruning_predicate.as_ref().map(|p| p.as_ref());
             let rg_metadata = file_metadata.row_groups();
             // track which row groups to actually read

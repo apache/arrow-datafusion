@@ -89,7 +89,7 @@ impl PhysicalExpr for Column {
     /// Evaluate the expression
     fn evaluate(&self, batch: &RecordBatch) -> Result<ColumnarValue> {
         self.bounds_check(batch.schema().as_ref())?;
-        Ok(ColumnarValue::Array(batch.column(self.index).clone()))
+        Ok(ColumnarValue::Array(Arc::clone(batch.column(self.index))))
     }
 
     fn children(&self) -> Vec<&Arc<dyn PhysicalExpr>> {

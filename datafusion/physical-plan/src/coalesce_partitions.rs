@@ -114,7 +114,9 @@ impl ExecutionPlan for CoalescePartitionsExec {
         self: Arc<Self>,
         children: Vec<Arc<dyn ExecutionPlan>>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        Ok(Arc::new(CoalescePartitionsExec::new(children[0].clone())))
+        Ok(Arc::new(CoalescePartitionsExec::new(Arc::clone(
+            &children[0],
+        ))))
     }
 
     fn execute(
@@ -152,7 +154,11 @@ impl ExecutionPlan for CoalescePartitionsExec {
                 // spawn independent tasks whose resulting streams (of batches)
                 // are sent to the channel for consumption.
                 for part_i in 0..input_partitions {
-                    builder.run_input(self.input.clone(), part_i, context.clone());
+                    builder.run_input(
+                        Arc::clone(&self.input),
+                        part_i,
+                        Arc::clone(&context),
+                    );
                 }
 
                 let stream = builder.build();

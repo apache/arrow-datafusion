@@ -140,8 +140,11 @@ impl AggregateStream {
                         let result =
                             finalize_aggregation(&mut this.accumulators, &this.mode)
                                 .and_then(|columns| {
-                                    RecordBatch::try_new(this.schema.clone(), columns)
-                                        .map_err(Into::into)
+                                    RecordBatch::try_new(
+                                        Arc::clone(&this.schema),
+                                        columns,
+                                    )
+                                    .map_err(Into::into)
                                 })
                                 .record_output(&this.baseline_metrics);
 
@@ -181,7 +184,7 @@ impl Stream for AggregateStream {
 
 impl RecordBatchStream for AggregateStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 

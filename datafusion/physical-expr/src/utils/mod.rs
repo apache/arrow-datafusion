@@ -111,7 +111,7 @@ pub fn convert_to_expr<T: Borrow<PhysicalSortExpr>>(
 ) -> Vec<Arc<dyn PhysicalExpr>> {
     sequence
         .into_iter()
-        .map(|elem| elem.borrow().expr.clone())
+        .map(|elem| Arc::clone(&elem.borrow().expr))
         .collect()
 }
 
@@ -166,7 +166,7 @@ impl<'a, T, F: Fn(&ExprTreeNode<NodeIndex>) -> Result<T>>
                 for expr_node in node.children.iter() {
                     self.graph.add_edge(node_idx, expr_node.data.unwrap(), 0);
                 }
-                self.visited_plans.push((expr.clone(), node_idx));
+                self.visited_plans.push((Arc::clone(expr), node_idx));
                 node_idx
             }
         };
@@ -379,7 +379,7 @@ pub(crate) mod tests {
     }
 
     fn make_dummy_node(node: &ExprTreeNode<NodeIndex>) -> Result<PhysicalExprDummyNode> {
-        let expr = node.expr.clone();
+        let expr = Arc::clone(&node.expr);
         let dummy_property = if expr.as_any().is::<BinaryExpr>() {
             "Binary"
         } else if expr.as_any().is::<Column>() {

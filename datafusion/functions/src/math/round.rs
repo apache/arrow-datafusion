@@ -111,7 +111,7 @@ pub fn round(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut decimal_places = ColumnarValue::Scalar(ScalarValue::Int64(Some(0)));
 
     if args.len() == 2 {
-        decimal_places = ColumnarValue::Array(args[1].clone());
+        decimal_places = ColumnarValue::Array(Arc::clone(&args[1]));
     }
 
     match args[0].data_type() {

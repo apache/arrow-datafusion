@@ -117,7 +117,7 @@ fn trunc(args: &[ArrayRef]) -> Result<ArrayRef> {
     let precision = if args.len() == 1 {
         ColumnarValue::Scalar(Int64(Some(0)))
     } else {
-        ColumnarValue::Array(args[1].clone())
+        ColumnarValue::Array(Arc::clone(&args[1]))
     };
 
     match args[0].data_type() {

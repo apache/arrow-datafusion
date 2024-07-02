@@ -163,7 +163,7 @@ impl WindowExpr for SlidingAggregateWindowExpr {
             aggregate: self.aggregate.with_new_expressions(args, vec![])?,
             partition_by: partition_bys,
             order_by: new_order_by,
-            window_frame: self.window_frame.clone(),
+            window_frame: Arc::clone(&self.window_frame),
         }))
     }
 }

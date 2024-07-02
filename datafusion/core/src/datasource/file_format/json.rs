@@ -244,7 +244,7 @@ impl FileFormat for JsonFormat {
 
         let writer_options = JsonWriterOptions::try_from(&self.options)?;
 
-        let sink_schema = conf.output_schema().clone();
+        let sink_schema = Arc::clone(conf.output_schema());
         let sink = Arc::new(JsonSink::new(conf, writer_options));
 
         Ok(Arc::new(DataSinkExec::new(

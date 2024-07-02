@@ -105,7 +105,7 @@ pub fn reverse_order_bys(order_bys: &[PhysicalSortExpr]) -> Vec<PhysicalSortExpr
     order_bys
         .iter()
         .map(|e| PhysicalSortExpr {
-            expr: e.expr.clone(),
+            expr: Arc::clone(&e.expr),
             options: !e.options,
         })
         .collect()

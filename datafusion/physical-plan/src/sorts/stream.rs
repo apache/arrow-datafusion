@@ -109,7 +109,7 @@ impl RowCursorStream {
         Ok(Self {
             converter,
             reservation,
-            column_expressions: expressions.iter().map(|x| x.expr.clone()).collect(),
+            column_expressions: expressions.iter().map(|x| Arc::clone(&x.expr)).collect(),
             streams: FusedStreams(streams),
         })
     }

@@ -21,6 +21,7 @@ use datafusion_common::tree_node::Transformed;
 use datafusion_common::{Result, ScalarValue};
 use datafusion_expr::logical_plan::tree_node::unwrap_arc;
 use datafusion_expr::{EmptyRelation, Expr, Filter, LogicalPlan};
+use std::sync::Arc;
 
 use crate::optimizer::ApplyOrder;
 use crate::{OptimizerConfig, OptimizerRule};
@@ -68,7 +69,7 @@ impl OptimizerRule for EliminateFilter {
                 Some(false) | None => Ok(Transformed::yes(LogicalPlan::EmptyRelation(
                     EmptyRelation {
                         produce_one_row: false,
-                        schema: input.schema().clone(),
+                        schema: Arc::clone(input.schema()),
                     },
                 ))),
             },

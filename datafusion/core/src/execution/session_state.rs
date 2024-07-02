@@ -339,8 +339,13 @@ impl SessionState {
             Some(factory) => factory,
             _ => return,
         };
-        let schema =
-            ListingSchemaProvider::new(authority, path, factory.clone(), store, format);
+        let schema = ListingSchemaProvider::new(
+            authority,
+            path,
+            Arc::clone(factory),
+            store,
+            format,
+        );
         let _ = default_catalog
             .register_schema("default", Arc::new(schema))
             .expect("Failed to register default schema");
@@ -363,9 +368,9 @@ impl SessionState {
         let resolved_ref = self.resolve_table_ref(table_ref);
         if self.config.information_schema() && *resolved_ref.schema == *INFORMATION_SCHEMA
         {
-            return Ok(Arc::new(InformationSchemaProvider::new(
-                self.catalog_list.clone(),
-            )));
+            return Ok(Arc::new(InformationSchemaProvider::new(Arc::clone(
+                &self.catalog_list,
+            ))));
         }
 
         self.catalog_list
@@ -686,9 +691,9 @@ impl SessionState {
 
                     return Ok(LogicalPlan::Explain(Explain {
                         verbose: e.verbose,
-                        plan: e.plan.clone(),
+                        plan: Arc::clone(&e.plan),
                         stringified_plans,
-                        schema: e.schema.clone(),
+                        schema: Arc::clone(&e.schema),
                         logical_optimization_succeeded: false,
                     }));
                 }
@@ -715,7 +720,7 @@ impl SessionState {
                     let plan_type = PlanType::OptimizedLogicalPlan { optimizer_name };
                     stringified_plans
                         .push(StringifiedPlan::new(plan_type, err.to_string()));
-                    (e.plan.clone(), false)
+                    (Arc::clone(&e.plan), false)
                 }
                 Err(e) => return Err(e),
             };
@@ -724,7 +729,7 @@ impl SessionState {
                 verbose: e.verbose,
                 plan,
                 stringified_plans,
-                schema: e.schema.clone(),
+                schema: Arc::clone(&e.schema),
                 logical_optimization_succeeded,
             }))
         } else {
@@ -940,7 +945,7 @@ impl SessionState {
         name: &str,
     ) -> datafusion_common::Result<Option<Arc<dyn TableFunctionImpl>>> {
         let udtf = self.table_functions.remove(name);
-        Ok(udtf.map(|x| x.function().clone()))
+        Ok(udtf.map(|x| Arc::clone(x.function())))
     }
 
     fn build_sql_query_planner<'a, S>(&self, provider: &'a S) -> SqlToRel<'a, S>
@@ -1067,7 +1072,7 @@ impl<'a> ContextProvider for SessionContextProvider<'a> {
             .ok_or(plan_datafusion_err!(
                 "There is no registered file format with ext {ext}"
             ))
-            .map(|file_type| format_as_file_type(file_type.clone()))
+            .map(|file_type| format_as_file_type(Arc::clone(file_type)))
     }
 }
 
@@ -1105,7 +1110,8 @@ impl FunctionRegistry for SessionState {
         udf: Arc<ScalarUDF>,
     ) -> datafusion_common::Result<Option<Arc<ScalarUDF>>> {
         udf.aliases().iter().for_each(|alias| {
-            self.scalar_functions.insert(alias.clone(), udf.clone());
+            self.scalar_functions
+                .insert(alias.clone(), Arc::clone(&udf));
         });
         Ok(self.scalar_functions.insert(udf.name().into(), udf))
     }
@@ -1115,7 +1121,8 @@ impl FunctionRegistry for SessionState {
         udaf: Arc<AggregateUDF>,
     ) -> datafusion_common::Result<Option<Arc<AggregateUDF>>> {
         udaf.aliases().iter().for_each(|alias| {
-            self.aggregate_functions.insert(alias.clone(), udaf.clone());
+            self.aggregate_functions
+                .insert(alias.clone(), Arc::clone(&udaf));
         });
         Ok(self.aggregate_functions.insert(udaf.name().into(), udaf))
     }
@@ -1125,7 +1132,8 @@ impl FunctionRegistry for SessionState {
         udwf: Arc<WindowUDF>,
     ) -> datafusion_common::Result<Option<Arc<WindowUDF>>> {
         udwf.aliases().iter().for_each(|alias| {
-            self.window_functions.insert(alias.clone(), udwf.clone());
+            self.window_functions
+                .insert(alias.clone(), Arc::clone(&udwf));
         });
         Ok(self.window_functions.insert(udwf.name().into(), udwf))
     }
@@ -1184,7 +1192,7 @@ impl OptimizerConfig for SessionState {
     }
 
     fn alias_generator(&self) -> Arc<AliasGenerator> {
-        self.execution_props.alias_generator.clone()
+        Arc::clone(&self.execution_props.alias_generator)
     }
 
     fn options(&self) -> &ConfigOptions {
@@ -1207,7 +1215,7 @@ impl From<&SessionState> for TaskContext {
             state.scalar_functions.clone(),
             state.aggregate_functions.clone(),
             state.window_functions.clone(),
-            state.runtime_env.clone(),
+            Arc::clone(&state.runtime_env),
         )
     }
 }

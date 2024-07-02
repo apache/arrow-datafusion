@@ -359,7 +359,7 @@ impl FileFormat for ParquetFormat {
             return not_impl_err!("Overwrites are not implemented yet for Parquet");
         }
 
-        let sink_schema = conf.output_schema().clone();
+        let sink_schema = Arc::clone(conf.output_schema());
         let sink = Arc::new(ParquetSink::new(conf, self.options.clone()));
 
         Ok(Arc::new(DataSinkExec::new(
@@ -645,7 +645,7 @@ impl ParquetSink {
                     .collect::<Vec<_>>(),
             ))
         } else {
-            self.config.output_schema().clone()
+            Arc::clone(self.config.output_schema())
         }
     }
 
@@ -730,7 +730,7 @@ impl DataSink for ParquetSink {
                 let mut writer = self
                     .create_async_arrow_writer(
                         &path,
-                        object_store.clone(),
+                        Arc::clone(&object_store),
                         parquet_props.writer_options().clone(),
                     )
                     .await?;
@@ -750,7 +750,7 @@ impl DataSink for ParquetSink {
                     // manage compressed blocks themselves.
                     FileCompressionType::UNCOMPRESSED,
                     &path,
-                    object_store.clone(),
+                    Arc::clone(&object_store),
                 )
                 .await?;
                 let schema = self.get_writer_schema();
@@ -913,8 +913,8 @@ fn spawn_parquet_parallel_serialization_task(
         let max_row_group_rows = writer_props.max_row_group_size();
         let (mut column_writer_handles, mut col_array_channels) =
             spawn_column_parallel_row_group_writer(
-                schema.clone(),
-                writer_props.clone(),
+                Arc::clone(&schema),
+                Arc::clone(&writer_props),
                 max_buffer_rb,
             )?;
         let mut current_rg_rows = 0;
@@ -925,15 +925,23 @@ fn spawn_parquet_parallel_serialization_task(
             // function.
             loop {
                 if current_rg_rows + rb.num_rows() < max_row_group_rows {
-                    send_arrays_to_col_writers(&col_array_channels, &rb, schema.clone())
-                        .await?;
+                    send_arrays_to_col_writers(
+                        &col_array_channels,
+                        &rb,
+                        Arc::clone(&schema),
+                    )
+                    .await?;
                     current_rg_rows += rb.num_rows();
                     break;
                 } else {
                     let rows_left = max_row_group_rows - current_rg_rows;
                     let a = rb.slice(0, rows_left);
-                    send_arrays_to_col_writers(&col_array_channels, &a, schema.clone())
-                        .await?;
+                    send_arrays_to_col_writers(
+                        &col_array_channels,
+                        &a,
+                        Arc::clone(&schema),
+                    )
+                    .await?;
 
                     // Signal the parallel column writers that the RowGroup is done, join and finalize RowGroup
                     // on a separate task, so that we can immediately start on the next RG before waiting
@@ -955,8 +963,8 @@ fn spawn_parquet_parallel_serialization_task(
 
                     (column_writer_handles, col_array_channels) =
                         spawn_column_parallel_row_group_writer(
-                            schema.clone(),
-                            writer_props.clone(),
+                            Arc::clone(&schema),
+                            Arc::clone(&writer_props),
                             max_buffer_rb,
                         )?;
                 }
@@ -1043,14 +1051,14 @@ async fn output_single_parquet_file_parallelized(
     let launch_serialization_task = spawn_parquet_parallel_serialization_task(
         data,
         serialize_tx,
-        output_schema.clone(),
-        arc_props.clone(),
+        Arc::clone(&output_schema),
+        Arc::clone(&arc_props),
         parallel_options,
     );
     let file_metadata = concatenate_parallel_row_groups(
         serialize_rx,
-        output_schema.clone(),
-        arc_props.clone(),
+        output_schema,
+        arc_props,
         object_store_writer,
     )
     .await?;

@@ -29,6 +29,7 @@ use datafusion_common::Result;
 use datafusion_execution::memory_pool::MemoryReservation;
 use futures::Stream;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{ready, Context, Poll};
 
 /// A fallible [`PartitionedStream`] of [`Cursor`] and [`RecordBatch`]
@@ -324,6 +325,6 @@ impl<C: CursorValues + Unpin> Stream for SortPreservingMergeStream<C> {
 
 impl<C: CursorValues + Unpin> RecordBatchStream for SortPreservingMergeStream<C> {
     fn schema(&self) -> SchemaRef {
-        self.in_progress.schema().clone()
+        Arc::clone(self.in_progress.schema())
     }
 }

@@ -155,7 +155,7 @@ impl SchemaAdapter for DefaultSchemaAdapter {
 
         Ok((
             Arc::new(SchemaMapping {
-                table_schema: self.table_schema.clone(),
+                table_schema: Arc::clone(&self.table_schema),
                 field_mappings,
             }),
             projection,
@@ -193,7 +193,7 @@ impl SchemaMapper for SchemaMapping {
         // Necessary to handle empty batches
         let options = RecordBatchOptions::new().with_row_count(Some(batch.num_rows()));
 
-        let schema = self.table_schema.clone();
+        let schema = Arc::clone(&self.table_schema);
         let record_batch = RecordBatch::try_new_with_options(schema, cols, &options)?;
         Ok(record_batch)
     }

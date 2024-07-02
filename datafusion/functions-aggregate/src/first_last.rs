@@ -247,7 +247,7 @@ impl FirstValueAccumulator {
             .iter()
             .zip(self.ordering_req.iter())
             .map(|(values, req)| SortColumn {
-                values: values.clone(),
+                values: Arc::clone(values),
                 options: Some(req.options),
             })
             .collect::<Vec<_>>();
@@ -547,7 +547,7 @@ impl LastValueAccumulator {
                 // Take the reverse ordering requirement. This enables us to
                 // use "fetch = 1" to get the last value.
                 SortColumn {
-                    values: values.clone(),
+                    values: Arc::clone(values),
                     options: Some(!req.options),
                 }
             })
@@ -676,7 +676,7 @@ fn convert_to_sort_cols(
     arrs.iter()
         .zip(sort_exprs.iter())
         .map(|(item, sort_expr)| SortColumn {
-            values: item.clone(),
+            values: Arc::clone(item),
             options: Some(sort_expr.options),
         })
         .collect::<Vec<_>>()
@@ -707,7 +707,7 @@ mod tests {
         for arr in arrs {
             // Once first_value is set, accumulator should remember it.
             // It shouldn't update first_value for each new batch
-            first_accumulator.update_batch(&[arr.clone()])?;
+            first_accumulator.update_batch(&[Arc::clone(&arr)])?;
             // last_value should be updated for each new batch.
             last_accumulator.update_batch(&[arr])?;
         }
@@ -733,12 +733,12 @@ mod tests {
         let mut first_accumulator =
             FirstValueAccumulator::try_new(&DataType::Int64, &[], vec![], false)?;
 
-        first_accumulator.update_batch(&[arrs[0].clone()])?;
+        first_accumulator.update_batch(&[Arc::clone(&arrs[0])])?;
         let state1 = first_accumulator.state()?;
 
         let mut first_accumulator =
             FirstValueAccumulator::try_new(&DataType::Int64, &[], vec![], false)?;
-        first_accumulator.update_batch(&[arrs[1].clone()])?;
+        first_accumulator.update_batch(&[Arc::clone(&arrs[1])])?;
         let state2 = first_accumulator.state()?;
 
         assert_eq!(state1.len(), state2.len());
@@ -763,12 +763,12 @@ mod tests {
         let mut last_accumulator =
             LastValueAccumulator::try_new(&DataType::Int64, &[], vec![], false)?;
 
-        last_accumulator.update_batch(&[arrs[0].clone()])?;
+        last_accumulator.update_batch(&[Arc::clone(&arrs[0])])?;
         let state1 = last_accumulator.state()?;
 
         let mut last_accumulator =
             LastValueAccumulator::try_new(&DataType::Int64, &[], vec![], false)?;
-        last_accumulator.update_batch(&[arrs[1].clone()])?;
+        last_accumulator.update_batch(&[Arc::clone(&arrs[1])])?;
         let state2 = last_accumulator.state()?;
 
         assert_eq!(state1.len(), state2.len());

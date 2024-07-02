@@ -74,7 +74,7 @@ impl AggregateExpr for Grouping {
     }
 
     fn expressions(&self) -> Vec<Arc<dyn PhysicalExpr>> {
-        vec![self.expr.clone()]
+        vec![Arc::clone(&self.expr)]
     }
 
     fn create_accumulator(&self) -> Result<Box<dyn Accumulator>> {

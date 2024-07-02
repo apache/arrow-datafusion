@@ -84,14 +84,14 @@ impl GroupedTopKAggregateStream {
 
 impl RecordBatchStream for GroupedTopKAggregateStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
 impl GroupedTopKAggregateStream {
     fn intern(&mut self, ids: ArrayRef, vals: ArrayRef) -> Result<()> {
         let len = ids.len();
-        self.priority_map.set_batch(ids, vals.clone());
+        self.priority_map.set_batch(ids, Arc::clone(&vals));
 
         let has_nulls = vals.null_count() > 0;
         for row_idx in 0..len {
@@ -139,14 +139,14 @@ impl Stream for GroupedTopKAggregateStream {
                         1,
                         "Exactly 1 group value required"
                     );
-                    let group_by_values = group_by_values[0][0].clone();
+                    let group_by_values = Arc::clone(&group_by_values[0][0]);
                     let input_values = evaluate_many(
                         &self.aggregate_arguments,
                         batches.first().unwrap(),
                     )?;
                     assert_eq!(input_values.len(), 1, "Exactly 1 input required");
                     assert_eq!(input_values[0].len(), 1, "Exactly 1 input required");
-                    let input_values = input_values[0][0].clone();
+                    let input_values = Arc::clone(&input_values[0][0]);
 
                     // iterate over each column of group_by values
                     (*self).intern(group_by_values, input_values)?;
@@ -158,7 +158,7 @@ impl Stream for GroupedTopKAggregateStream {
                         return Poll::Ready(None);
                     }
                     let cols = self.priority_map.emit()?;
-                    let batch = RecordBatch::try_new(self.schema.clone(), cols)?;
+                    let batch = RecordBatch::try_new(Arc::clone(&self.schema), cols)?;
                     trace!(
                         "partition {} emit batch with {} rows",
                         self.partition,

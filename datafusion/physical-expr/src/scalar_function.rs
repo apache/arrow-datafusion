@@ -153,7 +153,7 @@ impl PhysicalExpr for ScalarFunctionExpr {
     ) -> Result<Arc<dyn PhysicalExpr>> {
         Ok(Arc::new(ScalarFunctionExpr::new(
             &self.name,
-            self.fun.clone(),
+            Arc::clone(&self.fun),
             children,
             self.return_type().clone(),
         )))

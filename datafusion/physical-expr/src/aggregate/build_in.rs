@@ -61,12 +61,12 @@ pub fn create_aggregate_expr(
     let input_phy_exprs = input_phy_exprs.to_vec();
     Ok(match (fun, distinct) {
         (AggregateFunction::Grouping, _) => Arc::new(expressions::Grouping::new(
-            input_phy_exprs[0].clone(),
+            Arc::clone(&input_phy_exprs[0]),
             name,
             data_type,
         )),
         (AggregateFunction::ArrayAgg, false) => {
-            let expr = input_phy_exprs[0].clone();
+            let expr = Arc::clone(&input_phy_exprs[0]);
             let nullable = expr.nullable(input_schema)?;
 
             if ordering_req.is_empty() {
@@ -88,7 +88,7 @@ pub fn create_aggregate_expr(
                     "ARRAY_AGG(DISTINCT ORDER BY a ASC) order-sensitive aggregations are not available"
                 );
             }
-            let expr = input_phy_exprs[0].clone();
+            let expr = Arc::clone(&input_phy_exprs[0]);
             let is_expr_nullable = expr.nullable(input_schema)?;
             Arc::new(expressions::DistinctArrayAgg::new(
                 expr,
@@ -98,12 +98,12 @@ pub fn create_aggregate_expr(
             ))
         }
         (AggregateFunction::Min, _) => Arc::new(expressions::Min::new(
-            input_phy_exprs[0].clone(),
+            Arc::clone(&input_phy_exprs[0]),
             name,
             data_type,
         )),
         (AggregateFunction::Max, _) => Arc::new(expressions::Max::new(
-            input_phy_exprs[0].clone(),
+            Arc::clone(&input_phy_exprs[0]),
             name,
             data_type,
         )),
@@ -118,7 +118,7 @@ pub fn create_aggregate_expr(
             };
             let nullable = expr.nullable(input_schema)?;
             Arc::new(expressions::NthValueAgg::new(
-                expr.clone(),
+                Arc::clone(expr),
                 n.clone().try_into()?,
                 name,
                 input_phy_types[0].clone(),
@@ -325,7 +325,7 @@ mod tests {
         input_exprs
             .iter()
             .zip(coerced_types)
-            .map(|(expr, coerced_type)| try_cast(expr.clone(), schema, coerced_type))
+            .map(|(expr, coerced_type)| try_cast(Arc::clone(expr), schema, coerced_type))
             .collect::<Result<Vec<_>>>()
     }
 }

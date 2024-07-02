@@ -213,7 +213,7 @@ fn array_distinct_inner(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     // handle null
     if args[0].data_type() == &Null {
-        return Ok(args[0].clone());
+        return Ok(Arc::clone(&args[0]));
     }
 
     // handle for list & largelist
@@ -314,7 +314,7 @@ fn generic_set_lists<OffsetSize: OffsetSizeTrait>(
             offsets.push(last_offset + OffsetSize::usize_as(rows.len()));
             let arrays = converter.convert_rows(rows)?;
             let array = match arrays.first() {
-                Some(array) => array.clone(),
+                Some(array) => Arc::clone(array),
                 None => {
                     return internal_err!("{set_op}: failed to get array from rows");
                 }
@@ -370,12 +370,12 @@ fn general_set_op(
         (List(field), List(_)) => {
             let array1 = as_list_array(&array1)?;
             let array2 = as_list_array(&array2)?;
-            generic_set_lists::<i32>(array1, array2, field.clone(), set_op)
+            generic_set_lists::<i32>(array1, array2, Arc::clone(field), set_op)
         }
         (LargeList(field), LargeList(_)) => {
             let array1 = as_large_list_array(&array1)?;
             let array2 = as_large_list_array(&array2)?;
-            generic_set_lists::<i64>(array1, array2, field.clone(), set_op)
+            generic_set_lists::<i64>(array1, array2, Arc::clone(field), set_op)
         }
         (data_type1, data_type2) => {
             internal_err!(
@@ -426,7 +426,7 @@ fn general_array_distinct<OffsetSize: OffsetSizeTrait>(
         offsets.push(last_offset + OffsetSize::usize_as(rows.len()));
         let arrays = converter.convert_rows(rows)?;
         let array = match arrays.first() {
-            Some(array) => array.clone(),
+            Some(array) => Arc::clone(array),
             None => {
                 return internal_err!("array_distinct: failed to get array from rows")
             }
@@ -437,7 +437,7 @@ fn general_array_distinct<OffsetSize: OffsetSizeTrait>(
     let new_arrays_ref = new_arrays.iter().map(|v| v.as_ref()).collect::<Vec<_>>();
     let values = compute::concat(&new_arrays_ref)?;
     Ok(Arc::new(GenericListArray::<OffsetSize>::try_new(
-        field.clone(),
+        Arc::clone(field),
         offsets,
         values,
         None,

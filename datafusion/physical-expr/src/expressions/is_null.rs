@@ -91,7 +91,7 @@ impl PhysicalExpr for IsNullExpr {
         self: Arc<Self>,
         children: Vec<Arc<dyn PhysicalExpr>>,
     ) -> Result<Arc<dyn PhysicalExpr>> {
-        Ok(Arc::new(IsNullExpr::new(children[0].clone())))
+        Ok(Arc::new(IsNullExpr::new(Arc::clone(&children[0]))))
     }
 
     fn dyn_hash(&self, state: &mut dyn Hasher) {

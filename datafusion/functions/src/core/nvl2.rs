@@ -24,6 +24,7 @@ use datafusion_expr::{
     type_coercion::binary::comparison_coercion, ColumnarValue, ScalarUDFImpl, Signature,
     Volatility,
 };
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct NVL2Func {
@@ -112,7 +113,7 @@ fn nvl2_func(args: &[ColumnarValue]) -> Result<ColumnarValue> {
             .iter()
             .map(|arg| match arg {
                 ColumnarValue::Scalar(scalar) => scalar.to_array_of_size(len),
-                ColumnarValue::Array(array) => Ok(array.clone()),
+                ColumnarValue::Array(array) => Ok(Arc::clone(array)),
             })
             .collect::<Result<Vec<_>>>()?;
         let to_apply = is_not_null(&args[0])?;

@@ -598,7 +598,7 @@ fn coerced_from<'a>(
                             Arc::new(f_into.as_ref().clone().with_data_type(data_type));
                         Some(FixedSizeList(new_field, *size_from))
                     }
-                    Some(_) => Some(FixedSizeList(f_into.clone(), *size_from)),
+                    Some(_) => Some(FixedSizeList(Arc::clone(f_into), *size_from)),
                     _ => None,
                 }
             }
@@ -607,7 +607,7 @@ fn coerced_from<'a>(
         (Timestamp(unit, Some(tz)), _) if tz.as_ref() == TIMEZONE_WILDCARD => {
             match type_from {
                 Timestamp(_, Some(from_tz)) => {
-                    Some(Timestamp(unit.clone(), Some(from_tz.clone())))
+                    Some(Timestamp(unit.clone(), Some(Arc::clone(from_tz))))
                 }
                 Null | Date32 | Utf8 | LargeUtf8 | Timestamp(_, None) => {
                     // In the absence of any other information assume the time zone is "+00" (UTC).
@@ -715,12 +715,12 @@ mod tests {
     fn test_fixed_list_wildcard_coerce() -> Result<()> {
         let inner = Arc::new(Field::new("item", DataType::Int32, false));
         let current_types = vec![
-            DataType::FixedSizeList(inner.clone(), 2), // able to coerce for any size
+            DataType::FixedSizeList(Arc::clone(&inner), 2), // able to coerce for any size
         ];
 
         let signature = Signature::exact(
             vec![DataType::FixedSizeList(
-                inner.clone(),
+                Arc::clone(&inner),
                 FIXED_SIZE_LIST_WILDCARD,
             )],
             Volatility::Stable,
@@ -731,7 +731,7 @@ mod tests {
 
         // make sure it can't coerce to a different size
         let signature = Signature::exact(
-            vec![DataType::FixedSizeList(inner.clone(), 3)],
+            vec![DataType::FixedSizeList(Arc::clone(&inner), 3)],
             Volatility::Stable,
         );
         let coerced_data_types = data_types(&current_types, &signature);
@@ -739,7 +739,7 @@ mod tests {
 
         // make sure it works with the same type.
         let signature = Signature::exact(
-            vec![DataType::FixedSizeList(inner.clone(), 2)],
+            vec![DataType::FixedSizeList(Arc::clone(&inner), 2)],
             Volatility::Stable,
         );
         let coerced_data_types = data_types(&current_types, &signature).unwrap();

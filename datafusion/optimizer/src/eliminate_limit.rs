@@ -21,6 +21,7 @@ use crate::{OptimizerConfig, OptimizerRule};
 use datafusion_common::tree_node::Transformed;
 use datafusion_common::Result;
 use datafusion_expr::logical_plan::{tree_node::unwrap_arc, EmptyRelation, LogicalPlan};
+use std::sync::Arc;
 
 /// Optimizer rule to replace `LIMIT 0` or `LIMIT` whose ancestor LIMIT's skip is
 /// greater than or equal to current's fetch
@@ -67,7 +68,7 @@ impl OptimizerRule for EliminateLimit {
                         return Ok(Transformed::yes(LogicalPlan::EmptyRelation(
                             EmptyRelation {
                                 produce_one_row: false,
-                                schema: limit.input.schema().clone(),
+                                schema: Arc::clone(limit.input.schema()),
                             },
                         )));
                     }

@@ -382,7 +382,7 @@ where
     S: Stream<Item = Result<RecordBatch>>,
 {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -402,7 +402,7 @@ impl EmptyRecordBatchStream {
 
 impl RecordBatchStream for EmptyRecordBatchStream {
     fn schema(&self) -> SchemaRef {
-        self.schema.clone()
+        Arc::clone(&self.schema)
     }
 }
 
@@ -474,7 +474,7 @@ mod test {
         let schema = schema();
 
         let num_partitions = 10;
-        let input = PanicExec::new(schema.clone(), num_partitions);
+        let input = PanicExec::new(Arc::clone(&schema), num_partitions);
         consume(input, 10).await
     }
 
@@ -485,7 +485,7 @@ mod test {
 
         // make 2 partitions, second partition panics before the first
         let num_partitions = 2;
-        let input = PanicExec::new(schema.clone(), num_partitions)
+        let input = PanicExec::new(Arc::clone(&schema), num_partitions)
             .with_partition_panic(0, 10)
             .with_partition_panic(1, 3); // partition 1 should panic first (after 3 )
 
@@ -504,12 +504,12 @@ mod test {
         let schema = schema();
 
         // Make an input that never proceeds
-        let input = BlockingExec::new(schema.clone(), 1);
+        let input = BlockingExec::new(Arc::clone(&schema), 1);
         let refs = input.refs();
 
         // Configure a RecordBatchReceiverStream to consume the input
         let mut builder = RecordBatchReceiverStream::builder(schema, 2);
-        builder.run_input(Arc::new(input), 0, task_ctx.clone());
+        builder.run_input(Arc::new(input), 0, Arc::clone(&task_ctx));
         let stream = builder.build();
 
         // input should still be present
@@ -529,12 +529,14 @@ mod test {
         let schema = schema();
 
         // make an input that will error twice
-        let error_stream =
-            MockExec::new(vec![exec_err!("Test1"), exec_err!("Test2")], schema.clone())
-                .with_use_task(false);
+        let error_stream = MockExec::new(
+            vec![exec_err!("Test1"), exec_err!("Test2")],
+            Arc::clone(&schema),
+        )
+        .with_use_task(false);
 
         let mut builder = RecordBatchReceiverStream::builder(schema, 2);
-        builder.run_input(Arc::new(error_stream), 0, task_ctx.clone());
+        builder.run_input(Arc::new(error_stream), 0, Arc::clone(&task_ctx));
         let mut stream = builder.build();
 
         // get the first result, which should be an error
@@ -560,7 +562,11 @@ mod test {
         let mut builder =
             RecordBatchReceiverStream::builder(input.schema(), num_partitions);
         for partition in 0..num_partitions {
-            builder.run_input(input.clone(), partition, task_ctx.clone());
+            builder.run_input(
+                Arc::clone(&input) as Arc<dyn ExecutionPlan>,
+                partition,
+                Arc::clone(&task_ctx),
+            );
         }
         let mut stream = builder.build();
 

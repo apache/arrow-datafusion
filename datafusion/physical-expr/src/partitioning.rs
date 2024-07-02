@@ -169,11 +169,11 @@ impl Partitioning {
                             if !eq_groups.is_empty() {
                                 let normalized_required_exprs = required_exprs
                                     .iter()
-                                    .map(|e| eq_groups.normalize_expr(e.clone()))
+                                    .map(|e| eq_groups.normalize_expr(Arc::clone(e)))
                                     .collect::<Vec<_>>();
                                 let normalized_partition_exprs = partition_exprs
                                     .iter()
-                                    .map(|e| eq_groups.normalize_expr(e.clone()))
+                                    .map(|e| eq_groups.normalize_expr(Arc::clone(e)))
                                     .collect::<Vec<_>>();
                                 return physical_exprs_equal(
                                     &normalized_required_exprs,

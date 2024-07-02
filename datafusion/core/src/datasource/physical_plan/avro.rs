@@ -51,7 +51,7 @@ impl AvroExec {
         let (projected_schema, projected_statistics, projected_output_ordering) =
             base_config.project();
         let cache = Self::compute_properties(
-            projected_schema.clone(),
+            Arc::clone(&projected_schema),
             &projected_output_ordering,
             &base_config,
         );
@@ -188,7 +188,7 @@ mod private {
         fn open<R: std::io::Read>(&self, reader: R) -> Result<AvroReader<'static, R>> {
             AvroReader::try_new(
                 reader,
-                self.schema.clone(),
+                Arc::clone(&self.schema),
                 self.batch_size,
                 self.projection.clone(),
             )
@@ -201,7 +201,7 @@ mod private {
 
     impl FileOpener for AvroOpener {
         fn open(&self, file_meta: FileMeta) -> Result<FileOpenFuture> {
-            let config = self.config.clone();
+            let config = Arc::clone(&self.config);
             Ok(Box::pin(async move {
                 let r = config.object_store.get(file_meta.location()).await?;
                 match r.payload {
