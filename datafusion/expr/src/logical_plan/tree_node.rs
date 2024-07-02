@@ -371,6 +371,7 @@ impl TreeNode for LogicalPlan {
 
 /// Converts a `Arc<LogicalPlan>` without copying, if possible. Copies the plan
 /// if there is a shared reference
+#[inline(always)]
 pub fn unwrap_arc(plan: Arc<LogicalPlan>) -> LogicalPlan {
     Arc::try_unwrap(plan)
         // if None is returned, there is another reference to this
