@@ -202,6 +202,18 @@ SELECT id, CAST(string_col AS varchar) FROM alltypes_plain
 0 0
 1 1
 
+query IT
+SELECT id, CAST(string_col AS varchar) FROM '../../parquet-testing/data/alltypes_plain.parquet';
+----
+4 0
+5 1
+6 0
+7 1
+2 0
+3 1
+0 0
+1 1
+
 # Clean up
 statement ok
 DROP TABLE alltypes_plain;

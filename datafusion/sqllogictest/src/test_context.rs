@@ -90,12 +90,17 @@ impl TestContext {
                 {
                     info!("Registering avro tables");
                     register_avro_tables(&mut test_ctx).await;
+                    test_ctx.ctx.enable_url_table().ok();
                 }
                 #[cfg(not(feature = "avro"))]
                 {
                     info!("Skipping {file_name} because avro feature is not enabled");
                     return None;
                 }
+            }
+            "describe.slt" | "arrow_files.slt" | "csv_files.slt" | "json.slt"
+            | "parquet.slt" => {
+                test_ctx.ctx.enable_url_table().ok();
             }
             "joins.slt" => {
                 info!("Registering partition table tables");

@@ -45,6 +45,22 @@ SELECT a, b FROM json_test
 5 -3.5
 7 -3.5
 
+query IR rowsort
+SELECT a, b FROM '../core/tests/data/2.json'
+----
+-10 -3.5
+1 -3.5
+1 0.6
+1 0.6
+1 2
+1 2
+1 2
+1 2
+100000000000000 0.6
+2 0.6
+5 -3.5
+7 -3.5
+
 query TT
 EXPLAIN SELECT count(*) from json_test
 ----

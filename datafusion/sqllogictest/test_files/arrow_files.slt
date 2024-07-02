@@ -43,6 +43,14 @@ SELECT * FROM arrow_simple
 3 baz false
 4 NULL true
 
+query ITB
+SELECT * FROM '../core/tests/data/example.arrow';
+----
+1 foo true
+2 bar NULL
+3 baz false
+4 NULL true
+
 # ARROW partitioned table
 statement ok
 CREATE EXTERNAL TABLE arrow_partitioned (
@@ -63,6 +71,13 @@ SELECT * FROM arrow_partitioned ORDER BY f0;
 2 bar false 123
 3 baz true 456
 4 NULL NULL 456
+
+# dynamic select arrow file in the folder
+query ITB
+SELECT * FROM '../core/tests/data/partitioned_table_arrow/part=123' ORDER BY f0;
+----
+1 foo true
+2 bar false
 
 # select all fields
 query IITB

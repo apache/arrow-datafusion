@@ -52,7 +52,7 @@ use arrow::record_batch::RecordBatch;
 use arrow_schema::Schema;
 use datafusion_common::{
     config::{ConfigExtension, TableOptions},
-    exec_err, not_impl_err, plan_datafusion_err, plan_err,
+    config_err, exec_err, not_impl_err, plan_datafusion_err, plan_err,
     tree_node::{TreeNodeRecursion, TreeNodeVisitor},
     DFSchema, SchemaReference, TableReference,
 };
@@ -72,6 +72,11 @@ use object_store::ObjectStore;
 use parking_lot::RwLock;
 use url::Url;
 
+use crate::catalog::dynamic_file_schema::{
+    DynamicFileSchemaProvider, DynamicListTableFactory,
+};
+use crate::catalog::schema::SchemaProvider;
+use crate::execution::session_state::StateStore;
 pub use datafusion_execution::config::SessionConfig;
 pub use datafusion_execution::TaskContext;
 pub use datafusion_expr::execution_props::ExecutionProps;
@@ -309,7 +314,65 @@ impl SessionContext {
         Self {
             session_id: state.session_id().to_string(),
             session_start_time: Utc::now(),
-            state: Arc::new(RwLock::new(state)),
+            state: Arc::new(RwLock::new(state.clone())),
+        }
+    }
+
+    /// Enable the dynamic file query for the current session.
+    /// See [DynamicFileSchemaProvider] for more details
+    ///
+    /// # Example: query the url table
+    ///
+    /// ```
+    /// use datafusion::prelude::*;
+    /// # use datafusion::{error::Result, assert_batches_eq};
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<()> {
+    /// let cfg = SessionConfig::new().set_str("datafusion.catalog.has_header", "true");
+    /// let ctx = SessionContext::new_with_config(cfg);
+    /// ctx.enable_url_table()?;
+    /// let results = ctx
+    ///   .sql("SELECT a, MIN(b) FROM 'tests/data/example.csv' as example GROUP BY a LIMIT 100")
+    ///   .await?
+    ///   .collect()
+    ///   .await?;
+    /// assert_batches_eq!(
+    ///  &[
+    ///    "+---+----------------+",
+    ///    "| a | MIN(example.b) |",
+    ///    "+---+----------------+",
+    ///    "| 1 | 2              |",
+    ///    "+---+----------------+",
+    ///  ],
+    ///  &results
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn enable_url_table(&self) -> Result<Option<Arc<dyn SchemaProvider>>> {
+        let state_ref = self.state();
+        let catalog_name = state_ref.config_options().catalog.default_catalog.as_str();
+        let schema_name = state_ref.config_options().catalog.default_schema.as_str();
+        if let Ok(provider) = state_ref
+            // provide a fake table reference to get the default schema provider.
+            .schema_for_ref(TableReference::full(
+                catalog_name,
+                schema_name,
+                UNNAMED_TABLE,
+            ))
+        {
+            let state_store = Arc::new(StateStore::new());
+            state_store.with_state(self.state_weak_ref());
+            let factory = Arc::new(DynamicListTableFactory::new(state_store));
+            let new_provider =
+                Arc::new(DynamicFileSchemaProvider::new(provider, factory));
+            state_ref
+                .catalog_list()
+                .catalog(catalog_name)
+                .unwrap()
+                .register_schema(schema_name, new_provider)
+        } else {
+            config_err!("default catalog and schema are required for url table")
         }
     }
 
@@ -1702,6 +1765,40 @@ mod tests {
         let result =
             plan_and_collect(&ctx, "select c_name from default.customer limit 3;")
                 .await?;
+
+        let actual = arrow::util::pretty::pretty_format_batches(&result)
+            .unwrap()
+            .to_string();
+        let expected = r#"+--------------------+
+| c_name             |
++--------------------+
+| Customer#000000002 |
+| Customer#000000003 |
+| Customer#000000004 |
++--------------------+"#;
+        assert_eq!(actual, expected);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_dynamic_file_query() -> Result<()> {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let path = path.join("tests/tpch-csv/customer.csv");
+        let url = format!("file://{}", path.display());
+
+        let rt_cfg = RuntimeConfig::new();
+        let runtime = Arc::new(RuntimeEnv::new(rt_cfg).unwrap());
+        let cfg = SessionConfig::new().set_str("datafusion.catalog.has_header", "true");
+        let session_state = SessionState::new_with_config_rt(cfg, runtime);
+        let ctx = SessionContext::new_with_state(session_state);
+        ctx.enable_url_table()?;
+
+        let result = plan_and_collect(
+            &ctx,
+            format!("select c_name from '{}' limit 3;", &url).as_str(),
+        )
+        .await?;
 
         let actual = arrow::util::pretty::pretty_format_batches(&result)
             .unwrap()

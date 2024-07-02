@@ -57,11 +57,15 @@ statement ok
 DROP TABLE aggregate_simple;
 
 ##########
-# Describe file (currently we can only describe file in datafusion-cli, fix this after issue (#4850) has been done)
+# Describe file
 ##########
 
-statement error Error during planning: table 'datafusion.public.../core/tests/data/aggregate_simple.csv' not found
+query TTT
 DESCRIBE '../core/tests/data/aggregate_simple.csv';
+----
+column_1 Utf8 YES
+column_2 Utf8 YES
+column_3 Utf8 YES
 
 ##########
 # Describe command

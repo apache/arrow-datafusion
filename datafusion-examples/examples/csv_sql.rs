@@ -24,25 +24,40 @@ use datafusion::prelude::*;
 #[tokio::main]
 async fn main() -> Result<()> {
     // create local execution context
-    let ctx = SessionContext::new();
+    let cfg = SessionConfig::new().set_str("datafusion.catalog.has_header", "true");
+    let ctx = SessionContext::new_with_config(cfg);
 
     let testdata = datafusion::test_util::arrow_test_data();
-
+    let path = &format!("{testdata}/csv/aggregate_test_100.csv");
     // register csv file with the execution context
-    ctx.register_csv(
-        "aggregate_test_100",
-        &format!("{testdata}/csv/aggregate_test_100.csv"),
-        CsvReadOptions::new(),
-    )
-    .await?;
+    ctx.register_csv("aggregate_test_100", path, CsvReadOptions::new())
+        .await?;
 
     // execute the query
     let df = ctx
         .sql(
-            "SELECT c1, MIN(c12), MAX(c12) \
-        FROM aggregate_test_100 \
-        WHERE c11 > 0.1 AND c11 < 0.9 \
-        GROUP BY c1",
+            r#"SELECT c1, MIN(c12), MAX(c12)
+        FROM aggregate_test_100
+        WHERE c11 > 0.1 AND c11 < 0.9
+        GROUP BY c1"#,
+        )
+        .await?;
+
+    // print the results
+    df.show().await?;
+
+    ctx.enable_url_table()?;
+    // query the file by the path dynamically.
+    let df = ctx
+        .sql(
+            format!(
+                r#"SELECT c1, MIN(c12), MAX(c12)
+        FROM '{}'
+        WHERE c11 > 0.1 AND c11 < 0.9
+        GROUP BY c1"#,
+                path
+            )
+            .as_str(),
         )
         .await?;
 

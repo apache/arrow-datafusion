@@ -50,6 +50,23 @@ id7 value7
 id8 value8
 id9 value9
 
+# query the csv file dynamically with the config of current session
+query TT
+select * from '../core/tests/data/quote.csv';
+----
+c1 c2
+~id0~ ~value0~
+~id1~ ~value1~
+~id2~ ~value2~
+~id3~ ~value3~
+~id4~ ~value4~
+~id5~ ~value5~
+~id6~ ~value6~
+~id7~ ~value7~
+~id8~ ~value8~
+~id9~ ~value9~
+
+
 query TT
 select * from csv_with_escape;
 ----

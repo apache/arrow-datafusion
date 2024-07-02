@@ -18,21 +18,18 @@
 use std::any::Any;
 use std::sync::{Arc, Weak};
 
-use crate::object_storage::{get_object_store, AwsOptions, GcpOptions};
-
+use async_trait::async_trait;
+use datafusion::catalog::dynamic_file_schema::substitute_tilde;
 use datafusion::catalog::schema::SchemaProvider;
 use datafusion::catalog::{CatalogProvider, CatalogProviderList};
 use datafusion::common::plan_datafusion_err;
-use datafusion::datasource::listing::{
-    ListingTable, ListingTableConfig, ListingTableUrl,
-};
+use datafusion::datasource::listing::ListingTableUrl;
 use datafusion::datasource::TableProvider;
 use datafusion::error::Result;
 use datafusion::execution::context::SessionState;
-
-use async_trait::async_trait;
-use dirs::home_dir;
 use parking_lot::RwLock;
+
+use crate::object_storage::{get_object_store, AwsOptions, GcpOptions};
 
 /// Wraps another catalog, automatically creating table providers
 /// for local files if needed
@@ -115,7 +112,8 @@ impl CatalogProvider for DynamicFileCatalogProvider {
     }
 }
 
-/// Wraps another schema provider
+/// Wraps another schema provider. [DynamicFileSchemaProvider] is responsible for registering the required
+/// object stores for the file locations.
 struct DynamicFileSchemaProvider {
     inner: Arc<dyn SchemaProvider>,
     state: Weak<RwLock<SessionState>>,
@@ -149,9 +147,11 @@ impl SchemaProvider for DynamicFileSchemaProvider {
     }
 
     async fn table(&self, name: &str) -> Result<Option<Arc<dyn TableProvider>>> {
-        let inner_table = self.inner.table(name).await?;
-        if inner_table.is_some() {
-            return Ok(inner_table);
+        let inner_table = self.inner.table(name).await;
+        if inner_table.is_ok() {
+            if let Some(inner_table) = inner_table? {
+                return Ok(Some(inner_table));
+            }
         }
 
         // if the inner schema provider didn't have a table by
@@ -195,16 +195,7 @@ impl SchemaProvider for DynamicFileSchemaProvider {
                 state.runtime_env().register_object_store(url, store);
             }
         }
-
-        let config = match ListingTableConfig::new(table_url).infer(&state).await {
-            Ok(cfg) => cfg,
-            Err(_) => {
-                // treat as non-existing
-                return Ok(None);
-            }
-        };
-
-        Ok(Some(Arc::new(ListingTable::try_new(config)?)))
+        self.inner.table(name).await
     }
 
     fn deregister_table(&self, name: &str) -> Result<Option<Arc<dyn TableProvider>>> {
@@ -215,23 +206,13 @@ impl SchemaProvider for DynamicFileSchemaProvider {
         self.inner.table_exist(name)
     }
 }
-fn substitute_tilde(cur: String) -> String {
-    if let Some(usr_dir_path) = home_dir() {
-        if let Some(usr_dir) = usr_dir_path.to_str() {
-            if cur.starts_with('~') && !usr_dir.is_empty() {
-                return cur.replacen('~', usr_dir, 1);
-            }
-        }
-    }
-    cur
-}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use datafusion::catalog::schema::SchemaProvider;
     use datafusion::prelude::SessionContext;
+
+    use super::*;
 
     fn setup_context() -> (SessionContext, Arc<dyn SchemaProvider>) {
         let mut ctx = SessionContext::new();
@@ -263,7 +244,7 @@ mod tests {
         let (ctx, schema) = setup_context();
 
         // That's a non registered table so expecting None here
-        let table = schema.table(&location).await.unwrap();
+        let table = schema.table(&location).await?;
         assert!(table.is_none());
 
         // It should still create an object store for the location in the SessionState
@@ -287,7 +268,7 @@ mod tests {
 
         let (ctx, schema) = setup_context();
 
-        let table = schema.table(&location).await.unwrap();
+        let table = schema.table(&location).await?;
         assert!(table.is_none());
 
         let store = ctx
@@ -309,7 +290,7 @@ mod tests {
 
         let (ctx, schema) = setup_context();
 
-        let table = schema.table(&location).await.unwrap();
+        let table = schema.table(&location).await?;
         assert!(table.is_none());
 
         let store = ctx
@@ -330,42 +311,5 @@ mod tests {
         let (_ctx, schema) = setup_context();
 
         assert!(schema.table(location).await.is_err());
-    }
-    #[cfg(not(target_os = "windows"))]
-    #[test]
-    fn test_substitute_tilde() {
-        use std::env;
-        use std::path::MAIN_SEPARATOR;
-        let original_home = home_dir();
-        let test_home_path = if cfg!(windows) {
-            "C:\\Users\\user"
-        } else {
-            "/home/user"
-        };
-        env::set_var(
-            if cfg!(windows) { "USERPROFILE" } else { "HOME" },
-            test_home_path,
-        );
-        let input = "~/Code/datafusion/benchmarks/data/tpch_sf1/part/part-0.parquet";
-        let expected = format!(
-            "{}{}Code{}datafusion{}benchmarks{}data{}tpch_sf1{}part{}part-0.parquet",
-            test_home_path,
-            MAIN_SEPARATOR,
-            MAIN_SEPARATOR,
-            MAIN_SEPARATOR,
-            MAIN_SEPARATOR,
-            MAIN_SEPARATOR,
-            MAIN_SEPARATOR,
-            MAIN_SEPARATOR
-        );
-        let actual = substitute_tilde(input.to_string());
-        assert_eq!(actual, expected);
-        match original_home {
-            Some(home_path) => env::set_var(
-                if cfg!(windows) { "USERPROFILE" } else { "HOME" },
-                home_path.to_str().unwrap(),
-            ),
-            None => env::remove_var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }),
-        }
     }
 }

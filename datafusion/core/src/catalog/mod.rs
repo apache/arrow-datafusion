@@ -17,6 +17,7 @@
 
 //! Interfaces and default implementations of catalogs and schemas.
 
+pub mod dynamic_file_schema;
 pub mod information_schema;
 pub mod listing_schema;
 pub mod schema;

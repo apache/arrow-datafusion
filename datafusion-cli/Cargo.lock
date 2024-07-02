@@ -1149,6 +1149,7 @@ dependencies = [
  "datafusion-physical-expr-common",
  "datafusion-physical-plan",
  "datafusion-sql",
+ "dirs",
  "flate2",
  "futures",
  "glob",

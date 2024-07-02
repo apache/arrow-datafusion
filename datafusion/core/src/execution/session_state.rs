@@ -76,12 +76,13 @@ use datafusion_physical_expr_common::physical_expr::PhysicalExpr;
 use datafusion_physical_plan::ExecutionPlan;
 use datafusion_sql::parser::{DFParser, Statement};
 use datafusion_sql::planner::{ContextProvider, ParserOptions, PlannerContext, SqlToRel};
+use parking_lot::{Mutex, RwLock};
 use sqlparser::ast::Expr as SQLExpr;
 use sqlparser::dialect::dialect_from_str;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use url::Url;
 use uuid::Uuid;
 
@@ -207,11 +208,12 @@ impl SessionState {
 
         if config.create_default_catalog_and_schema() {
             let default_catalog = MemoryCatalogProvider::new();
+            let schema = MemorySchemaProvider::new();
 
             default_catalog
                 .register_schema(
                     &config.options().catalog.default_schema,
-                    Arc::new(MemorySchemaProvider::new()),
+                    Arc::new(schema),
                 )
                 .expect("memory catalog provider can register schema");
 
@@ -1256,5 +1258,36 @@ impl<'a> SimplifyInfo for SessionSimplifyProvider<'a> {
 
     fn get_data_type(&self, expr: &Expr) -> datafusion_common::Result<DataType> {
         expr.get_type(self.df_schema)
+    }
+}
+
+/// The state store that stores the reference of the runtime session state.
+pub struct StateStore {
+    state: Arc<Mutex<Option<Weak<RwLock<SessionState>>>>>,
+}
+
+impl StateStore {
+    /// Create a new [StateStore]
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Set the session state of the store
+    pub fn with_state(&self, state: Weak<RwLock<SessionState>>) {
+        let mut lock = self.state.lock();
+        *lock = Some(state);
+    }
+
+    /// Get the current session state of the store
+    pub fn get_state(&self) -> Weak<RwLock<SessionState>> {
+        self.state.lock().clone().unwrap()
+    }
+}
+
+impl Default for StateStore {
+    fn default() -> Self {
+        Self::new()
     }
 }

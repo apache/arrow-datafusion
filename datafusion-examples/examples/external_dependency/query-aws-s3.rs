@@ -63,5 +63,14 @@ async fn main() -> Result<()> {
     // print the results
     df.show().await?;
 
+    // dynamic query by the file path
+    ctx.enable_url_table()?;
+    let df = ctx
+        .sql(format!(r#"SELECT * FROM '{}' LIMIT 10"#, &path).as_str())
+        .await?;
+
+    // print the results
+    df.show().await?;
+
     Ok(())
 }

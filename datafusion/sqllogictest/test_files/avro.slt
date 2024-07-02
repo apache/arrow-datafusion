@@ -136,9 +136,34 @@ SELECT id, CAST(string_col AS varchar) FROM alltypes_plain
 0 0
 1 1
 
+query IT
+SELECT id, CAST(string_col AS varchar) FROM '../../testing/data/avro/alltypes_plain.avro'
+----
+4 0
+5 1
+6 0
+7 1
+2 0
+3 1
+0 0
+1 1
+
 # test avro query with snappy
 query IT
 SELECT id, CAST(string_col AS varchar) FROM alltypes_plain_snappy
+----
+4 0
+5 1
+6 0
+7 1
+2 0
+3 1
+0 0
+1 1
+
+# dynamic query snappy avro file
+query IT
+SELECT id, CAST(string_col AS varchar) FROM '../../testing/data/avro/alltypes_plain.snappy.avro'
 ----
 4 0
 5 1
