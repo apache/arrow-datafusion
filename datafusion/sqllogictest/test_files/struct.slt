@@ -162,9 +162,23 @@ select named_struct('scalar', 27, 'array', values.a, 'null', NULL) from values;
 {scalar: 27, array: 2, null: }
 {scalar: 27, array: 3, null: }
 
+query ?
+select {'scalar': 27, 'array': values.a, 'null': NULL} from values;
+----
+{scalar: 27, array: 1, null: }
+{scalar: 27, array: 2, null: }
+{scalar: 27, array: 3, null: }
+
 # named_struct with mixed scalar and array values #2
 query ?
 select named_struct('array', values.a, 'scalar', 27, 'null', NULL) from values;
+----
+{array: 1, scalar: 27, null: }
+{array: 2, scalar: 27, null: }
+{array: 3, scalar: 27, null: }
+
+query ?
+select {'array': values.a, 'scalar': 27, 'null': NULL} from values;
 ----
 {array: 1, scalar: 27, null: }
 {array: 2, scalar: 27, null: }
@@ -207,3 +221,14 @@ query T
 select arrow_typeof(named_struct('first', 1, 'second', 2, 'third', 3));
 ----
 Struct([Field { name: "first", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }, Field { name: "second", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }, Field { name: "third", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }])
+
+query T
+select arrow_typeof({'first': 1, 'second': 2, 'third': 3});
+----
+Struct([Field { name: "first", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }, Field { name: "second", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }, Field { name: "third", data_type: Int64, nullable: true, dict_id: 0, dict_is_ordered: false, metadata: {} }])
+
+# test nested struct literal
+query ?
+select {'animal': {'cat': 1, 'dog': 2, 'bird': {'parrot': 3, 'canary': 1}}, 'genre': {'fiction': ['mystery', 'sci-fi', 'fantasy'], 'non-fiction': {'biography': 5, 'history': 7, 'science': {'physics': 2, 'biology': 3}}}, 'vehicle': {'car': {'sedan': 4, 'suv': 2}, 'bicycle': 3, 'boat': ['sailboat', 'motorboat']}, 'weather': {'sunny': True, 'temperature': 25.5, 'wind': {'speed': 10, 'direction': 'NW'}}};
+----
+{animal: {cat: 1, dog: 2, bird: {parrot: 3, canary: 1}}, genre: {fiction: [mystery, sci-fi, fantasy], non-fiction: {biography: 5, history: 7, science: {physics: 2, biology: 3}}}, vehicle: {car: {sedan: 4, suv: 2}, bicycle: 3, boat: [sailboat, motorboat]}, weather: {sunny: true, temperature: 25.5, wind: {speed: 10, direction: NW}}}

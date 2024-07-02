@@ -110,6 +110,15 @@ pub trait UserDefinedSQLPlanner: Send + Sync {
     ) -> Result<PlannerResult<Vec<Expr>>> {
         Ok(PlannerResult::Original(exprs))
     }
+
+    // Plan the dictionaray literal { key: value, ...}
+    fn plan_dictionary_literal(
+        &self,
+        expr: RawDictionaryExpr,
+        _schema: &DFSchema,
+    ) -> Result<PlannerResult<RawDictionaryExpr>> {
+        Ok(PlannerResult::Original(expr))
+    }
 }
 
 /// An operator with two arguments to plan
@@ -134,6 +143,12 @@ pub struct RawBinaryExpr {
 pub struct RawFieldAccessExpr {
     pub field_access: GetFieldAccess,
     pub expr: Expr,
+}
+
+/// A dictionary expression { key: value, ...}
+pub struct RawDictionaryExpr {
+    pub keys: Vec<Expr>,
+    pub values: Vec<Expr>,
 }
 
 /// Result of planning a raw expr with [`UserDefinedSQLPlanner`]
