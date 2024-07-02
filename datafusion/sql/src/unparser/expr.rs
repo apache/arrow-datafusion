@@ -30,8 +30,8 @@ use arrow_array::{Date32Array, Date64Array, PrimitiveArray};
 use arrow_schema::DataType;
 use sqlparser::ast::Value::SingleQuotedString;
 use sqlparser::ast::{
-    self, Expr as AstExpr, Function, FunctionArg, Ident, Interval, TimezoneInfo,
-    UnaryOperator,
+    self, BinaryOperator, Expr as AstExpr, Function, FunctionArg, Ident, Interval,
+    TimezoneInfo, UnaryOperator,
 };
 
 use datafusion_common::{
@@ -101,7 +101,16 @@ pub fn expr_to_unparsed(expr: &Expr) -> Result<Unparsed> {
     unparser.expr_to_unparsed(expr)
 }
 
+const LOWEST: &BinaryOperator = &BinaryOperator::BitwiseOr;
+
 impl Unparser<'_> {
+    /// Try to unparse the expression into a more human-readable format
+    /// by removing unnecessary parentheses.
+    pub fn pretty_expr_to_sql(&self, expr: &Expr) -> Result<ast::Expr> {
+        let root_expr = self.expr_to_sql(expr)?;
+        Ok(self.pretty(root_expr, LOWEST, LOWEST))
+    }
+
     pub fn expr_to_sql(&self, expr: &Expr) -> Result<ast::Expr> {
         match expr {
             Expr::InList(InList {
@@ -603,6 +612,60 @@ impl Unparser<'_> {
         }
     }
 
+    /// Given an expression of the form `((a + b) * (c * d))`,
+    /// the parenthesing is redundant if the precedence of the nested expression is already higher
+    /// than the surrounding operators' precedence. The above expression would become
+    /// `(a + b) * c * d`.
+    ///
+    /// Also note that when fetching the precedence of a nested expression, we ignore other nested
+    /// expressions, so precedence of expr `(a * (b + c))` equals `*` and not `+`.
+    fn pretty(
+        &self,
+        expr: ast::Expr,
+        left_op: &BinaryOperator,
+        right_op: &BinaryOperator,
+    ) -> ast::Expr {
+        match expr {
+            ast::Expr::Nested(nested) => {
+                let surrounding_precedence = self
+                    .sql_op_precedence(left_op)
+                    .max(self.sql_op_precedence(right_op));
+
+                let inner_precedence = self.inner_precedence(&nested);
+
+                let not_associative =
+                    matches!(left_op, BinaryOperator::Minus | BinaryOperator::Divide);
+
+                if inner_precedence == surrounding_precedence && not_associative {
+                    ast::Expr::Nested(Box::new(self.pretty(*nested, LOWEST, LOWEST)))
+                } else if inner_precedence >= surrounding_precedence {
+                    self.pretty(*nested, left_op, right_op)
+                } else {
+                    ast::Expr::Nested(Box::new(self.pretty(*nested, LOWEST, LOWEST)))
+                }
+            }
+            ast::Expr::BinaryOp { left, op, right } => ast::Expr::BinaryOp {
+                left: Box::new(self.pretty(*left, left_op, &op)),
+                right: Box::new(self.pretty(*right, &op, right_op)),
+                op,
+            },
+            _ => expr,
+        }
+    }
+
+    fn inner_precedence(&self, expr: &ast::Expr) -> u8 {
+        match expr {
+            ast::Expr::Nested(_) | ast::Expr::Identifier(_) | ast::Expr::Value(_) => 100,
+            ast::Expr::BinaryOp { op, .. } => self.sql_op_precedence(op),
+            // closest precedence we currently have to Between is PGLikeMatch
+            // (https://www.postgresql.org/docs/7.2/sql-precedence.html)
+            ast::Expr::Between { .. } => {
+                self.sql_op_precedence(&ast::BinaryOperator::PGLikeMatch)
+            }
+            _ => 0,
+        }
+    }
+
     pub(super) fn between_op_to_sql(
         &self,
         expr: ast::Expr,
@@ -615,6 +678,50 @@ impl Unparser<'_> {
             negated,
             low: Box::new(low),
             high: Box::new(high),
+        }
+    }
+
+    // TODO: operator precedence should be defined in sqlparser
+    // to avoid the need for sql_to_op and sql_op_precedence
+    fn sql_op_precedence(&self, op: &BinaryOperator) -> u8 {
+        match self.sql_to_op(op) {
+            Ok(op) => op.precedence(),
+            Err(_) => 0,
+        }
+    }
+
+    fn sql_to_op(&self, op: &BinaryOperator) -> Result<Operator> {
+        match op {
+            ast::BinaryOperator::Eq => Ok(Operator::Eq),
+            ast::BinaryOperator::NotEq => Ok(Operator::NotEq),
+            ast::BinaryOperator::Lt => Ok(Operator::Lt),
+            ast::BinaryOperator::LtEq => Ok(Operator::LtEq),
+            ast::BinaryOperator::Gt => Ok(Operator::Gt),
+            ast::BinaryOperator::GtEq => Ok(Operator::GtEq),
+            ast::BinaryOperator::Plus => Ok(Operator::Plus),
+            ast::BinaryOperator::Minus => Ok(Operator::Minus),
+            ast::BinaryOperator::Multiply => Ok(Operator::Multiply),
+            ast::BinaryOperator::Divide => Ok(Operator::Divide),
+            ast::BinaryOperator::Modulo => Ok(Operator::Modulo),
+            ast::BinaryOperator::And => Ok(Operator::And),
+            ast::BinaryOperator::Or => Ok(Operator::Or),
+            ast::BinaryOperator::PGRegexMatch => Ok(Operator::RegexMatch),
+            ast::BinaryOperator::PGRegexIMatch => Ok(Operator::RegexIMatch),
+            ast::BinaryOperator::PGRegexNotMatch => Ok(Operator::RegexNotMatch),
+            ast::BinaryOperator::PGRegexNotIMatch => Ok(Operator::RegexNotIMatch),
+            ast::BinaryOperator::PGILikeMatch => Ok(Operator::ILikeMatch),
+            ast::BinaryOperator::PGNotLikeMatch => Ok(Operator::NotLikeMatch),
+            ast::BinaryOperator::PGLikeMatch => Ok(Operator::LikeMatch),
+            ast::BinaryOperator::PGNotILikeMatch => Ok(Operator::NotILikeMatch),
+            ast::BinaryOperator::BitwiseAnd => Ok(Operator::BitwiseAnd),
+            ast::BinaryOperator::BitwiseOr => Ok(Operator::BitwiseOr),
+            ast::BinaryOperator::BitwiseXor => Ok(Operator::BitwiseXor),
+            ast::BinaryOperator::PGBitwiseShiftRight => Ok(Operator::BitwiseShiftRight),
+            ast::BinaryOperator::PGBitwiseShiftLeft => Ok(Operator::BitwiseShiftLeft),
+            ast::BinaryOperator::StringConcat => Ok(Operator::StringConcat),
+            ast::BinaryOperator::AtArrow => Ok(Operator::AtArrow),
+            ast::BinaryOperator::ArrowAt => Ok(Operator::ArrowAt),
+            _ => not_impl_err!("unsupported operation: {op:?}"),
         }
     }
 
