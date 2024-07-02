@@ -134,7 +134,15 @@ use crate::{OptimizerConfig, OptimizerRule};
 #[derive(Default)]
 pub struct PushDownFilter {}
 
-/// For a given JOIN type, determine whether each side of the join is preserved.
+/// For a given JOIN type, determine whether each input of the join is preserved
+/// for post-join (`WHERE` clause) filters.
+///
+/// It is only correct to push filters below a join for preserved inputs.
+///
+/// # Return Value
+/// A tuple of booleans - (left_preserved, right_preserved).
+///
+/// # "Preserved" input definition
 ///
 /// We say a join side is preserved if the join returns all or a subset of the rows from
 /// the relevant side, such that each row of the output table directly maps to a row of
@@ -145,15 +153,11 @@ pub struct PushDownFilter {}
 /// For example:
 ///   - In an inner join, both sides are preserved, because each row of the output
 ///     maps directly to a row from each side.
-///   - In a left join, the left side is preserved and the right is not, because
-///     there may be rows in the output that don't directly map to a row in the
-///     right input (due to nulls filling where there is no match on the right).
 ///
-/// This is important because we can always push down post-join filters to a preserved
-/// side of the join, assuming the filter only references columns from that side. For the
-/// non-preserved side it can be more tricky.
-///
-/// Returns a tuple of booleans - (left_preserved, right_preserved).
+///   - In a left join, the left side is preserved (we can push predicates) but
+///     the right is not, because there may be rows in the output that don't
+///     directly map to a row in the right input (due to nulls filling where there
+///     is no match on the right).
 fn lr_is_preserved(join_type: JoinType) -> Result<(bool, bool)> {
     match join_type {
         JoinType::Inner => Ok((true, true)),
@@ -169,9 +173,15 @@ fn lr_is_preserved(join_type: JoinType) -> Result<(bool, bool)> {
     }
 }
 
-/// For a given JOIN logical plan, determine whether each side of the join is preserved
-/// in terms on join filtering.
-/// Predicates from join filter can only be pushed to preserved join side.
+/// For a given JOIN type, determine whether each input of the join is preserved
+/// for the join condition (`ON` clause filters).
+///
+/// It is only correct to push filters below a join for preserved inputs.
+///
+/// # Return Value
+/// A tuple of booleans - (left_preserved, right_preserved).
+///
+/// See [`lr_is_preserved`] for a definition of "preserved".
 fn on_lr_is_preserved(join_type: JoinType) -> Result<(bool, bool)> {
     match join_type {
         JoinType::Inner => Ok((true, true)),
@@ -184,11 +194,7 @@ fn on_lr_is_preserved(join_type: JoinType) -> Result<(bool, bool)> {
     }
 }
 
-/// Determine which predicates in state can be pushed down to a given side of a join.
-/// To determine this, we need to know the schema of the relevant join side and whether
-/// or not the side's rows are preserved when joining. If the side is not preserved, we
-/// do not push down anything. Otherwise we can push down predicates where all of the
-/// relevant columns are contained on the relevant join side's schema.
+/// Return true if a predicate only references columns in the specified schema
 fn can_pushdown_join_predicate(predicate: &Expr, schema: &DFSchema) -> Result<bool> {
     let schema_columns = schema
         .iter()
