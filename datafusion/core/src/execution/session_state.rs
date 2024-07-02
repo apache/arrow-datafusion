@@ -947,7 +947,7 @@ impl SessionState {
     where
         S: ContextProvider,
     {
-        let query = SqlToRel::new_with_options(provider, self.get_parser_options());
+        let mut query = SqlToRel::new_with_options(provider, self.get_parser_options());
 
         // register crate of array expressions (if enabled)
         #[cfg(feature = "array_expressions")]
@@ -958,14 +958,19 @@ impl SessionState {
             let field_access_planner =
                 Arc::new(functions_array::planner::FieldAccessPlanner::default()) as _;
 
-            query
+            query = query
                 .with_user_defined_planner(array_planner)
-                .with_user_defined_planner(field_access_planner)
+                .with_user_defined_planner(field_access_planner);
         }
-        #[cfg(not(feature = "array_expressions"))]
+        #[cfg(feature = "datetime_expressions")]
         {
-            query
+            let extract_planner =
+                Arc::new(functions::datetime::planner::ExtractPlanner::default()) as _;
+
+            query = query.with_user_defined_planner(extract_planner);
         }
+
+        query
     }
 }
 

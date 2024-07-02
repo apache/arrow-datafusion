@@ -110,6 +110,12 @@ pub trait UserDefinedSQLPlanner {
     ) -> Result<PlannerResult<Vec<Expr>>> {
         Ok(PlannerResult::Original(exprs))
     }
+
+    // Plan the Extract expression, e.g., EXTRACT(month FROM foo)
+    // returns origin expression arguments if not possible
+    fn plan_extract(&self, args: Vec<Expr>) -> Result<PlannerResult<Vec<Expr>>> {
+        Ok(PlannerResult::Original(args))
+    }
 }
 
 /// An operator with two arguments to plan

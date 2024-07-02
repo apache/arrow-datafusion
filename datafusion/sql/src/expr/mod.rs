@@ -175,21 +175,21 @@ impl<'a, S: ContextProvider> SqlToRel<'a, S> {
                 self.parse_value(value, planner_context.prepare_param_data_types())
             }
             SQLExpr::Extract { field, expr } => {
-                let date_part = self
-                    .context_provider
-                    .get_function_meta("date_part")
-                    .ok_or_else(|| {
-                        internal_datafusion_err!(
-                            "Unable to find expected 'date_part' function"
-                        )
-                    })?;
-                let args = vec![
+                let mut extract_args = vec![
                     Expr::Literal(ScalarValue::from(format!("{field}"))),
                     self.sql_expr_to_logical_expr(*expr, schema, planner_context)?,
                 ];
-                Ok(Expr::ScalarFunction(ScalarFunction::new_udf(
-                    date_part, args,
-                )))
+
+                for planner in self.planners.iter() {
+                    match planner.plan_extract(extract_args)? {
+                        PlannerResult::Planned(expr) => return Ok(expr),
+                        PlannerResult::Original(args) => {
+                            extract_args = args;
+                        }
+                    }
+                }
+
+                not_impl_err!("Extract not supported by UserDefinedExtensionPlanners: {extract_args:?}")
             }
 
             SQLExpr::Array(arr) => self.sql_array_literal(arr.elem, schema),

@@ -30,6 +30,7 @@ pub mod date_trunc;
 pub mod from_unixtime;
 pub mod make_date;
 pub mod now;
+pub mod planner;
 pub mod to_char;
 pub mod to_date;
 pub mod to_timestamp;
